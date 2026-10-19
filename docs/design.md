@@ -152,6 +152,8 @@ Shares are approximate and live in data.
 
 The atmosphere is per bin: direct sunlight is the AM0 spectrum attenuated by Rayleigh scattering (λ^-4), haze (Ångström λ^-1.3) and water/ozone absorption, times the Kasten–Young air mass (`Spectrum.atmospheric`). Low sun is dimmer and redder without a fudge factor (≈1010 W/m² overhead, ≈770 at 30°, ≈110 at 5°, mostly red/IR); the sky color is the same light weighted by scattering.
 
+**The moon** is a second light source. Its phase runs over `MOON_CYCLE_DAYS` (8) game days and it trails the sun by phase × 24 h on the same arc, so a full moon rises at sunset and each moonrise comes a day/7 (≈3.4 h) later. Moonlight is reflected sunlight: `MOON_FULL_RATIO` (2.2 × 10⁻⁶, the real full-moon/sun ratio) of the AM0 spectrum at full, times the lit fraction cubed (a quarter moon ≈ 1/8 of full, close to the real phase curve), through the atmosphere at the moon's own air mass. The light passes trace one source, `world.light_*`: the sun when it is up, else the moon. Cull thresholds scale with the traced DNI, so dim light keeps the same relative detail. Display: moonlight is drawn at a night exposure (a full moon at `MOON_DISPLAY` ≈ 0.35 of daylight) in a pale-blue tint, and the sky's moon glow follows the real moon; readouts stay physical (mW/m², "× moon").
+
 ### 6.3 Geometry (D4)
 
 - Every optical object exposes **surfaces**: polylines with per-vertex normals (interpolated across segments for smooth refraction), a material on each side, and a surface coating (none, AR, mirror, dichroic cutoff…).
@@ -384,7 +386,7 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | **M0 — Skeleton** | Godot project, `SimWorld` tick loop, command queue, tile grid with all layers allocated, material resources, debug tile renderer, camera |
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
 | M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
-| **Next — Moonlight & moon cycle** | Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
+| **Moonlight & moon cycle** ✅ | Done (§6.2, §18.6). Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
 | **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
 | M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
@@ -467,6 +469,13 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Heat:** solid/liquid heat capacity scales with the day compression (1/120): realistic daily ground cycle, air warmed by the ground. Heat view colors every tile by absolute temperature. Objects own a thermal node (D13): light absorbed in a body heats the object, which convects into the tiles its outline touches and radiates.
 - **World:** background walls below the original ground line, earth beyond the site edges; tile shader (grain, bevels, seams, depth).
 - **Agent tooling:** `debug/sim_probe.gd` (`SimProbe` autoload) reads and drives the running game through the MCP's game_eval. Extend it with every new system so behaviour can be checked by numbers rather than screenshots.
+
+### 18.6 Moonlight (2026-10-19)
+
+- **Moon (§6.2):** phase cycle of 8 game days, trailing the sun by its phase (moonrise ≈3.4 h later each day); irradiance = 2.2 × 10⁻⁶ of AM0 × lit fraction³, through the atmosphere at the moon's air mass (≈1.7 mW/m² for a 95 %-lit moon at 46°).
+- **One traced light:** `world.light_*` is the sun when up, else the moon; light passes, deposits, the inspector, probe labels and the peak marker use it ("× moon" at night, mW/µW/m² readouts). Engine cull thresholds scale with the traced DNI (`SetCullScale`), so moonlight keeps reflections and secondary rays.
+- **Display:** night exposure (full moon ≈ 0.35 of daylight) in a pale-blue tint for beams, the light sheet and the Light view; the sky's moon glow follows the real moon and its phase. HUD shows moon elevation, % lit and irradiance.
+- **Tests:** moonrise spacing, the moon as the night light (direction, irradiance, moon set), moonlight through a lens (energy balance, culling, concentration). SimProbe `state` reports the moon and the traced light.
 
 ## 19. Open questions
 

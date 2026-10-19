@@ -154,10 +154,16 @@ func _build_status() -> void:
 func _update_status() -> void:
 	var tod := world.time_of_day() * 24.0
 	var clock := "Day %d   %02d:%02d" % [world.day_number() + 1, int(tod), int(fmod(tod, 1.0) * 60.0)]
-	var sun := "Sun %.0f°   %.0f W/m²   air %.1f °C" % [rad_to_deg(world.sun_elevation), world.sun_dni,
-		SimConst.k_to_c(world.ambient_k)] if world.sun_is_up \
-		else "Night   air %.1f °C" % SimConst.k_to_c(world.ambient_k)
-	_status.text = clock + "\n" + sun
+	var air := "air %.1f °C" % SimConst.k_to_c(world.ambient_k)
+	var sky := ""
+	if world.sun_is_up:
+		sky = "Sun %.0f°   %.0f W/m²" % [rad_to_deg(world.sun_elevation), world.sun_dni]
+	elif world.moon_is_up:
+		sky = "Moon %.0f°   %.0f%% lit   %s" % [rad_to_deg(world.moon_elevation),
+			world.moon_illuminated * 100.0, _irr(world.moon_dni)]
+	else:
+		sky = "Night   moon set (%.0f%% lit)" % (world.moon_illuminated * 100.0)
+	_status.text = clock + "\n" + sky + "   " + air
 	_pause_button.text = "Play" if runner.paused else "Pause"
 	for k in _speed_buttons.size():
 		_speed_buttons[k].set_pressed_no_signal(not runner.paused and Main.SPEEDS[k] == runner.speed)
@@ -459,14 +465,15 @@ func _light_text(i: int, def: MaterialDef) -> String:
 	var scale := _light.power_scale(world) / area
 	var irr := tp[i] * scale
 	if irr <= 0.0:
-		return "[color=#8a93a0]in shadow[/color]" if world.sun_is_up else ""
+		return "[color=#8a93a0]in shadow[/color]" if world.light_is_up else ""
 	var absorptivity := 0.0
 	for b in Spectrum.BIN_COUNT:
 		absorptivity += def.surface_absorptivity[b] * Spectrum.AM15_SHARE[b]
-	var suns := irr / maxf(world.sun_dni * maxf(absorptivity, 0.05), 1.0)
+	var suns := times_light(world, irr / maxf(absorptivity, 0.05))
 	var o := i * Spectrum.BAND_COUNT
 	var bp := _light.band_power
-	var head := "[color=#ffd873]≈%.0f× sun[/color]" % suns if suns >= 1.5 else "in sun"
+	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, light_name(world)] if suns >= 1.5 \
+		else "in " + light_name(world) + "light"
 	return "%s · absorbing %s\n[color=#8a93a0]UV %s · visible %s · IR %s[/color]" % [head, _irr(irr),
 		_irr(bp[o] * scale), _irr(bp[o + 1] * scale), _irr(bp[o + 2] * scale)]
 
@@ -476,7 +483,7 @@ func _object_text(obj: SimObject) -> String:
 		wrapf(rad_to_deg(obj.angle), -180.0, 180.0)]
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		var irr := obj.probe_irradiance()
-		s += "\nreads %s  (%.1f× sun)" % [_irr(irr), irr / maxf(world.sun_dni, 1.0)]
+		s += "\nreads %s  (%.1f× %s)" % [_irr(irr), times_light(world, irr), light_name(world)]
 		var area := obj.def.size_m * SimConst.DEPTH_M
 		var bands := PackedFloat32Array([0, 0, 0])
 		for b in Spectrum.BIN_COUNT:
@@ -496,7 +503,21 @@ static func _irr(w_m2: float) -> String:
 		return "%.0f kW/m²" % (w_m2 / 1e3)
 	if w_m2 >= 1e3:
 		return "%.1f kW/m²" % (w_m2 / 1e3)
-	return "%.0f W/m²" % w_m2
+	if w_m2 >= 1.0 or w_m2 <= 0.0:
+		return "%.0f W/m²" % w_m2
+	if w_m2 >= 1e-3:
+		return "%.1f mW/m²" % (w_m2 * 1e3)
+	return "%.1f µW/m²" % (w_m2 * 1e6)
+
+
+## "sun" or "moon": the light being traced, for readouts.
+static func light_name(world: SimWorld) -> String:
+	return "moon" if world.light_is_moon else "sun"
+
+
+## Irradiance as a multiple of plain light from the current source (0 when none is up).
+static func times_light(world: SimWorld, w_m2: float) -> float:
+	return w_m2 / world.light_dni if world.light_dni > 0.0 else 0.0
 
 
 # --- Helpers --------------------------------------------------------------------------------

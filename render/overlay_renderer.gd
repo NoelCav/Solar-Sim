@@ -155,12 +155,14 @@ func _fill_light(band: int, glow: bool) -> void:
 	var log_lo := log(IRR_MIN)
 	var log_span := log(IRR_MAX) - log_lo
 	var glow_lo := log(GLOW_MIN)
+	var gain := BeamRenderer.exposure(world)   # Moonlight shown at the night exposure
 	for i in _light.shown_lit:
 		var w := tp[i] if band < 0 else bp[i * Spectrum.BAND_COUNT + band]
 		var irr := w * scale
 		if irr > peak_value:
 			peak_value = irr
 			peak_tile = i
+		irr *= gain
 		var o := i * 4
 		if glow:
 			# Warm additive glow: invisible at ordinary sunlight, strong at a focus.

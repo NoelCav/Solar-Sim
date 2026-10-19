@@ -54,8 +54,8 @@ func tick(world: SimWorld, dt: float) -> void:
 	# Geometry edits are normally picked up by the next pass, but a long full pass (the sun
 	# moved) that is less than half done gives way to a quick incremental pass at the sun
 	# already shown, so edits appear promptly; the sun catches up once edits stop.
-	var obsolete := world.sun_is_up and _pass.dir != Vector2.ZERO \
-		and absf(world.sun_direction.angle_to(_pass.dir)) > deg_to_rad(SimConst.RESTART_ANGLE_DEG)
+	var obsolete := world.light_is_up and _pass.dir != Vector2.ZERO \
+		and absf(world.light_direction.angle_to(_pass.dir)) > deg_to_rad(SimConst.RESTART_ANGLE_DEG)
 	var edited := _pass_active and (world.grid.structure_version != _pass.structure_version \
 		or world.objects_version != _pass.objects_version)
 	if _pass_active and obsolete:
@@ -91,7 +91,7 @@ func preview(world: SimWorld) -> void:
 
 ## Factor from published `tile_power` (traced at an earlier DNI) to current watts.
 func power_scale(world: SimWorld) -> float:
-	return world.sun_dni / shown_dni if shown_dni > 0.0 else 0.0
+	return world.light_dni / shown_dni if shown_dni > 0.0 else 0.0
 
 
 ## True when published results lag behind the world (a pass is pending or running).
@@ -151,7 +151,7 @@ func _deposit(world: SimWorld, dt: float) -> void:
 	var g := world.grid
 	var energy := g.energy_in
 	if _traced_dni > 0.0:
-		var scale := world.sun_dni / _traced_dni * dt
+		var scale := world.light_dni / _traced_dni * dt
 		for k in _lit_tiles.size():
 			energy[_lit_tiles[k]] += _lit_power[k] * scale
 		for id in _obj_power:
@@ -182,12 +182,12 @@ func _setup(world: SimWorld) -> void:
 func _needs_retrace(world: SimWorld) -> bool:
 	if world.grid.structure_version != _traced_structure or world.objects_version != _traced_objects:
 		return true
-	var up := world.sun_is_up and world.sun_dni > 0.0
+	var up := world.light_is_up and world.light_dni > 0.0
 	if up != (_traced_dni > 0.0):
 		return true
 	if not up:
 		return false
-	if absf(world.sun_direction.angle_to(_traced_dir)) > deg_to_rad(SimConst.RETRACE_ANGLE_DEG):
+	if absf(world.light_direction.angle_to(_traced_dir)) > deg_to_rad(SimConst.RETRACE_ANGLE_DEG):
 		return true
 	# The spectrum reddens as DNI falls; re-trace on large intensity changes.
-	return absf(world.sun_dni / _traced_dni - 1.0) > 0.1
+	return absf(world.light_dni / _traced_dni - 1.0) > 0.1

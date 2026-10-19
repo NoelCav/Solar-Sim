@@ -4,7 +4,7 @@ extends ColorRect
 ## comes in from the screen edge the light comes from, colored by the spectrum that actually
 ## arrives (Spectrum.atmospheric), and the sky's own color is that light as scattered by air
 ## (Spectrum.sky_scatter): blue at noon, orange-red low at dawn and dusk. At night a pale
-## blue moon glow comes from the opposite side, with stars.
+## blue glow comes from wherever the moon is (EnvironmentSystem), with stars.
 
 const NIGHT_TOP := Color(0.012, 0.018, 0.05)
 const NIGHT_LOW := Color(0.03, 0.045, 0.10)
@@ -86,8 +86,11 @@ func _draw() -> void:
 	if world.sun_is_up:
 		var c := Spectrum.to_color(world.sun_spectrum)
 		_glow(sun_angle, Color(c.r, c.g * 0.95, c.b * 0.85, clampf(world.sun_dni / 700.0, 0.25, 0.9)))
-	if h < 0.1:
-		_glow(sun_angle + PI, Color(MOON.r, MOON.g, MOON.b, 0.35 * clampf((0.1 - h) / 0.3, 0.0, 1.0)))
+	# The moon's glow follows the real moon, brighter the more of it is lit, once the sun is low.
+	if world.moon_is_up and h < 0.1:
+		var a := 0.4 * sqrt(world.moon_illuminated) * clampf((0.1 - h) / 0.3, 0.0, 1.0)
+		if a > 0.01:
+			_glow(EnvironmentSystem.moon_angle(world.time_s), Color(MOON.r, MOON.g, MOON.b, a))
 
 
 ## A radial glow centred where the line from the screen centre toward the light source (at

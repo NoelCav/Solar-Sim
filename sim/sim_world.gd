@@ -22,6 +22,19 @@ var air_mass: float = INF
 var sun_dni: float = 0.0                ## Direct normal irradiance, W/m²
 var sun_spectrum := Spectrum.make_zero()   ## DNI per spectral bin, W/m²
 var diffuse_irradiance: float = 0.0     ## Diffuse sky light on horizontal surfaces, W/m²
+var moon_phase: float = 0.0             ## 0 new, 0.5 full (moon cycle, §6.2)
+var moon_illuminated: float = 0.0       ## Lit fraction of the disk
+var moon_direction := Vector2.DOWN      ## Direction moonlight travels, y down
+var moon_elevation: float = 0.0         ## Radians above horizon
+var moon_is_up := false
+var moon_dni: float = 0.0               ## Direct normal irradiance of moonlight, W/m²
+var moon_spectrum := Spectrum.make_zero()
+## The light the light system traces: the sun when it is up, else the moon.
+var light_is_moon := false
+var light_is_up := false
+var light_direction := Vector2.DOWN
+var light_dni: float = 0.0
+var light_spectrum := Spectrum.make_zero()
 
 # Site parameters
 var site_max_elevation_deg: float = 60.0

@@ -42,7 +42,7 @@ func run(cmd: String, a: Dictionary = {}) -> Dictionary:
 
 func _help() -> Dictionary:
 	return {"commands": {
-		"state": "time, sun, ambient, speed/pause, view, light and heat stats",
+		"state": "time, sun, moon (phase, lit), traced light, ambient, speed/pause, view, light and heat stats",
 		"objects": "all placed objects: id, key, kind, position, angle, absorbed W, probe reading",
 		"defs": "object definitions that can be placed (keys)",
 		"object": "{id}: one object with its bounds",
@@ -72,6 +72,10 @@ func _state() -> Dictionary:
 		"wavelength": _main.wavelength,
 		"sun": {"up": w.sun_is_up, "elevation_deg": snappedf(rad_to_deg(w.sun_elevation), 0.1),
 			"direction": _v(w.sun_direction), "dni_w_m2": snappedf(w.sun_dni, 0.1)},
+		"moon": {"up": w.moon_is_up, "elevation_deg": snappedf(rad_to_deg(w.moon_elevation), 0.1),
+			"direction": _v(w.moon_direction), "phase": snappedf(w.moon_phase, 0.001),
+			"lit": snappedf(w.moon_illuminated, 0.001), "dni_w_m2": w.moon_dni},
+		"traced": ("moon" if w.light_is_moon else "sun") if w.light_is_up else "none",
 		"ambient_c": snappedf(SimConst.k_to_c(w.ambient_k), 0.01),
 		"world_m": _v(Vector2(w.grid.width, w.grid.height) * SimConst.TILE_M),
 		"objects": w.objects.size(),
@@ -354,14 +358,14 @@ func _step(a: Dictionary) -> Dictionary:
 	for k in clampi(int(a.get("n", 1)), 1, 2000):
 		w.tick()
 	return {"hour": snappedf(w.time_of_day() * 24.0, 0.0001), "ticks": w.tick_count,
-		"sun_dir_deg": snappedf(rad_to_deg(w.sun_direction.angle()), 0.001),
+		"sun_dir_deg": snappedf(rad_to_deg(w.light_direction.angle()), 0.001),
 		"passes_published": light.trace_version - before}
 
 
 func _fan(a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var light: LightSystem = w.get_system(&"light")
-	var dir := w.sun_direction.rotated(deg_to_rad(float(a.get("sun_offset_deg", 0))))
+	var dir := w.light_direction.rotated(deg_to_rad(float(a.get("sun_offset_deg", 0))))
 	var p0 := Vector2(float(a.get("x0", 0)), float(a.get("y0", 0)))
 	var p1 := Vector2(float(a.get("x1", 0)), float(a.get("y1", 0)))
 	var n := clampi(int(a.get("n", 400)), 2, 20000)

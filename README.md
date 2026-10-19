@@ -13,7 +13,7 @@ godot --path .
 
 The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens. Hover anything for the inspector (material, temperature, absorbed light by band, object readings and temperature).
 
-What you see: the sky glows from the screen edge the sunlight comes from and is colored by the sun's actual spectrum (red at dawn and dusk); below the original ground line a dark earth backdrop sits behind the tiles. Lenses, prisms and mirrors have their own temperature (Heat view fills them with it).
+What you see: the sky glows from the screen edge the sunlight comes from and is colored by the sun's actual spectrum (red at dawn and dusk). At night the moon takes over: it goes through phases over 8 game days, rises about 3.4 h later each day, and its light (about a millionth of the sun's) is traced through the same optics and drawn pale blue at a night exposure; below the original ground line a dark earth backdrop sits behind the tiles. Lenses, prisms and mirrors have their own temperature (Heat view fills them with it).
 
 Controls (the window opens maximized and the interface scales with it; every key below also has a button):
 
@@ -46,7 +46,7 @@ return SimProbe.run("step", {"n": 5})          # pause, then advance exactly 5 t
 return SimProbe.run("fan", {...})              # dense plain-ray ground truth (exit-angle histogram)
 ```
 
-Other commands: `state`, `defs`, `object`, `tile`, `peaks`, `beams`, `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`). Prefer these over screenshots when checking behaviour: they return exact numbers and cost far less.
+Other commands: `state` (sun, moon, traced light), `defs`, `object`, `tile`, `peaks`, `beams`, `strips` (beam widths and concentration per leg), `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`). Prefer these over screenshots when checking behaviour: they return exact numbers and cost far less.
 
 Positions are meters (x right, y down), angles degrees. Commands go through the sim's command queue like player input.
 

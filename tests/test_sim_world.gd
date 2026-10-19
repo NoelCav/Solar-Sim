@@ -38,6 +38,48 @@ func test_sun_rises_east_and_sets_west() -> void:
 	check(not world.sun_is_up, "midnight")
 
 
+
+## The moon lags the sun by its phase, so it rises later each day: one rise every
+## cycle / (cycle - 1) days.
+func test_moon_rises_later_each_day() -> void:
+	var world := _make_world()
+	var step := SimConst.DAY_LENGTH_S / 2000.0
+	var rises: Array[float] = []
+	var was_up := true   # Don't count a moon already up at the start
+	var t := 0.0
+	while t < 4.0 * SimConst.DAY_LENGTH_S and rises.size() < 3:
+		world.time_s = t
+		world.refresh_environment()
+		if world.moon_is_up and not was_up:
+			rises.append(t)
+		was_up = world.moon_is_up
+		t += step
+	check_eq(rises.size(), 3, "three moonrises")
+	var cycle := SimConst.MOON_CYCLE_DAYS
+	var expected := SimConst.DAY_LENGTH_S * cycle / (cycle - 1.0)
+	for k in rises.size() - 1:
+		check_near(rises[k + 1] - rises[k], expected, 2.0 * step, "moonrise to moonrise")
+
+
+## At night the moon is the traced light: from its direction, at about MOON_FULL_RATIO of
+## sunlight times the lit fraction cubed (less what the atmosphere takes). With the moon
+## set, nothing is traced.
+func test_moon_is_the_light_at_night() -> void:
+	var world := _make_world()
+	world.time_s = 1.0 * SimConst.DAY_LENGTH_S   # Midnight, moon a little past full and high
+	world.refresh_environment()
+	check(not world.sun_is_up and world.moon_is_up, "moon up at midnight")
+	check(world.light_is_moon and world.light_is_up, "moon is the traced light")
+	check(world.light_direction.is_equal_approx(world.moon_direction), "light comes from the moon")
+	check(world.moon_illuminated > 0.9, "nearly full (%.2f lit)" % world.moon_illuminated)
+	var top := SimConst.SOLAR_CONSTANT * SimConst.MOON_FULL_RATIO * pow(world.moon_illuminated, 3.0)
+	check(world.light_dni < top and world.light_dni > 0.4 * top,
+		"moonlight %s W/m² (above the atmosphere %s)" % [String.num_scientific(world.light_dni), String.num_scientific(top)])
+	world.time_s = 4.0 * SimConst.DAY_LENGTH_S   # Midnight near new moon: moon down
+	world.refresh_environment()
+	check(not world.moon_is_up and not world.light_is_up, "no light with the moon set")
+
+
 func test_paint_command_applies_and_undoes() -> void:
 	var world := _make_world()
 	var g := world.grid

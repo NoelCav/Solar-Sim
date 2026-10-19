@@ -159,6 +159,7 @@ public partial class LightEngine : RefCounted
     // --- Settings and tables ---------------------------------------------------------------
     int _w, _h, _maxEvents;
     double _tm, _depth, _minChildW, _minRayW, _reflPool;
+    double _baseChildW, _baseRayW;   // Cull thresholds for full sunlight (SetCullScale)
     byte[] _opaque = Array.Empty<byte>(), _dispersive = Array.Empty<byte>(), _hasBulk = Array.Empty<byte>();
     double[] _index = Array.Empty<double>(), _bulk = Array.Empty<double>(), _surfAbs = Array.Empty<double>();
     int[] _mat = Array.Empty<int>();
@@ -249,8 +250,8 @@ public partial class LightEngine : RefCounted
         _tm = tileM;
         _depth = depthM;
         _maxEvents = maxRayEvents;
-        _minChildW = minChildW;
-        _minRayW = minRayW;
+        _minChildW = _baseChildW = minChildW;
+        _minRayW = _baseRayW = minRayW;
         _reflPool = reflPoolM;
         _opaque = opaque;
         _dispersive = dispersive;
@@ -260,6 +261,16 @@ public partial class LightEngine : RefCounted
         _surfAbs = ToDouble(surfAbs);
         _tilePower = new float[width * height];
         _bandPower = new float[width * height * Bands];
+    }
+
+    /// <summary>
+    /// Scales the cull thresholds to the light being traced (k = its DNI relative to full
+    /// sunlight), so dim light (moonlight, ~10⁻⁶ of the sun) keeps the same relative detail.
+    /// </summary>
+    public void SetCullScale(double k)
+    {
+        _minChildW = _baseChildW * k;
+        _minRayW = _baseRayW * k;
     }
 
     /// <summary>The optical surfaces this pass traces (from SurfaceSet).</summary>

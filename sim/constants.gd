@@ -34,10 +34,17 @@ static func c_to_k(celsius: float) -> float:
 const SOLAR_CONSTANT := 1361.0      ## W/m² above the atmosphere (AM0)
 const DIFFUSE_W_M2 := 110.0         ## Diffuse sky irradiance with the sun high (non-focusable)
 
+# --- Moon (§6.2) ---
+const MOON_CYCLE_DAYS := 8.0        ## Game days from full moon to full moon (rises ~3 h later each day)
+const MOON_START_PHASE := 0.45      ## Phase at world start (0 new, 0.5 full): a bright first night
+const MOON_FULL_RATIO := 2.2e-6     ## Full-moon irradiance / sunlight, both above the atmosphere
+const MOON_DISPLAY := 0.35          ## Night exposure: a full moon draws at this fraction of daylight
+
 # --- Light (§6.4) ---
 const LANE_WIDTH_M := 0.02          ## Sun-map lane width across the sun direction
 const MIN_CHILD_W := 0.02           ## Reflected child rays below this power are culled
 const MIN_RAY_W := 1e-4           ## Any ray below this is culled
+const CULL_REFERENCE_DNI := 1000.0  ## Cull thresholds hold at this DNI and scale down with dimmer light
 const REFL_POOL_M := 0.25          ## Pooled Fresnel reflections: one secondary ray per this much wavefront (at most)
 const MAX_RAY_EVENTS := 24          ## Surface interactions along one ray path, children included
 const RETRACE_ANGLE_DEG := 0.1      ## Re-trace when the sun has moved this far (≈0.27 s at 1×), so light moves smoothly

@@ -188,6 +188,40 @@ func test_lens_concentrates_onto_probe() -> void:
 	check(concentration > 8.0, "concentration %.1f×" % concentration)
 
 
+## Moonlight is traced like sunlight, a millionth as strong: a lens still concentrates it
+## onto a probe, energy balances, and scaled cull thresholds keep culling small.
+func test_moonlight_through_lens() -> void:
+	var world := _make_world(80, 60)
+	# The night's highest moon (sun down), so the light comes nearly straight down.
+	var best_t := 0.0
+	var best_h := -INF
+	for k in 1000:
+		world.time_s = (1.0 + k / 1000.0) * SimConst.DAY_LENGTH_S
+		world.refresh_environment()
+		if not world.sun_is_up and world.moon_elevation > best_h:
+			best_h = world.moon_elevation
+			best_t = world.time_s
+	world.time_s = best_t
+	world.tick()
+	check(world.light_is_moon, "moon is the traced light")
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var probe_def := ObjectDef.new()
+	probe_def.key = &"tiny_probe"
+	probe_def.kind = ObjectDef.Kind.PROBE
+	probe_def.size_m = 0.05
+	_place(world, lens, Vector2(10.0, 4.0))
+	var probe := _place(world, probe_def, Vector2(10.0, 4.0 + 1.05))
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var s := light.stats
+	var out: float = s.absorbed + s.escaped + s.scattered + s.culled
+	check(s.emitted > 0.0, "moon emitted light")
+	check_near(out / s.emitted, 1.0, 1e-4, "energy balance")
+	check(s.culled < 0.02 * s.emitted, "culling stays small (%.2f%%)" % [100.0 * s.culled / s.emitted])
+	var concentration := probe.probe_irradiance() / world.light_dni
+	check(concentration > 8.0, "concentration %.1f×" % concentration)
+
+
 ## Light only heats open air where a body is: no ray may stay flagged as inside a lens or
 ## prism after slipping past a corner (regression for grazing hits near prism corners).
 func test_no_stray_deposits_in_open_air() -> void:

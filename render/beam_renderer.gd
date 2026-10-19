@@ -7,11 +7,14 @@ extends MeshInstance2D
 ##   so plain sunlight is faint, a 10× beam is bright and a focus blooms through the glow;
 ## - secondary rays (pooled reflections) as thin lines.
 ## Colors follow the current view (ViewMode); unsplit sunlight sums to white.
+## Moonlight is about a millionth of sunlight: it is drawn at a night exposure
+## (SimConst.MOON_DISPLAY of daylight at full moon) in a pale-blue tint.
 
 const REFERENCE_DNI := 1000.0       ## Irradiance that tones to BeamGeometry.SUN_LEVEL
 const SHEET_LEVEL := 0.07           ## Brightness of the direct-light sheet
 const VERTEX_SCALE := 4.0           ## Vertex colors are stored /4 and scaled back by self_modulate
 const FADE_S := 0.25                ## Crossfade from the previous light to a newly published one
+const MOON_TINT := Vector3(0.62, 0.74, 1.0)   ## Night vision: moonlight reads pale blue
 
 var world: SimWorld
 var view := ViewMode.NORMAL:
@@ -63,6 +66,12 @@ func _process(delta: float) -> void:
 	_old.self_modulate.a = 1.0 - _fade
 
 
+## Display gain for the light being traced: 1 by day; at night moonlight is scaled up so a
+## full moon draws at SimConst.MOON_DISPLAY of daylight.
+static func exposure(world: SimWorld) -> float:
+	return SimConst.MOON_DISPLAY / SimConst.MOON_FULL_RATIO if world.light_is_moon else 1.0
+
+
 ## Brightness for a concentration ratio C (1 = plain sunlight).
 static func tone(c: float) -> float:
 	return BeamGeometry.tone(c)
@@ -85,6 +94,8 @@ func _balance() -> void:
 			# A single-band view (UV, IR) has no white to balance against: keep its hue.
 			if v.x + v.y + v.z > 0.0 and _shown_bins(colors) <= 2:
 				v = Vector3(c.r, c.g, c.b) * Spectrum.AM15_SHARE[b] / _shown_share(colors)
+		if world.light_is_moon:
+			v *= MOON_TINT
 		_rgb.append(v * ViewMode.beam_gain(view))
 
 
@@ -135,13 +146,14 @@ func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) 
 	var share_sum := 0.0
 	for b in Spectrum.BIN_COUNT:
 		share_sum += Spectrum.AM15_SHARE[b]
-	var total := Spectrum.total(world.sun_spectrum)
+	var spectrum := world.light_spectrum
+	var total := Spectrum.total(spectrum)
 	if total <= 0.0:
 		return
 	for b in Spectrum.BIN_COUNT:
 		if Spectrum.AM15_SHARE[b] > 0.0:
-			rgb += _rgb[b] * (world.sun_spectrum[b] / total) / Spectrum.AM15_SHARE[b] * share_sum
-	var level := SHEET_LEVEL * minf(total / REFERENCE_DNI, 1.0) / VERTEX_SCALE
+			rgb += _rgb[b] * (spectrum[b] / total) / Spectrum.AM15_SHARE[b] * share_sum
+	var level := SHEET_LEVEL * minf(total * exposure(world) / REFERENCE_DNI, 1.0) / VERTEX_SCALE
 	var c := Color(rgb.x * level, rgb.y * level, rgb.z * level, 1.0)
 	# One strip per drawn lane, exactly as wide as the lanes it stands for, so neighbours
 	# meet edge to edge whatever their lengths (shadow edges stay crisp, no slits).
@@ -156,7 +168,7 @@ func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) 
 
 
 func _build_beams(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
-	BeamGeometry.build(_light.beam_render, _rgb, REFERENCE_DNI, px,
+	BeamGeometry.build(_light.beam_render, _rgb, REFERENCE_DNI / exposure(world), px,
 		VERTEX_SCALE, verts, cols)
 
 
@@ -169,12 +181,13 @@ func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -
 	# rather than a hairline: weak secondary light reads as haze, not as stray lines.
 	var width_m := SimConst.REFL_POOL_M
 	var half := width_m * 0.5 * px
+	var reference := REFERENCE_DNI / exposure(world)
 	for k in from.size():
 		var rgb := Vector3.ZERO
 		for b in Spectrum.BIN_COUNT:
 			var irr := power[k * Spectrum.BIN_COUNT + b] / (width_m * SimConst.DEPTH_M)
 			if irr > 0.0:
-				rgb += _rgb[b] * tone(irr / (REFERENCE_DNI * Spectrum.AM15_SHARE[b]))
+				rgb += _rgb[b] * tone(irr / (reference * Spectrum.AM15_SHARE[b]))
 		if rgb.x + rgb.y + rgb.z < 1e-4:
 			continue
 		var a := from[k] * px

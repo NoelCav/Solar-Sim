@@ -35,10 +35,10 @@ func _draw() -> void:
 		ViewMode.Overlay.ABSORBED:
 			text = "peak %s" % Hud._irr(overlay.peak_value)
 		_:
-			var suns := overlay.peak_value / maxf(world.sun_dni, 1.0)
+			var suns := Hud.times_light(world, overlay.peak_value)
 			if suns < MIN_SUNS:
 				return
-			text = "≈%.0f× sun" % suns
+			text = "≈%.0f× %s" % [suns, Hud.light_name(world)]
 	var g := world.grid
 	var c := g.coords(overlay.peak_tile)
 	# Screen units throughout (see ObjectRenderer), so the marker stays crisp at any zoom.

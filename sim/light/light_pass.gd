@@ -101,11 +101,11 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	var objects_now := {}
 	for obj: SimObject in world.objects.values():
 		objects_now[obj.id] = [obj.position, obj.angle, obj.def]
-	if world.sun_is_up and world.sun_dni > 0.0 and world.sun_direction.y > 1e-3:
+	if world.light_is_up and world.light_dni > 0.0 and world.light_direction.y > 1e-3:
 		var max_drift := SimConst.RESTART_ANGLE_DEG if edit_only else SimConst.RETRACE_ANGLE_DEG
 		var reuse := prev != null and prev.dir != Vector2.ZERO \
-			and absf(world.sun_direction.angle_to(prev.dir)) < deg_to_rad(max_drift) \
-			and absf(world.sun_dni / prev.dni - 1.0) < (0.25 if edit_only else 0.1)
+			and absf(world.light_direction.angle_to(prev.dir)) < deg_to_rad(max_drift) \
+			and absf(world.light_dni / prev.dni - 1.0) < (0.25 if edit_only else 0.1)
 		incremental = reuse
 		if reuse:
 			# A geometry-only pass keeps the sun the previous pass traced, so unaffected tasks
@@ -114,9 +114,10 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 			dni = prev.dni
 			spectrum = prev.spectrum.duplicate()
 		else:
-			dir = world.sun_direction
-			dni = world.sun_dni
-			spectrum = world.sun_spectrum.duplicate()
+			dir = world.light_direction
+			dni = world.light_dni
+			spectrum = world.light_spectrum.duplicate()
+		engine.SetCullScale(minf(dni / SimConst.CULL_REFERENCE_DNI, 1.0))
 		map.build(grid, opaque, surfaces, dir, SimConst.LANE_WIDTH_M)
 		var t1 := Time.get_ticks_usec()
 		stage_ms.map = (t1 - t0) / 1000.0
