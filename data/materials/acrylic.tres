@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"acrylic"
+id = 10
+display_name = "Acrylic"
+color = Color(0.85, 0.95, 1, 0.3)
+density = 1180
+specific_heat = 1470
+conductivity = 0.19
+emissivity = 0.9
+transparent = true
+cauchy_a = 1.4799
+cauchy_b = 0.0042
+bulk_absorption = PackedFloat32Array(200, 0.5, 0.5, 0.5, 2, 20)
+surface_absorptivity = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+dn_dt = -0.00012
+hardness = 1
+softening_temp = 378
+melt_temp = 433
+thermal_shock_limit = 60
+ignition_temp = 733
+burn_rate = 0.1
+burn_energy = 800
+smoke_rate = 1
+burns_to = &"air"
+flammable = true

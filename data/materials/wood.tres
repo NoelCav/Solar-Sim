@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"wood"
+id = 4
+display_name = "Wood"
+color = Color(0.55, 0.37, 0.2, 1)
+density = 600
+specific_heat = 1700
+conductivity = 0.15
+emissivity = 0.9
+surface_absorptivity = PackedFloat32Array(0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
+hardness = 1.2
+ignition_temp = 573
+burn_rate = 0.05
+burn_energy = 400
+smoke_rate = 0.5
+burns_to = &"char"
+flammable = true

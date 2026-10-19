@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"sand"
+id = 3
+display_name = "Sand"
+phase = 1
+color = Color(0.86, 0.76, 0.52, 1)
+density = 1600
+specific_heat = 830
+conductivity = 0.3
+emissivity = 0.9
+surface_absorptivity = PackedFloat32Array(0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
+hardness = 0.6
+melt_temp = 1973
+melts_to = &"glass_slag"
+falls_when_unsupported = true

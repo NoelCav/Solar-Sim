@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"char"
+id = 13
+display_name = "Char"
+color = Color(0.12, 0.1, 0.09, 1)
+density = 400
+specific_heat = 1000
+conductivity = 0.1
+emissivity = 0.95
+surface_absorptivity = PackedFloat32Array(0.95, 0.95, 0.95, 0.95, 0.95, 0.95)
+hardness = 0.5
+ignition_temp = 623
+burn_rate = 0.02
+burn_energy = 300
+smoke_rate = 0.2
+burns_to = &"ash"
+flammable = true

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"fused_silica"
+id = 11
+display_name = "Fused Silica"
+color = Color(0.9, 0.95, 1, 0.25)
+density = 2200
+specific_heat = 740
+conductivity = 1.4
+emissivity = 0.9
+transparent = true
+cauchy_a = 1.4459
+cauchy_b = 0.00354
+bulk_absorption = PackedFloat32Array(1, 0.1, 0.1, 0.1, 0.2, 0.5)
+surface_absorptivity = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+dn_dt = 1e-05
+hardness = 3
+softening_temp = 1900
+melt_temp = 2000
+thermal_shock_limit = 1000
+melts_to = &"glass_slag"

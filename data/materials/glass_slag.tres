@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"glass_slag"
+id = 15
+display_name = "Glass Slag"
+color = Color(0.3, 0.42, 0.38, 1)
+density = 2400
+specific_heat = 840
+conductivity = 1
+emissivity = 0.9
+surface_absorptivity = PackedFloat32Array(0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
+hardness = 2.5

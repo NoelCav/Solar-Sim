@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"aluminum"
+id = 7
+display_name = "Aluminum"
+color = Color(0.78, 0.8, 0.83, 1)
+density = 2700
+specific_heat = 900
+conductivity = 237
+emissivity = 0.1
+surface_absorptivity = PackedFloat32Array(0.1, 0.1, 0.1, 0.1, 0.1, 0.1)
+hardness = 2
+melt_temp = 933

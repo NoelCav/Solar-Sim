@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"silicon"
+id = 16
+display_name = "Silicon"
+color = Color(0.18, 0.22, 0.35, 1)
+density = 2329
+specific_heat = 700
+conductivity = 150
+emissivity = 0.7
+surface_absorptivity = PackedFloat32Array(0.7, 0.7, 0.7, 0.7, 0.7, 0.7)
+hardness = 3
+melt_temp = 1687

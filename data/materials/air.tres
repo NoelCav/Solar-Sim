@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"air"
+id = 0
+display_name = "Air"
+phase = 3
+color = Color(0.6, 0.8, 1, 0)
+density = 1.2
+specific_heat = 1005
+conductivity = 0.026
+emissivity = 0
+transparent = true
+cauchy_a = 1.0003
+cauchy_b = 0
+bulk_absorption = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+surface_absorptivity = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+hardness = 0

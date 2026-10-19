@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"water"
+id = 12
+display_name = "Water"
+phase = 2
+color = Color(0.2, 0.45, 0.85, 0.6)
+density = 1000
+specific_heat = 4186
+conductivity = 0.6
+emissivity = 0.96
+transparent = true
+cauchy_a = 1.3199
+cauchy_b = 0.0035
+bulk_absorption = PackedFloat32Array(0.05, 0.01, 0.05, 0.4, 40, 2000)
+surface_absorptivity = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+hardness = 0
+boil_temp = 373.15
+viscosity = 0.001

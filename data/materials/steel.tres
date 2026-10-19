@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"steel"
+id = 5
+display_name = "Steel"
+color = Color(0.55, 0.58, 0.62, 1)
+density = 7850
+specific_heat = 490
+conductivity = 45
+emissivity = 0.6
+surface_absorptivity = PackedFloat32Array(0.6, 0.6, 0.6, 0.6, 0.6, 0.6)
+hardness = 5
+melt_temp = 1700
+melts_to = &"glass_slag"

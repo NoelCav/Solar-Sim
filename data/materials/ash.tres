@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"ash"
+id = 14
+display_name = "Ash"
+phase = 1
+color = Color(0.6, 0.6, 0.58, 1)
+density = 600
+specific_heat = 800
+conductivity = 0.1
+emissivity = 0.9
+surface_absorptivity = PackedFloat32Array(0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+hardness = 0.2
+falls_when_unsupported = true

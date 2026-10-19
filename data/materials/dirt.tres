@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"dirt"
+id = 1
+display_name = "Dirt"
+color = Color(0.42, 0.29, 0.18, 1)
+density = 1500
+specific_heat = 800
+conductivity = 0.5
+emissivity = 0.92
+surface_absorptivity = PackedFloat32Array(0.85, 0.85, 0.85, 0.85, 0.85, 0.85)
+hardness = 1
