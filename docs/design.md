@@ -408,12 +408,31 @@ What changed, in order of impact:
 
 Still GDScript-bound: a primary path costs ~40 µs, a full field pass ~0.3 s spread over ticks. The native port (tracer core, heat loop) remains the next large step; the code is now organised around flat arrays and self-contained tasks, which is what a port wants.
 
+### 18.4 C# port (2026-10-19)
+
+The hot loops moved to C# (Godot .NET), per §5.5; GDScript keeps the models and orchestration. The boundary is coarse: GDScript calls in once per pass setup and once per tick (light) or once per band (heat), never per ray or per tile, because every crossing copies arrays.
+
+- `LightEngine.cs`: marching, ray tree, primary paths, beam tracer, object cache, task logs/replay, air distance field — a function-by-function port of the former `tracer.gd`/`beam_tracer.gd`, geometry in doubles.
+- `HeatKernel.cs`: energy fold, conduction (quiet rows), radiation, ambient relaxation.
+- `BeamMesh.cs`: beam triangles for the renderer.
+
+| | GDScript | C# |
+|---|---|---|
+| Full light pass, demo rig 09:00 | 37 ms | 4.4 ms |
+| Full light pass, 30-lens field 09:00 | 340 ms | 21 ms |
+| Heat per tick | 0.77 ms | ~0.2 ms (mostly array copies) |
+| Beam mesh, lens field | 29 ms | 8 ms |
+| Average tick, demo / field | 1.7 / 4.7 ms | 0.35 / 0.8 ms |
+| 4× speed in the editor (debug build) | ~14 fps | 60 fps |
+
+Results match the GDScript implementation (all tests; checksums within ~0.003 %). Remaining GDScript cost sits in per-pass setup (surface sync, sun map, direct-light sheet: ~3–6 ms) and is the next candidate if edits need to get cheaper still.
+
 ## 19. Open questions
 
 - Art direction: pixel art at 16 px (fits scale) vs. clean vector? Light rendering looks good either way.
 - Working title: *Bandgap*, *Heliolab*, *Photon Farm*, *Sunsink*…
 - Tuning: ray count/spacing, heat-capacity scale, dn/dT exaggeration.
 - Wind and weather depth.
-- GDScript vs. C#/GDExtension port for the tracer and heat loop — M1 profiling (§18.1) says port both; pick the language (the editor build in use is not .NET, so C# means switching editors; GDExtension needs a C++ toolchain).
+- ~~GDScript vs. C#/GDExtension port~~ — done in C# (§18.4).
 - Thermal tuning: heat-capacity dial vs. 25 cm tiles averaging away focal spots (the 1.5 m acrylic demo lens raises its focal tile only ~0.3 K/s).
 - Lens absorption heats host air tiles until M7 thermal slices; acceptable stopgap?

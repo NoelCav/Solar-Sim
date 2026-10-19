@@ -4,9 +4,10 @@ A 2D side-view systems sandbox about harnessing sunlight: route spectral light t
 
 ## Running
 
-Godot 4.7+. Open the project in the editor and press Play, or:
+Godot **4.7 .NET** (the C# build; the Steam build lacks C#) and the .NET 8+ SDK. The hot loops (light engine, beam mesh, heat) are C#; everything else is GDScript. Open the project in the editor and press Play (the editor builds the C# project), or:
 
 ```bash
+dotnet build "Solar Sim.csproj"
 godot --path .
 ```
 
@@ -29,9 +30,10 @@ Controls:
 
 ## Tests
 
-Headless sim tests (a test also fails on any script error raised while it runs):
+Headless sim tests (a test also fails on any script error raised while it runs). Build the C# project first if it changed:
 
 ```bash
+dotnet build "Solar Sim.csproj"
 godot --headless --path . -s res://tests/run_tests.gd
 ```
 
@@ -44,11 +46,11 @@ godot --headless --path . -s res://tests/bench.gd
 ## Layout
 
 - `sim/` — pure simulation (no Nodes): world, tile grid, materials, commands, systems
-  - `light/` — spectrum, optical surfaces, generators, ray tracer, light system
-  - `thermal/` — heat grid
+  - `light/` — spectrum, optical surfaces, generators, sun map, light passes; `LightEngine.cs` (ray work)
+  - `thermal/` — heat grid; `HeatKernel.cs` (per-tile loops)
   - `objects/` — object definitions and instances
 - `data/materials/`, `data/objects/` — content definitions (`.tres`, SI units)
-- `render/`, `ui/` — Nodes that read sim state and send commands
+- `render/`, `ui/` — Nodes that read sim state and send commands (`BeamMesh.cs` builds beam triangles)
 - `scenes/` — entry scene
 - `tests/` — headless tests and benchmark
 - `addons/godot_ai/` — Godot AI MCP plugin (v4.3.0)
