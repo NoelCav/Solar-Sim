@@ -30,6 +30,8 @@ var wavelength := -1:   ## Single bin to show, or -1 for all; tiles show that bi
 ## Peak of the current layer: tile index (-1 if none) and value (W/m² or K).
 var peak_tile := -1
 var peak_value := 0.0
+var heat_gradient := Gradient.new()
+var light_gradient := Gradient.new()
 
 var _light: LightSystem
 var _image: Image
@@ -37,8 +39,6 @@ var _texture: ImageTexture
 var _bytes := PackedByteArray()
 var _timer := 0.0
 var _add_mat := CanvasItemMaterial.new()
-var heat_gradient := Gradient.new()
-var light_gradient := Gradient.new()
 var _heat_lut := PackedByteArray()
 var _light_lut := PackedByteArray()
 var _solid_lut := PackedByteArray()   ## 1 per material id that is not a gas
@@ -129,10 +129,9 @@ func legend_value(x: float) -> String:
 	x = clampf(x, 0.0, 1.0)
 	match ViewMode.overlay(view):
 		ViewMode.Overlay.TEMPERATURE:
-			var c := HEAT_COLD_C + x / 0.5 * (HEAT_WARM_C - HEAT_COLD_C) if x <= 0.5 				else HEAT_WARM_C + exp((x - 0.5) / 0.5 * log(1.0 + HEAT_HOT_C - HEAT_WARM_C)) - 1.0
-			return "%.0f °C" % c
+			return "%.0f °C" % heat_c(x)
 		ViewMode.Overlay.ABSORBED:
-			return Hud._irr(exp(log(IRR_MIN) + x * (log(IRR_MAX) - log(IRR_MIN))))
+			return Readout.irradiance(exp(log(IRR_MIN) + x * (log(IRR_MAX) - log(IRR_MIN))))
 	return ""
 
 
@@ -144,6 +143,13 @@ static func heat_x(c: float) -> float:
 	return 0.5 + 0.5 * clampf(log(1.0 + c - HEAT_WARM_C) / log(1.0 + HEAT_HOT_C - HEAT_WARM_C), 0.0, 1.0)
 
 
+## Temperature in °C at position x (0–1) on the heat scale; the inverse of heat_x.
+static func heat_c(x: float) -> float:
+	if x <= 0.5:
+		return HEAT_COLD_C + x / 0.5 * (HEAT_WARM_C - HEAT_COLD_C)
+	return HEAT_WARM_C + exp((x - 0.5) / 0.5 * log(1.0 + HEAT_HOT_C - HEAT_WARM_C)) - 1.0
+
+
 ## Absorbed light from the published lit tiles only; `band` -1 = all light.
 func _fill_light(band: int, glow: bool) -> void:
 	_bytes.fill(0)
@@ -151,11 +157,11 @@ func _fill_light(band: int, glow: bool) -> void:
 	if tp.size() != world.grid.size():
 		return
 	var bp := _light.band_power
-	var scale := _light.power_scale(world) / (SimConst.TILE_M * SimConst.DEPTH_M)
+	var scale := _light.irradiance_scale(world)
 	var log_lo := log(IRR_MIN)
 	var log_span := log(IRR_MAX) - log_lo
 	var glow_lo := log(GLOW_MIN)
-	var gain := BeamRenderer.exposure(world)   # Moonlight shown at the night exposure
+	var gain := DisplayLight.exposure(world)
 	for i in _light.shown_lit:
 		var w := tp[i] if band < 0 else bp[i * Spectrum.BAND_COUNT + band]
 		var irr := w * scale

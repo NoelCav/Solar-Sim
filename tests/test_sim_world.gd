@@ -1,4 +1,5 @@
 extends TestSuite
+## World checks: grid layers, ticking, sun and moon motion, commands and undo, determinism.
 
 
 func _make_world(seed_value: int = 7) -> SimWorld:

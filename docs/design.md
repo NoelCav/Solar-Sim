@@ -42,6 +42,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D16 | **Placed objects can hold components**: a stand holds a lens, a cell module holds its layers. Components are designs (D15) with their own state | Swap a lens without moving the stand; one inspector and save path for both |
 | D17 | **Systems exchange energy only through the heat field and object ports** (power, pipe). No system reads another's internals | Keeps thermal power, cells, fluids and light composable as scope grows |
 | D18 | **Lit faces carry a thin surface skin** split into strips (~2.5 cm) that take the light deposits at the light engine's resolution; the skin couples to its 25 cm tile by conduction. Charring, ignition, melting and cell damage read the skin | Focal spots heat a spot, not a whole tile: a magnifying glass singes wood in seconds while the block stays cool |
+| D19 | **Light is shown where it lands.** Terrain is lit on its exposed faces only, never through a block; things behind the play plane are **background props** (trees, stands, panel frames, machine bodies) that catch light for display but never block, absorb or heat. Daylight lights everything; at night only lit faces and props show (`DisplayLight`) | Keeps optics and heat 2D while the world reads as lit by real light: focused moonlight, later lamps, light up spots in a dark world |
 
 ## 4. World & scale
 
@@ -227,6 +228,8 @@ Real-ish lens materials:
 - **Dust motes** (particles) brighten where they sample the light buffer → visible beams.
 - **Heat shimmer** distortion shader driven by the heat texture.
 - NIR/IR are invisible in normal view but shown in a **light overlay** (false color per bin).
+- **World lighting (D19):** by day everything is lit; after dusk the ambient fades to near black and a block shows only in a thin skin on the faces light lands on (the light engine records light arriving per tile face; the D18 skin will refine that along each face). Moonlight is drawn at a night exposure in a pale-blue tint. All display exposure and night policy lives in `DisplayLight`.
+- **Background props (planned, D19):** a display layer behind the play plane, lit by the light passing in front of it (sheet, beams) so a lens stand or a panel frame glows where light crosses it. Display only: props never enter the optics or the heat field.
 
 ## 7. Heat
 
@@ -388,9 +391,9 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
 | **Moonlight & moon cycle** ✅ | Done (§6.2, §18.6). Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
 | **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
-| M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error |
+| M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
-| M3 — Cells & power | Cell model, power network, batteries, grid market |
+| M3 — Cells & power | Cell model, power network, batteries, grid market; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power |
 | M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule |
 | M5 — Fire & destruction | Integrity, ignition, debris, mining/deconstruction |
 | M6 — Liquids & gases | Free liquid CA, smoke/steam fields, phase change, light attenuation |
@@ -476,6 +479,14 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **One traced light:** `world.light_*` is the sun when up, else the moon; light passes, deposits, the inspector, probe labels and the peak marker use it ("× moon" at night, mW/µW/m² readouts). Engine cull thresholds scale with the traced DNI (`SetCullScale`), so moonlight keeps reflections and secondary rays.
 - **Display:** night exposure (full moon ≈ 0.35 of daylight) in a pale-blue tint for beams, the light sheet and the Light view; the sky's moon glow follows the real moon and its phase. HUD shows moon elevation, % lit and irradiance.
 - **Tests:** moonrise spacing, the moon as the night light (direction, irradiance, moon set), moonlight through a lens (energy balance, culling, concentration). SimProbe `state` reports the moon and the traced light.
+
+### 18.7 Lighting, consistency pass (2026-10-19)
+
+- **Night and glow:** sun and moon glows are soft, centred past the screen edge, with a cubic falloff (no disk, no rim). Nights are near black (`DisplayLight.NIGHT_AMBIENT`; the HDR buffer is linear, so 0.2 % reads as ~4 % on screen); blocks show only a lit skin on exposed faces (D19). Objects keep a 12 % floor so they can still be edited in the dark.
+- **Consolidation:** one home each for plain sunlight (`SimConst.REFERENCE_DNI`), sun-weighted absorptivity (`MaterialDB.sun_absorptivity`), tile watts → W/m² (`LightSystem.irradiance_scale`), arc angles (`world.sun_arc_angle`, `moon_arc_angle`), display light policy (`DisplayLight`) and value text (`Readout`). SimProbe commands are one table (`COMMANDS`) that drives both help and dispatch; SimProbe and the benchmark use public APIs only (`Main.object_db`, `Main.invalidate_preview`, `LightSystem.probe_engine`, `retrace(world, fresh)`, `BeamRenderer.rebuild`).
+- **Rules and tooling:** `docs/style.md` (principles, layers, naming, docs); `python tools/check.py` runs gdlint (config `gdlintrc`, 120 columns) plus layering, privacy, one-home, docs and line-ending checks. gdformat is not used (it strips aligned comments).
+- **Light per face:** the light engine records the watts arriving on each tile face (`LightEngine.FaceLight`, published as `LightSystem.face_light`, replayed by incremental passes). The tile shader lights each face's skin from its own value, so only faces light really reaches show at night, and the inspector's "≈ N× sun" reads the light arriving instead of estimating it back from absorption.
+- **Known cost:** geometric beam slicing (§18.5 fixes) raised the lens-field beam mesh build from ~12 to ~17 ms (debug build, 09:00); candidate for the next performance pass.
 
 ## 19. Open questions
 

@@ -5,6 +5,39 @@ extends Node
 ## command queue like player input (D6). Positions are meters (x right, y down), angles degrees.
 
 const ASCII := " .:-=+*#%@"
+## Commands: name -> arguments and what it returns (`help` lists them). Each is handled by
+## `_cmd_<name>(args)`.
+const COMMANDS := {
+	"state": "time, sun, moon (phase, lit), traced light, ambient, speed/pause, view, light and heat stats",
+	"objects": "all placed objects: id, key, kind, position, angle, absorbed W, probe reading",
+	"defs": "object definitions that can be placed (keys)",
+	"object": "{id}: one object with its bounds",
+	"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light",
+	"region": "{x0, y0, x1, y1, layer: light|heat|material, cols?: 60}: ASCII map plus summary",
+	"peaks": "{layer: light|heat, n: 10}: hottest or brightest tiles",
+	"trace": "{x, y, angle (deg, 90 = straight down) or dx, dy, bin: 0-5 (UV..IR, default 2 green)}: "
+		+ "one test ray through current geometry; returns segments with power",
+	"place": "{key, x, y, angle}",
+	"move": "{id, x, y}",
+	"rotate": "{id, angle} absolute or {id, by}",
+	"remove": "{id}",
+	"time": "{hour}: jump to that hour of the current day (24+ = next day)",
+	"pause": "{on: bool}",
+	"speed": "{n: 1|2|4|8|16}",
+	"view": "{name: Normal|Light|Heat}",
+	"wavelength": "{bin: -1..5}",
+	"camera": "{x, y, zoom}: centre the view on a point (for screenshots)",
+	"step": "{n: 1}: pause, then advance exactly n sim ticks (light passes run within ticks)",
+	"fan": "{x0, y0, x1, y1 start line, n: 400, sun_offset_deg: 0, bin: 2, box: [bx0, by0, bx1, by1], "
+		+ "hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the traced "
+		+ "light (rotated by sun_offset_deg) from the start line; histogram of directions of legs "
+		+ "leaving the box, weighted by power",
+	"beams": "{x0, y0, x1, y1}: published beam records and secondary rays overlapping a box: count, "
+		+ "watts, and a fingerprint to compare passes",
+	"strips": "{x0, y0, x1, y1, bin: 2, max: 40}: beam render records with a point in the box, leg by "
+		+ "leg: start/end widths (m, as BeamMesh measures them) and concentration C (1 = plain sun); "
+		+ "sorted by peak C",
+}
 
 var _main: Main
 
@@ -13,55 +46,16 @@ func run(cmd: String, a: Dictionary = {}) -> Dictionary:
 	_main = get_tree().current_scene as Main
 	if _main == null or _main.world == null:
 		return {"error": "game not ready"}
-	match cmd:
-		"help": return _help()
-		"state": return _state()
-		"objects": return _objects()
-		"defs": return _defs()
-		"object": return _object(a)
-		"tile": return _tile(a)
-		"region": return _region(a)
-		"peaks": return _peaks(a)
-		"trace": return _trace(a)
-		"place": return _place(a)
-		"move": return _move(a)
-		"rotate": return _rotate(a)
-		"remove": return _remove(a)
-		"time": return _time(a)
-		"pause": return _pause(a)
-		"speed": return _speed(a)
-		"view": return _view(a)
-		"wavelength": return _wavelength(a)
-		"camera": return _camera(a)
-		"step": return _step(a)
-		"beams": return _beams(a)
-		"strips": return _strips(a)
-		"fan": return _fan(a)
-	return {"error": "unknown cmd '%s'; try help" % cmd}
+	if cmd != "help" and not COMMANDS.has(cmd):
+		return {"error": "unknown cmd '%s'; try help" % cmd}
+	return call("_cmd_" + cmd, a)
 
 
-func _help() -> Dictionary:
-	return {"commands": {
-		"state": "time, sun, moon (phase, lit), traced light, ambient, speed/pause, view, light and heat stats",
-		"objects": "all placed objects: id, key, kind, position, angle, absorbed W, probe reading",
-		"defs": "object definitions that can be placed (keys)",
-		"object": "{id}: one object with its bounds",
-		"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light",
-		"region": "{x0, y0, x1, y1, layer: light|heat|material, cols?: 60}: ASCII map plus summary",
-		"peaks": "{layer: light|heat, n: 10}: hottest or brightest tiles",
-		"trace": "{x, y, angle (deg, 90 = straight down) or dx, dy, bin: 0-5 (UV..IR, default 2 green)}: one test ray through current geometry; returns segments with power",
-		"place": "{key, x, y, angle}", "move": "{id, x, y}", "rotate": "{id, angle} absolute or {id, by}",
-		"remove": "{id}", "time": "{hour}", "pause": "{on: bool}", "speed": "{n: 1|2|4}",
-		"view": "{name: Normal|Light|Heat}", "wavelength": "{bin: -1..5}",
-		"camera": "{x, y, zoom}: centre the view on a point (for screenshots)",
-		"step": "{n: 1}: pause, then advance exactly n sim ticks (light passes run within ticks)",
-		"fan": "{x0, y0, x1, y1 start line, n: 400, sun_offset_deg: 0, bin: 2, box: [bx0, by0, bx1, by1], hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the sun (rotated by sun_offset_deg) from the start line; histogram of directions of legs leaving the box, weighted by power",
-		"beams": "{x0, y0, x1, y1}: published beam records and secondary rays overlapping a box: count, watts, and a fingerprint to compare passes",
-		"strips": "{x0, y0, x1, y1, bin: 2, max: 40}: beam render records with a point in the box, leg by leg: start/end widths (m, as BeamMesh measures them) and concentration C (1 = plain sun); sorted by peak C",
-	}}
+func _cmd_help(_a: Dictionary) -> Dictionary:
+	return {"commands": COMMANDS}
 
 
-func _state() -> Dictionary:
+func _cmd_state(_a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var light: LightSystem = w.get_system(&"light")
 	var heat: ThermalSystem = w.get_system(&"heat")
@@ -85,7 +79,7 @@ func _state() -> Dictionary:
 	}
 
 
-func _objects() -> Dictionary:
+func _cmd_objects(_a: Dictionary) -> Dictionary:
 	var out := []
 	for obj: SimObject in _main.world.objects.values():
 		out.append(_object_info(obj))
@@ -103,15 +97,15 @@ func _object_info(obj: SimObject) -> Dictionary:
 	return d
 
 
-func _defs() -> Dictionary:
+func _cmd_defs(_a: Dictionary) -> Dictionary:
 	var out := []
-	for def: ObjectDef in _main._tool.defs:
+	for def: ObjectDef in _main.object_db.defs:
 		out.append({"key": str(def.key), "name": def.display_name, "kind": ObjectDef.Kind.keys()[def.kind],
 			"size_m": def.size_m})
 	return {"defs": out}
 
 
-func _object(a: Dictionary) -> Dictionary:
+func _cmd_object(a: Dictionary) -> Dictionary:
 	var obj: SimObject = _main.world.objects.get(int(a.get("id", -1)))
 	if obj == null:
 		return {"error": "no object %s" % a.get("id")}
@@ -133,7 +127,7 @@ func _cell(a: Dictionary) -> Vector2i:
 	return Vector2i(floori(float(a.get("x", 0)) / SimConst.TILE_M), floori(float(a.get("y", 0)) / SimConst.TILE_M))
 
 
-func _tile(a: Dictionary) -> Dictionary:
+func _cmd_tile(a: Dictionary) -> Dictionary:
 	var c := _cell(a)
 	var g := _main.world.grid
 	if not g.in_bounds(c.x, c.y):
@@ -164,7 +158,7 @@ func _tile_info(i: int) -> Dictionary:
 
 
 ## An ASCII map of a region (log-scaled for light and heat) and a summary.
-func _region(a: Dictionary) -> Dictionary:
+func _cmd_region(a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var g := w.grid
 	var light: LightSystem = w.get_system(&"light")
@@ -221,7 +215,7 @@ func _region(a: Dictionary) -> Dictionary:
 	return out
 
 
-func _peaks(a: Dictionary) -> Dictionary:
+func _cmd_peaks(a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var g := w.grid
 	var light: LightSystem = w.get_system(&"light")
@@ -244,20 +238,17 @@ func _peaks(a: Dictionary) -> Dictionary:
 
 ## One test ray through the current geometry on the preview pass (the sim's own passes are
 ## untouched).
-func _trace(a: Dictionary) -> Dictionary:
+func _cmd_trace(a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var light: LightSystem = w.get_system(&"light")
-	if light._preview == null:
-		return {"error": "light not set up yet"}
 	var dir := Vector2(float(a.get("dx", 0)), float(a.get("dy", 1)))
 	if a.has("angle"):
 		dir = Vector2.from_angle(deg_to_rad(float(a.angle)))
 	var origin := Vector2(float(a.get("x", 0)), float(a.get("y", 0)))
 	var bin := clampi(int(a.get("bin", Spectrum.Bin.GREEN)), 0, Spectrum.BIN_COUNT - 1)
-	var p := light._preview
-	p.start(w, light._shown)
-	var e := p.engine
-	e.Begin()
+	var e := light.probe_engine(w)
+	if e == null:
+		return {"error": "light not set up yet"}
 	var power := Spectrum.make_zero()
 	power[bin] = 1.0
 	e.Trace(origin, dir.normalized(), power)
@@ -270,21 +261,21 @@ func _trace(a: Dictionary) -> Dictionary:
 			"power": snappedf(pw[k * Spectrum.BIN_COUNT + bin], 0.0001),
 			"angle_deg": snappedf(rad_to_deg((to[k] - from[k]).angle()), 0.01)})
 	var s: Dictionary = e.Stats()
-	_main._previewed = Vector3(-1, -1, -1)   # Make the paused view re-preview normally
+	_main.invalidate_preview()
 	return {"segments": segs, "absorbed": snappedf(s.absorbed, 0.0001), "escaped": snappedf(s.escaped, 0.0001),
 		"scattered": snappedf(s.scattered, 0.0001), "culled": snappedf(s.culled, 0.0001)}
 
 
-func _place(a: Dictionary) -> Dictionary:
-	for def: ObjectDef in _main._tool.defs:
-		if str(def.key) == str(a.get("key", "")):
-			_main.world.enqueue(PlaceObjectCommand.new(def, Vector2(float(a.get("x", 0)), float(a.get("y", 0))),
-				deg_to_rad(float(a.get("angle", 0)))))
-			return {"ok": true, "id": _main.world.next_object_id}
-	return {"error": "no def '%s'; see defs" % a.get("key")}
+func _cmd_place(a: Dictionary) -> Dictionary:
+	var def := _main.object_db.get_by_key(StringName(str(a.get("key", ""))))
+	if def == null:
+		return {"error": "no def '%s'; see defs" % a.get("key")}
+	_main.world.enqueue(PlaceObjectCommand.new(def, Vector2(float(a.get("x", 0)), float(a.get("y", 0))),
+		deg_to_rad(float(a.get("angle", 0)))))
+	return {"ok": true, "id": _main.world.next_object_id}
 
 
-func _move(a: Dictionary) -> Dictionary:
+func _cmd_move(a: Dictionary) -> Dictionary:
 	var obj: SimObject = _main.world.objects.get(int(a.get("id", -1)))
 	if obj == null:
 		return {"error": "no object"}
@@ -293,7 +284,7 @@ func _move(a: Dictionary) -> Dictionary:
 	return {"ok": true}
 
 
-func _rotate(a: Dictionary) -> Dictionary:
+func _cmd_rotate(a: Dictionary) -> Dictionary:
 	var obj: SimObject = _main.world.objects.get(int(a.get("id", -1)))
 	if obj == null:
 		return {"error": "no object"}
@@ -302,32 +293,32 @@ func _rotate(a: Dictionary) -> Dictionary:
 	return {"ok": true}
 
 
-func _remove(a: Dictionary) -> Dictionary:
+func _cmd_remove(a: Dictionary) -> Dictionary:
 	_main.world.enqueue(RemoveObjectCommand.new(int(a.get("id", -1))))
 	return {"ok": true}
 
 
-func _time(a: Dictionary) -> Dictionary:
+func _cmd_time(a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var day_start := floorf(w.time_s / SimConst.DAY_LENGTH_S) * SimConst.DAY_LENGTH_S
 	w.enqueue(SetTimeCommand.new(day_start + float(a.get("hour", 12)) / 24.0 * SimConst.DAY_LENGTH_S))
 	return {"ok": true}
 
 
-func _pause(a: Dictionary) -> Dictionary:
+func _cmd_pause(a: Dictionary) -> Dictionary:
 	if bool(a.get("on", not _main.paused)) != _main.paused:
 		_main.toggle_pause()
 	return {"paused": _main.paused}
 
 
-func _speed(a: Dictionary) -> Dictionary:
+func _cmd_speed(a: Dictionary) -> Dictionary:
 	var n := int(a.get("n", 1))
 	if n in Main.SPEEDS:
 		_main.speed = n
 	return {"speed": _main.speed}
 
 
-func _view(a: Dictionary) -> Dictionary:
+func _cmd_view(a: Dictionary) -> Dictionary:
 	var k := ViewMode.NAMES.find(str(a.get("name", "Normal")))
 	if k < 0:
 		return {"error": "views: %s" % [ViewMode.NAMES]}
@@ -335,12 +326,12 @@ func _view(a: Dictionary) -> Dictionary:
 	return {"ok": true}
 
 
-func _wavelength(a: Dictionary) -> Dictionary:
+func _cmd_wavelength(a: Dictionary) -> Dictionary:
 	_main.set_wavelength(clampi(int(a.get("bin", -1)), -1, Spectrum.BIN_COUNT - 1))
 	return {"ok": true}
 
 
-func _camera(a: Dictionary) -> Dictionary:
+func _cmd_camera(a: Dictionary) -> Dictionary:
 	var cam := _main.get_node("Camera") as Camera2D
 	var px := SimConst.TILE_PX / SimConst.TILE_M
 	cam.position = Vector2(float(a.get("x", cam.position.x / px)), float(a.get("y", cam.position.y / px))) * px
@@ -349,7 +340,7 @@ func _camera(a: Dictionary) -> Dictionary:
 	return {"ok": true}
 
 
-func _step(a: Dictionary) -> Dictionary:
+func _cmd_step(a: Dictionary) -> Dictionary:
 	if not _main.paused:
 		_main.toggle_pause()
 	var w := _main.world
@@ -362,7 +353,7 @@ func _step(a: Dictionary) -> Dictionary:
 		"passes_published": light.trace_version - before}
 
 
-func _fan(a: Dictionary) -> Dictionary:
+func _cmd_fan(a: Dictionary) -> Dictionary:
 	var w := _main.world
 	var light: LightSystem = w.get_system(&"light")
 	var dir := w.light_direction.rotated(deg_to_rad(float(a.get("sun_offset_deg", 0))))
@@ -373,10 +364,9 @@ func _fan(a: Dictionary) -> Dictionary:
 	var bx: Array = a.get("box", [0, 0, 1e9, 1e9])
 	var box := Rect2(Vector2(bx[0], bx[1]), Vector2(bx[2] - bx[0], bx[3] - bx[1]))
 	var hist_deg := float(a.get("hist_deg", 2.0))
-	var lp := light._preview
-	lp.start(w, light._shown)
-	var e := lp.engine
-	e.Begin()
+	var e := light.probe_engine(w)
+	if e == null:
+		return {"error": "light not set up yet"}
 	var power := Spectrum.make_zero()
 	power[bin] = 1.0 / n
 	for k in n:
@@ -399,14 +389,14 @@ func _fan(a: Dictionary) -> Dictionary:
 	for key in keys:
 		if hist[key] > 0.002:
 			rows.append([key, snappedf(hist[key], 0.0001)])
-	_main._previewed = Vector3(-1, -1, -1)
+	_main.invalidate_preview()
 	return {"sun_dir_deg": snappedf(rad_to_deg(dir.angle()), 0.001), "leaving_box_w": snappedf(out_w, 0.0001),
 		"histogram_deg_w": rows}
 
 
 ## Beam records (BeamGeometry layout) touching a box: how many, their power and a coarse
 ## fingerprint (sum of record points), to see whether consecutive passes changed shape.
-func _beams(a: Dictionary) -> Dictionary:
+func _cmd_beams(a: Dictionary) -> Dictionary:
 	var light: LightSystem = _main.world.get_system(&"light")
 	var box := Rect2(Vector2(float(a.get("x0", 0)), float(a.get("y0", 0))), Vector2.ZERO)
 	box = box.expand(Vector2(float(a.get("x1", 1e9)), float(a.get("y1", 1e9))))
@@ -447,12 +437,12 @@ func _beams(a: Dictionary) -> Dictionary:
 		"fingerprint": _v(fp), "secondary_rays": rays, "secondary_w": snappedf(ray_w, 0.001)}
 
 
-func _strips(a: Dictionary) -> Dictionary:
+func _cmd_strips(a: Dictionary) -> Dictionary:
 	var light: LightSystem = _main.world.get_system(&"light")
 	var box := Rect2(Vector2(float(a.get("x0", 0)), float(a.get("y0", 0))), Vector2.ZERO)
 	box = box.expand(Vector2(float(a.get("x1", 1e9)), float(a.get("y1", 1e9))))
 	var want := int(a.get("bin", 2))
-	var reference := 1000.0 * Spectrum.AM15_SHARE[want] * SimConst.DEPTH_M
+	var reference := SimConst.REFERENCE_DNI * Spectrum.AM15_SHARE[want] * SimConst.DEPTH_M
 	var buf := light.beam_render
 	var out := []
 	var o := 0

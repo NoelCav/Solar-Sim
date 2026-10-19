@@ -9,6 +9,7 @@ const DARKEN := 0.42
 const OUTSIDE := 4000.0        ## How far the earth continues past the site, tiles
 
 var world: SimWorld
+var outside: Node2D   ## Earth beyond the site's edges (plain rects, dimmed at night by TileRenderer)
 
 
 func setup(p_world: SimWorld) -> void:
@@ -37,7 +38,7 @@ func setup(p_world: SimWorld) -> void:
 			img.set_pixel(x, y, Color(c.r * DARKEN, c.g * DARKEN, c.b * DARKEN, 1.0))
 	texture = ImageTexture.create_from_image(img)
 	# Earth beyond the site's edges and below its bottom, unshaded.
-	var outside := Node2D.new()
+	outside = Node2D.new()
 	outside.z_index = -5
 	outside.z_as_relative = false
 	outside.draw.connect(func() -> void:

@@ -10,6 +10,7 @@ const SPEEDS: Array[int] = [1, 2, 4, 8, 16]
 @export var place_demo_rig := true
 
 var world: SimWorld
+var object_db: ObjectDB   ## Placeable object definitions
 var paused := false
 var speed := 1
 
@@ -40,7 +41,7 @@ func _ready() -> void:
 	if err != "":
 		push_error("Material load failed: " + err)
 		return
-	var object_db := ObjectDB.new()
+	object_db = ObjectDB.new()
 	err = object_db.load_dir()
 	if err != "":
 		push_error("Object load failed: " + err)
@@ -58,6 +59,9 @@ func _ready() -> void:
 	move_child(backdrop, _sky.get_index() + 1)
 	backdrop.setup(world)
 	_tiles.setup(world)
+	_tiles.lit_materials.append(backdrop.material as ShaderMaterial)
+	_tiles.dimmed[backdrop.outside] = 0.0
+	_tiles.dimmed[_objects] = 0.12   # Objects stay faintly visible to edit in the dark
 	_objects.setup(world)
 	_beams.setup(world)
 	_overlay.setup(world)
@@ -131,6 +135,11 @@ func set_wavelength(bin: int) -> void:
 
 func toggle_pause() -> void:
 	paused = not paused
+	invalidate_preview()
+
+
+## Makes the paused view trace a fresh preview next frame (after something else used it).
+func invalidate_preview() -> void:
 	_previewed = Vector3(-1, -1, -1)
 
 

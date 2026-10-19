@@ -2,14 +2,30 @@ class_name TileRenderer
 extends Sprite2D
 ## Tile view: one texel per tile, scaled up and shaded per pixel by tiles.gdshader (grain,
 ## bevels, depth). Reads sim state only; rebuilds when the grid's structure_version changes.
+##
+## Also lights the world (DisplayLight): by day everything is lit; after dusk the ambient
+## fades to nearly black and a block shows only where light lands on its exposed faces (from
+## the published light pass, at the view's exposure: moonlit ground dimly, focused moonlight
+## brightly). The backdrop shares the light texture; other items in `dimmed` are darkened
+## by the ambient, down to their own floor.
+
+const LIGHT_REFRESH_S := 0.25     ## How often the light texture follows the light's intensity
 
 var world: SimWorld
+var lit_materials: Array[ShaderMaterial] = []   ## Shader materials that take ambient + light_tex
+var dimmed: Dictionary[CanvasItem, float] = {}   ## Items darkened at night -> brightness floor
 
 var _image: Image
 var _texture: ImageTexture
 var _bytes := PackedByteArray()
 var _palette := PackedByteArray()   ## RGBA8 per material id
 var _seen_version := -1
+var _light: LightSystem
+var _light_image: Image
+var _light_texture: ImageTexture
+var _light_bytes := PackedByteArray()
+var _light_seen := -1
+var _light_timer := 0.0
 
 
 func setup(p_world: SimWorld) -> void:
@@ -27,11 +43,45 @@ func setup(p_world: SimWorld) -> void:
 	_texture = ImageTexture.create_from_image(_image)
 	texture = _texture
 	_rebuild()
+	_light = world.get_system(&"light")
+	_light_bytes.resize(g.size() * 4)
+	_light_image = Image.create_empty(g.width, g.height, false, Image.FORMAT_RGBA8)
+	_light_texture = ImageTexture.create_from_image(_light_image)
+	lit_materials.append(mat)
 
 
-func _process(_delta: float) -> void:
-	if world != null and world.grid.structure_version != _seen_version:
+func _process(delta: float) -> void:
+	if world == null:
+		return
+	if world.grid.structure_version != _seen_version:
 		_rebuild()
+	_light_timer -= delta
+	if _light.trace_version != _light_seen or _light_timer <= 0.0:
+		_rebuild_light()
+	var ambient := DisplayLight.ambient(world)
+	for m in lit_materials:
+		m.set_shader_parameter(&"ambient", ambient)
+		m.set_shader_parameter(&"light_tex", _light_texture)
+	for item: CanvasItem in dimmed:
+		var v := maxf(ambient, dimmed[item])
+		item.modulate = Color(v, v, v, item.modulate.a)
+
+
+## Per tile face (RGBA: top, bottom, left, right), how lit it is by the light arriving on
+## it: irradiance at the view's exposure, relative to plain sunlight, 0..1.
+func _rebuild_light() -> void:
+	_light_seen = _light.trace_version
+	_light_timer = LIGHT_REFRESH_S
+	_light_bytes.fill(0)
+	var faces := _light.face_light
+	var g := world.grid
+	if faces.size() == g.size() * 4:
+		var scale := _light.irradiance_scale(world) * DisplayLight.exposure(world) / SimConst.REFERENCE_DNI
+		for i in _light.shown_lit:
+			for f in 4:
+				_light_bytes[i * 4 + f] = int(clampf(faces[i * 4 + f] * scale, 0.0, 1.0) * 255.0)
+	_light_image.set_data(g.width, g.height, false, Image.FORMAT_RGBA8, _light_bytes)
+	_light_texture.update(_light_image)
 
 
 func _build_palette() -> void:

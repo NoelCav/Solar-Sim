@@ -117,7 +117,7 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 			dir = world.light_direction
 			dni = world.light_dni
 			spectrum = world.light_spectrum.duplicate()
-		engine.SetCullScale(minf(dni / SimConst.CULL_REFERENCE_DNI, 1.0))
+		engine.SetCullScale(minf(dni / SimConst.REFERENCE_DNI, 1.0))
 		map.build(grid, opaque, surfaces, dir, SimConst.LANE_WIDTH_M)
 		var t1 := Time.get_ticks_usec()
 		stage_ms.map = (t1 - t0) / 1000.0
@@ -297,7 +297,7 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 ## Probes read the lanes that cross them before their first hit.
 func _direct() -> void:
 	var lane_area := map.lane_w * SimConst.DEPTH_M
-	engine.DirectDeposit(map.kind, map.ref, spectrum, lane_area, SunMap.Hit.OPAQUE, SunMap.Hit.NONE)
+	engine.DirectDeposit(map.kind, map.ref, map.side, spectrum, lane_area, SunMap.Hit.OPAQUE, SunMap.Hit.NONE)
 	for s in surfaces.count():
 		if surfaces.coating[s] == SurfaceSet.Coating.PROBE:
 			var n := map.lanes_reaching(surfaces.a[s], surfaces.b[s]).size()

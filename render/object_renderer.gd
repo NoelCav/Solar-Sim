@@ -60,8 +60,8 @@ func _draw() -> void:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
 				draw_dashed_line(a, b, def.color, 2.0 if hl else 1.5, 4.0)
-				var label := "%s  (%.1f×)" % [Hud._irr(obj.probe_irradiance()),
-					Hud.times_light(world, obj.probe_irradiance())]
+				var label := "%s  (%.1f×)" % [Readout.irradiance(obj.probe_irradiance()),
+					Readout.times_light(world, obj.probe_irradiance())]
 				draw_string_outline(_font, b + Vector2(6, 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 3,
 					Color(0, 0, 0, 0.6))
 				draw_string(_font, b + Vector2(6, 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, def.color)

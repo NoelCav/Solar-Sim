@@ -5,6 +5,8 @@ extends RefCounted
 ## for all) narrows any view to a single bin, shown in its false color.
 
 enum { NORMAL, LIGHT, HEAT }
+enum Overlay { NONE, ABSORBED, TEMPERATURE }
+
 const COUNT := 3
 const NAMES: Array[String] = ["Normal", "Light", "Heat"]
 const HINTS: Array[String] = [
@@ -15,8 +17,6 @@ const HINTS: Array[String] = [
 
 ## Wavelength filter stops: -1 (all), then one per spectral bin.
 const WAVELENGTH_NAMES: Array[String] = ["UV", "Blue", "Green", "Red", "Near IR", "Infrared"]
-
-enum Overlay { NONE, ABSORBED, TEMPERATURE }
 
 const _HIDDEN := Color(0, 0, 0, 0)
 const _FALSE_COLORS: Array[Color] = [

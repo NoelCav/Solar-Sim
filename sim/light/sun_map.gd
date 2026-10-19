@@ -16,7 +16,6 @@ var perp := Vector2.RIGHT    ## Lane axis: u = position · perp
 var u0 := 0.0                ## u of lane 0's left edge
 var lane_w := 0.02
 var count := 0
-var _site_w := 0.0
 
 var depth := PackedFloat32Array()   ## Distance along dir (s = position · dir) of the first hit
 var kind := PackedByteArray()       ## Hit
@@ -26,6 +25,8 @@ var side := PackedByteArray()       ## Face code of tile hits: 0 top, 1 bottom, 
 ## Optical runs: consecutive lanes whose first hit belongs to the same object (or to tile
 ## media). Each run is [first lane, last lane, min depth, key].
 var runs: Array = []
+
+var _site_w := 0.0
 
 # Exposed tile faces (rebuilt when the grid's structure changes).
 var _faces_version := -1

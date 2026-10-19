@@ -15,8 +15,10 @@ extends SimSystem
 # --- Published results (read by renderers, inspector) ---
 var trace_version := 0          ## Bumped on every publish
 var last_trace_ms := 0.0        ## CPU time of the last complete pass, summed over its ticks
+var last_stage_ms := {}         ## Same, per stage (map, direct, beams)
 var tile_power := PackedFloat32Array()     ## W absorbed per tile, at the traced DNI
 var band_power := PackedFloat32Array()     ## Same, per Spectrum band (BAND_COUNT per tile)
+var face_light := PackedFloat32Array()     ## W arriving per tile face (tile * 4 + face: top, bottom, left, right)
 var shown_lit := PackedInt32Array()        ## Tiles with tile_power > 0
 var sheet_from := PackedVector2Array()     ## Direct-light sheet (see LightPass)
 var sheet_to := PackedVector2Array()
@@ -38,7 +40,6 @@ var _traced_dni := 0.0          ## DNI behind the deposits in use (sim state)
 var _lit_tiles := PackedInt32Array()
 var _lit_power := PackedFloat32Array()
 var _obj_power := {}            ## Object id -> W absorbed in its body, at _traced_dni (sim state)
-var _diffuse_absorptivity := PackedFloat32Array()   ## AM1.5-weighted, per material
 
 var _pass_active := false
 
@@ -69,11 +70,16 @@ func tick(world: SimWorld, dt: float) -> void:
 	_deposit(world, dt)
 
 
-## Runs a complete pass now (tests, benchmarks).
-func retrace(world: SimWorld) -> void:
+## Runs a complete pass now (tests, benchmarks). `fresh` traces again on the current pass
+## reusing no results (its geometry caches stay warm): what a full pass costs.
+func retrace(world: SimWorld, fresh := false) -> void:
 	if _pass == null:
 		_setup(world)
-	_start_pass(world)
+	if fresh:
+		_pass.start(world, null)
+		_pass_active = true
+	else:
+		_start_pass(world)
 	_pass.step(-1)
 	_publish(world, _pass, true)
 
@@ -89,9 +95,25 @@ func preview(world: SimWorld) -> void:
 	_publish(world, _preview, false)
 
 
+## An engine set up on the current geometry for test rays (SimProbe), on the preview pass:
+## the sim's own passes are untouched. Null before the first tick.
+func probe_engine(world: SimWorld) -> LightEngine:
+	if _preview == null:
+		return null
+	_preview.start(world, _shown)
+	_preview.engine.Begin()
+	return _preview.engine
+
+
 ## Factor from published `tile_power` (traced at an earlier DNI) to current watts.
 func power_scale(world: SimWorld) -> float:
 	return world.light_dni / shown_dni if shown_dni > 0.0 else 0.0
+
+
+## Factor from published `tile_power`, `band_power` (W per tile) and `face_light` (W per face)
+## to current W/m².
+func irradiance_scale(world: SimWorld) -> float:
+	return power_scale(world) / (SimConst.TILE_M * SimConst.DEPTH_M)
 
 
 ## True when published results lag behind the world (a pass is pending or running).
@@ -115,6 +137,7 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	var e := p.engine
 	tile_power = e.TilePower()
 	band_power = e.BandPower()
+	face_light = e.FaceLight()
 	shown_lit = e.LitTiles()
 	sheet_from = p.sheet_from.duplicate()
 	sheet_to = p.sheet_to.duplicate()
@@ -145,6 +168,7 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	_traced_dir = p.dir
 	_traced_dni = p.dni
 	last_trace_ms = p.ms
+	last_stage_ms = p.stage_ms.duplicate()
 
 
 func _deposit(world: SimWorld, dt: float) -> void:
@@ -161,22 +185,15 @@ func _deposit(world: SimWorld, dt: float) -> void:
 	if world.diffuse_irradiance > 0.0:
 		var per_tile := world.diffuse_irradiance * SimConst.TILE_M * SimConst.DEPTH_M * dt
 		var mat := g.material
+		var absorptivity := world.materials.sun_absorptivity
 		for i in g.sky_tiles(world.materials.is_gas):
-			energy[i] += per_tile * _diffuse_absorptivity[mat[i]]
+			energy[i] += per_tile * absorptivity[mat[i]]
 
 
 func _setup(world: SimWorld) -> void:
 	_passes = [LightPass.new(world.grid, world.materials), LightPass.new(world.grid, world.materials)]
 	_pass = _passes[0]
 	_preview = LightPass.new(world.grid, world.materials)
-	var mats := world.materials
-	_diffuse_absorptivity.resize(mats.count())
-	_diffuse_absorptivity.fill(0.0)
-	for def in mats.placeable():
-		var a := 0.0
-		for b in Spectrum.BIN_COUNT:
-			a += def.surface_absorptivity[b] * Spectrum.AM15_SHARE[b]
-		_diffuse_absorptivity[def.id] = a
 
 
 func _needs_retrace(world: SimWorld) -> bool:

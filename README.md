@@ -65,6 +65,16 @@ Per-system timings on a full-size site (demo rig and a 30-lens field; full passe
 godot --headless --path . -s res://tests/bench.gd
 ```
 
+## Code rules
+
+[docs/style.md](docs/style.md) is the style guide: one source of truth per formula, where each kind of code lives, naming and docs. Check before committing (needs `pip install "gdtoolkit==4.*"`):
+
+```bash
+python tools/check.py
+```
+
+It runs gdlint (`gdlintrc`) plus the house rules: the sim never uses render/UI classes, no use of another class's `_private` members, centralized formulas stay in their one home, every script has a doc comment, no mixed line endings.
+
 ## Layout
 
 - `sim/` — pure simulation (no Nodes): world, tile grid, materials, commands, systems
@@ -72,7 +82,10 @@ godot --headless --path . -s res://tests/bench.gd
   - `thermal/` — heat grid; `HeatKernel.cs` (per-tile loops)
   - `objects/` — object definitions and instances
 - `data/materials/`, `data/objects/` — content definitions (`.tres`, SI units)
-- `render/`, `ui/` — Nodes that read sim state and send commands (`BeamMesh.cs` builds beam triangles)
+- `render/`, `ui/` — Nodes that read sim state and send commands (`BeamMesh.cs` builds beam triangles; `DisplayLight` holds exposure and night policy, `Readout` formats values)
+- `debug/` — `SimProbe`, agent tooling for the running game
 - `scenes/` — entry scene
 - `tests/` — headless tests and benchmark
+- `tools/` — `check.py` (lint and house rules)
+- `docs/` — design document and style guide
 - `addons/godot_ai/` — Godot AI MCP plugin (v4.3.0)

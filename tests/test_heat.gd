@@ -1,4 +1,6 @@
 extends TestSuite
+## Heat field checks: conduction conserves energy and stays stable, absorbed light and the
+## sky heat and cool surfaces, banded updates match full ones, objects own their heat (D13).
 
 
 func _stone_world() -> SimWorld:

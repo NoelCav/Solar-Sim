@@ -14,11 +14,13 @@ func tick(world: SimWorld, _dt: float) -> void:
 	var day := world.time_of_day()
 	# Sun angle: 0 at sunrise (6:00), PI at sunset (18:00).
 	var sun_angle := (day - 0.25) * TAU
+	world.sun_arc_angle = sun_angle
 	world.sun_elevation = elevation(world, sun_angle)
 	world.sun_is_up = world.sun_elevation > 0.0
 	world.sun_direction = arc_direction(sun_angle) if world.sun_is_up else Vector2.DOWN
 	world.moon_phase = moon_phase(world.time_s)
 	var moon_angle := sun_angle - world.moon_phase * TAU
+	world.moon_arc_angle = moon_angle
 	world.moon_elevation = elevation(world, moon_angle)
 	world.moon_is_up = world.moon_elevation > 0.0
 	world.moon_direction = arc_direction(moon_angle) if world.moon_is_up else Vector2.DOWN
@@ -31,11 +33,6 @@ func tick(world: SimWorld, _dt: float) -> void:
 ## Moon phase at sim time t: 0 new, 0.5 full.
 static func moon_phase(t: float) -> float:
 	return fposmod(SimConst.MOON_START_PHASE + t / (SimConst.MOON_CYCLE_DAYS * SimConst.DAY_LENGTH_S), 1.0)
-
-
-## Angle of the moon on its arc (0 rising, PI setting) at sim time t.
-static func moon_angle(t: float) -> float:
-	return (fposmod(t / SimConst.DAY_LENGTH_S, 1.0) - 0.25) * TAU - moon_phase(t) * TAU
 
 
 ## Elevation (radians) of a body at `angle` on its arc (0 rising, PI setting).

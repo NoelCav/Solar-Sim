@@ -6,10 +6,11 @@ extends ColorRect
 ## (Spectrum.sky_scatter): blue at noon, orange-red low at dawn and dusk. At night a pale
 ## blue glow comes from wherever the moon is (EnvironmentSystem), with stars.
 
-const NIGHT_TOP := Color(0.012, 0.018, 0.05)
-const NIGHT_LOW := Color(0.03, 0.045, 0.10)
+const NIGHT_TOP := Color(0.003, 0.004, 0.012)
+const NIGHT_LOW := Color(0.008, 0.011, 0.026)
 const MOON := Color(0.55, 0.65, 0.95)
-const GLOW_RADIUS := 0.85      ## Glow radius, fraction of the screen diagonal
+const GLOW_RADIUS := 1.1       ## Glow radius, fraction of the screen diagonal
+const GLOW_OUTSIDE := 0.2      ## How far past the screen edge the glow is centred, fraction of its radius
 const STARS := 140
 
 var world: SimWorld
@@ -28,9 +29,16 @@ func setup(p_world: SimWorld) -> void:
 	get_parent().add_child(layer)
 	reparent(layer, false)
 	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.08, 0.35, 1.0])
-	g.colors = PackedColorArray([Color(1, 1, 1, 0.95), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.15),
-		Color(1, 1, 1, 0.0)])
+	# No bright core and a falloff that eases to zero ((1 - r)³), so it reads as glow: no disk
+	# in the middle and no visible rim against a dark night sky.
+	var offsets := PackedFloat32Array()
+	var colors := PackedColorArray()
+	for k in 17:
+		var x := k / 16.0
+		offsets.append(x)
+		colors.append(Color(1, 1, 1, 0.55 * pow(1.0 - x, 3.0)))
+	g.offsets = offsets
+	g.colors = colors
 	_glow_tex = GradientTexture2D.new()
 	_glow_tex.gradient = g
 	_glow_tex.fill = GradientTexture2D.FILL_RADIAL
@@ -51,7 +59,7 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if world == null:
 		return
-	var sun_angle := (world.time_of_day() - 0.25) * TAU   # 0 at sunrise, PI at sunset
+	var sun_angle := world.sun_arc_angle
 	var h := sin(sun_angle)
 	var w := size.x
 	var ht := size.y
@@ -85,16 +93,17 @@ func _draw() -> void:
 	# Glow from the edge the light comes from.
 	if world.sun_is_up:
 		var c := Spectrum.to_color(world.sun_spectrum)
-		_glow(sun_angle, Color(c.r, c.g * 0.95, c.b * 0.85, clampf(world.sun_dni / 700.0, 0.25, 0.9)))
+		_glow(sun_angle, Color(c.r, c.g * 0.95, c.b * 0.85, clampf(world.sun_dni / 700.0, 0.2, 0.7)))
 	# The moon's glow follows the real moon, brighter the more of it is lit, once the sun is low.
 	if world.moon_is_up and h < 0.1:
-		var a := 0.4 * sqrt(world.moon_illuminated) * clampf((0.1 - h) / 0.3, 0.0, 1.0)
+		var a := 0.28 * sqrt(world.moon_illuminated) * clampf((0.1 - h) / 0.3, 0.0, 1.0)
 		if a > 0.01:
-			_glow(EnvironmentSystem.moon_angle(world.time_s), Color(MOON.r, MOON.g, MOON.b, a))
+			_glow(world.moon_arc_angle, Color(MOON.r, MOON.g, MOON.b, a))
 
 
-## A radial glow centred where the line from the screen centre toward the light source (at
-## `angle` on the sky arc: 0 east horizon, PI/2 overhead) leaves the screen.
+## A radial glow centred beyond where the line from the screen centre toward the light source
+## (at `angle` on the sky arc: 0 east horizon, PI/2 overhead) leaves the screen, so only its
+## soft outer part shows.
 func _glow(angle: float, col: Color) -> void:
 	var toward := Vector2(-cos(angle), -sin(angle))   # Screen space, y down
 	if toward.y > 0.05:
@@ -105,8 +114,8 @@ func _glow(angle: float, col: Color) -> void:
 		t = minf(t, half.x / absf(toward.x))
 	if absf(toward.y) > 1e-4:
 		t = minf(t, half.y / absf(toward.y))
-	var at := half + toward * t
 	var r := size.length() * GLOW_RADIUS
+	var at := half + toward * (t + r * GLOW_OUTSIDE)
 	draw_texture_rect(_glow_tex, Rect2(at - Vector2(r, r), Vector2(r, r) * 2.0), false, col)
 
 

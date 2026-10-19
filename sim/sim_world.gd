@@ -5,6 +5,8 @@ extends RefCounted
 
 signal ticked
 
+const MAX_HISTORY := 200
+
 var materials: MaterialDB
 var grid: TileGrid
 var rng := RandomNumberGenerator.new()
@@ -15,6 +17,7 @@ var time_s: float = 0.0                 ## Sim seconds since world start
 
 # Environment state (written by EnvironmentSystem)
 var ambient_k: float = SimConst.DEFAULT_AMBIENT_K
+var sun_arc_angle: float = 0.0          ## Position on its arc: 0 rising (east), PI/2 overhead, PI setting
 var sun_direction := Vector2.DOWN       ## Direction light travels, y down
 var sun_elevation: float = 0.0          ## Radians above horizon
 var sun_is_up := false
@@ -24,6 +27,7 @@ var sun_spectrum := Spectrum.make_zero()   ## DNI per spectral bin, W/m²
 var diffuse_irradiance: float = 0.0     ## Diffuse sky light on horizontal surfaces, W/m²
 var moon_phase: float = 0.0             ## 0 new, 0.5 full (moon cycle, §6.2)
 var moon_illuminated: float = 0.0       ## Lit fraction of the disk
+var moon_arc_angle: float = 0.0         ## Position on its arc, as sun_arc_angle
 var moon_direction := Vector2.DOWN      ## Direction moonlight travels, y down
 var moon_elevation: float = 0.0         ## Radians above horizon
 var moon_is_up := false
@@ -51,7 +55,6 @@ var systems: Array[SimSystem] = []
 
 var _queue: Array[SimCommand] = []
 var _history: Array[SimCommand] = []
-const MAX_HISTORY := 200
 
 
 func _init(p_materials: MaterialDB, width: int, height: int, p_seed: int = 1) -> void:

@@ -1,4 +1,6 @@
 extends TestSuite
+## Material registry checks: loading, lookup tables, realistic optical data, and rejection
+## of bad definitions.
 
 
 func test_all_materials_load_with_air_at_zero() -> void:

@@ -1,6 +1,10 @@
 extends TestSuite
 ## Optics checks against closed-form physics (design doc §17 workflow).
 
+const LENS_CROWN := preload("res://data/objects/lens_crown.tres")
+const PRISM_FLINT := preload("res://data/objects/prism_flint.tres")
+const MIRROR_ALUMINUM := preload("res://data/objects/mirror_aluminum.tres")
+
 
 ## An all-air world with the given objects, sun off so only test rays are traced.
 func _make_world(w: int = 80, h: int = 80) -> SimWorld:
@@ -18,6 +22,28 @@ func _tracer(world: SimWorld) -> LightEngine:
 	light.retrace(world)   # Builds surfaces + buckets
 	light.tracer().Begin()
 	return light.tracer()
+
+
+## A crown lens with a 5 cm probe near its focus (thin lens: f ≈ R / (2(n-1)) ≈ 1.15 m),
+## traced once. Returns the probe.
+func _lens_over_probe(world: SimWorld) -> SimObject:
+	var probe_def := ObjectDef.new()
+	probe_def.key = &"tiny_probe"
+	probe_def.kind = ObjectDef.Kind.PROBE
+	probe_def.size_m = 0.05
+	_place(world, LENS_CROWN, Vector2(10.0, 4.0))
+	var probe := _place(world, probe_def, Vector2(10.0, 4.0 + 1.05))
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	return probe
+
+
+## Every emitted watt is absorbed, escapes, scatters or is culled, and culling stays small.
+func _check_energy_balance(s: Dictionary) -> void:
+	var out: float = s.absorbed + s.escaped + s.scattered + s.culled
+	check(s.emitted > 0.0, "light emitted")
+	check_near(out / s.emitted, 1.0, 1e-4, "energy balance")
+	check(s.culled < 0.02 * s.emitted, "culling stays small (%.2f%%)" % [100.0 * s.culled / s.emitted])
 
 
 func _single_bin(bin: int, watts: float) -> PackedFloat32Array:
@@ -121,9 +147,8 @@ func test_total_internal_reflection() -> void:
 ## A prism bends blue more than red.
 func test_prism_disperses() -> void:
 	var world := _make_world()
-	var prism: ObjectDef = load("res://data/objects/prism_flint.tres")
 	var center := Vector2(10.0, 5.0)
-	_place(world, prism, center)   # Apex up
+	_place(world, PRISM_FLINT, center)   # Apex up
 	# Hit the left face ~50° off its normal (near minimum deviation; 30° would TIR in flint).
 	var face_mid := Vector2(center.x - 0.15, center.y - 0.087)
 	var d := Vector2.from_angle(deg_to_rad(-20.0))
@@ -157,16 +182,12 @@ func test_sun_trace_conserves_energy() -> void:
 	WorldGen.generate(world)
 	world.time_s = 0.42 * SimConst.DAY_LENGTH_S
 	world.tick()
-	_place(world, load("res://data/objects/lens_crown.tres"), Vector2(6.0, 3.0))
-	_place(world, load("res://data/objects/prism_flint.tres"), Vector2(10.0, 3.0), 0.4)
-	_place(world, load("res://data/objects/mirror_aluminum.tres"), Vector2(13.0, 3.0), 0.6)
+	_place(world, LENS_CROWN, Vector2(6.0, 3.0))
+	_place(world, PRISM_FLINT, Vector2(10.0, 3.0), 0.4)
+	_place(world, MIRROR_ALUMINUM, Vector2(13.0, 3.0), 0.6)
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
-	var s := light.stats
-	var out: float = s.absorbed + s.escaped + s.scattered + s.culled
-	check(s.emitted > 0.0, "sun emitted light")
-	check_near(out / s.emitted, 1.0, 1e-4, "energy balance")
-	check(s.culled < 0.02 * s.emitted, "culling stays small (%.2f%%)" % [100.0 * s.culled / s.emitted])
+	_check_energy_balance(light.stats)
 
 
 ## A lens concentrates sunlight: the probe at its focus reads far above plain DNI.
@@ -174,16 +195,7 @@ func test_lens_concentrates_onto_probe() -> void:
 	var world := _make_world(80, 60)
 	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
 	world.tick()
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
-	var probe_def := ObjectDef.new()
-	probe_def.key = &"tiny_probe"
-	probe_def.kind = ObjectDef.Kind.PROBE
-	probe_def.size_m = 0.05
-	_place(world, lens, Vector2(10.0, 4.0))
-	# Thin-lens estimate f ≈ R / (2(n-1)) ≈ 1.15 m; the probe sits near the focus.
-	var probe := _place(world, probe_def, Vector2(10.0, 4.0 + 1.05))
-	var light: LightSystem = world.get_system(&"light")
-	light.retrace(world)
+	var probe := _lens_over_probe(world)
 	var concentration := probe.probe_irradiance() / world.sun_dni
 	check(concentration > 8.0, "concentration %.1f×" % concentration)
 
@@ -204,20 +216,8 @@ func test_moonlight_through_lens() -> void:
 	world.time_s = best_t
 	world.tick()
 	check(world.light_is_moon, "moon is the traced light")
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
-	var probe_def := ObjectDef.new()
-	probe_def.key = &"tiny_probe"
-	probe_def.kind = ObjectDef.Kind.PROBE
-	probe_def.size_m = 0.05
-	_place(world, lens, Vector2(10.0, 4.0))
-	var probe := _place(world, probe_def, Vector2(10.0, 4.0 + 1.05))
-	var light: LightSystem = world.get_system(&"light")
-	light.retrace(world)
-	var s := light.stats
-	var out: float = s.absorbed + s.escaped + s.scattered + s.culled
-	check(s.emitted > 0.0, "moon emitted light")
-	check_near(out / s.emitted, 1.0, 1e-4, "energy balance")
-	check(s.culled < 0.02 * s.emitted, "culling stays small (%.2f%%)" % [100.0 * s.culled / s.emitted])
+	var probe := _lens_over_probe(world)
+	_check_energy_balance((world.get_system(&"light") as LightSystem).stats)
 	var concentration := probe.probe_irradiance() / world.light_dni
 	check(concentration > 8.0, "concentration %.1f×" % concentration)
 
@@ -270,6 +270,10 @@ func test_direct_sun_on_flat_ground() -> void:
 		expected += world.sun_spectrum[b] * stone.surface_absorptivity[b]
 	expected *= SimConst.TILE_M * world.sun_direction.y * SimConst.DEPTH_M
 	check_near(light.tile_power[i], expected, expected * 0.1, "surface tile power")
+	var arriving := world.sun_dni * world.sun_direction.y * SimConst.TILE_M * SimConst.DEPTH_M
+	check_near(light.face_light[i * 4], arriving, arriving * 0.1, "light arriving on the top face")
+	check_eq(light.face_light[i * 4 + 1] + light.face_light[i * 4 + 2] + light.face_light[i * 4 + 3], 0.0,
+		"no light on the other faces")
 	check_eq(light.tile_power[g.idx(20, 16)], 0.0, "tile below the surface is dark")
 	check_eq(light.stats.rays, 0, "no rays needed without optics")
 
@@ -293,14 +297,36 @@ func test_block_casts_shadow() -> void:
 	check(light.tile_power[g.idx(20, 5)] > 0.0, "the block's top is lit")
 
 
+## Light is recorded on the faces it lands on (D19): morning sun travels +x, so a floating
+## block's top and sun-side (left) faces are lit and its far side is not.
+func test_light_lands_on_the_faces_it_hits() -> void:
+	var world := _flat_world()
+	world.time_s = 0.33 * SimConst.DAY_LENGTH_S
+	world.tick()
+	check(world.sun_direction.x > 0.3, "low morning sun from the left")
+	var g := world.grid
+	var cells := PackedInt32Array()
+	for x in range(18, 22):
+		for y in range(5, 7):
+			cells.append(g.idx(x, y))
+	world.enqueue(PaintTilesCommand.new(cells, world.materials.id_of(&"stone")))
+	world.flush_commands()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var faces := light.face_light
+	check(faces[g.idx(19, 5) * 4] > 0.0, "top face lit")
+	check(faces[g.idx(18, 6) * 4 + 2] > 0.0, "sun-side (left) face lit")
+	check_eq(faces[g.idx(21, 6) * 4 + 3], 0.0, "far (right) face dark")
+	check_eq(faces[g.idx(19, 6) * 4 + 1], 0.0, "bottom face dark")
+
+
 ## Beams and plain rays agree on how much light a lens puts into its focal tiles.
 func test_beams_match_ray_tree_at_focus() -> void:
 	var world := _flat_world(40, 30, 25)
 	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
 	world.tick()
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
 	# Lens 1.2 m above the ground so the focus lands on the surface.
-	_place(world, lens, Vector2(5.0, 25 * SimConst.TILE_M - 1.23))
+	_place(world, LENS_CROWN, Vector2(5.0, 25 * SimConst.TILE_M - 1.23))
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
 	var g := world.grid
@@ -329,14 +355,13 @@ func test_beams_match_ray_tree_at_focus() -> void:
 ## An incremental pass (replaying tasks the edit can't have affected) gives the same light as
 ## tracing the edited world from scratch.
 func test_incremental_pass_matches_full_trace() -> void:
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
 	var worlds: Array[SimWorld] = []
 	for k in 2:
 		var world := _flat_world(80, 40, 30)
 		world.time_s = 0.46 * SimConst.DAY_LENGTH_S
 		world.tick()
 		for j in 5:
-			_place(world, lens, Vector2(3.0 + j * 3.0, 4.0))
+			_place(world, LENS_CROWN, Vector2(3.0 + j * 3.0, 4.0))
 		worlds.append(world)
 	var edited := worlds[0]
 	var fresh := worlds[1]
@@ -367,9 +392,8 @@ func test_incremental_distance_field_matches_rebuild() -> void:
 	var world := _flat_world(80, 40, 30)
 	world.time_s = 0.46 * SimConst.DAY_LENGTH_S
 	world.tick()
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
 	for j in 4:
-		_place(world, lens, Vector2(3.0 + j * 4.0, 4.0))
+		_place(world, LENS_CROWN, Vector2(3.0 + j * 4.0, 4.0))
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
 	for step in 3:
@@ -433,11 +457,10 @@ func test_beams_match_ray_tree_through_two_lenses() -> void:
 	var world := _flat_world(40, 30, 25)
 	world.time_s = 0.47 * SimConst.DAY_LENGTH_S
 	world.tick()
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
 	var ground := 25 * SimConst.TILE_M
 	# Two f ≈ 1.15 m lenses 0.5 m apart focus ≈ 0.45 m past the second: on the ground.
-	_place(world, lens, Vector2(5.0, ground - 1.05))
-	_place(world, lens, Vector2(5.0, ground - 0.55))
+	_place(world, LENS_CROWN, Vector2(5.0, ground - 1.05))
+	_place(world, LENS_CROWN, Vector2(5.0, ground - 0.55))
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
 	var s := light.stats
@@ -487,15 +510,14 @@ func test_beams_match_ray_tree_through_two_lenses() -> void:
 ## Moving the upper of two stacked lenses changes what the lower one receives: an
 ## incremental pass must retrace the lower lens too and match a fresh trace.
 func test_incremental_pass_with_lenses_in_series() -> void:
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
 	var worlds: Array[SimWorld] = []
 	for k in 2:
 		var world := _flat_world(80, 40, 30)
 		world.time_s = 0.46 * SimConst.DAY_LENGTH_S
 		world.tick()
-		_place(world, lens, Vector2(6.0, 5.0))
-		_place(world, lens, Vector2(6.0, 5.6))
-		_place(world, lens, Vector2(14.0, 5.0))   # Unrelated, should replay
+		_place(world, LENS_CROWN, Vector2(6.0, 5.0))
+		_place(world, LENS_CROWN, Vector2(6.0, 5.6))
+		_place(world, LENS_CROWN, Vector2(14.0, 5.0))   # Unrelated, should replay
 		worlds.append(world)
 	var edited := worlds[0]
 	var light: LightSystem = edited.get_system(&"light")

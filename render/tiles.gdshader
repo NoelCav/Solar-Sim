@@ -2,12 +2,20 @@ shader_type canvas_item;
 // Shades the one-texel-per-tile material texture so blocks read as solid without art:
 // per-tile color jitter, fine grain inside each tile, a lit rim where a face meets open
 // space, a dark rim underneath, and gradual darkening with depth below the surface.
+// Lighting (DisplayLight): `ambient` is the light everything gets (1 by day, near 0 at
+// night); light_tex holds, per tile, how lit each face is by light arriving on it (RGBA:
+// top, bottom, left, right; TileRenderer). Light lands on a solid block's surface, so each
+// face brightens only a thin skin along itself; see-through media (water, glass) are lit
+// through. At night only moonlit (and focused) faces show (D19).
 
 uniform float grain = 0.07;        // Strength of the speckle inside a tile
 uniform float jitter = 0.05;       // Per-tile brightness variation
 uniform float rim = 0.16;          // Width of the edge bevel, in tiles
 uniform int depth_tiles = 12;      // How far down depth darkening reaches
 uniform float depth_dark = 0.45;   // Darkening at full depth
+uniform float ambient = 1.0;
+uniform sampler2D light_tex : filter_nearest;
+uniform float face_skin = 0.15;    // Depth of the lit skin on exposed faces, in tiles
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -58,5 +66,14 @@ void fragment() {
 		}
 		col *= 1.0 - depth_dark * (float(d) + f.y) / float(depth_tiles + 1);
 	}
+	vec4 faces = texelFetch(light_tex, cell, 0);
+	float lit = max(max(faces.r, faces.g), max(faces.b, faces.a));
+	if (base.a > 0.9) {
+		// Each face lights only the skin along itself.
+		vec4 dist = vec4(f.y, 1.0 - f.y, f.x, 1.0 - f.x);
+		vec4 skin = faces * (vec4(1.0) - smoothstep(vec4(0.6 * face_skin), vec4(face_skin), dist));
+		lit = max(max(skin.r, skin.g), max(skin.b, skin.a));
+	}
+	col *= ambient + (1.0 - ambient) * lit;
 	COLOR = vec4(col, base.a);
 }

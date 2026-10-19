@@ -3,6 +3,7 @@ extends RefCounted
 ## The six spectral bins light is carried in (design doc §6.1).
 
 enum Bin { UV, BLUE, GREEN, RED, NIR, IR }
+enum Band { UV, VISIBLE, INFRARED }   ## Coarse groupings of bins (BAND_OF)
 
 const BIN_COUNT := 6
 
@@ -34,6 +35,12 @@ const DISPLAY_COLOR: Array[Color] = [
 	Color(0.45, 0.05, 0.05, 0.0),
 	Color(0.20, 0.00, 0.00, 0.0),
 ]
+
+
+# --- Bands: coarse groupings of bins for views and per-band deposits ---
+const BAND_COUNT := 3
+const BAND_OF: Array[int] = [0, 1, 1, 1, 2, 2]
+const BAND_NAMES: Array[String] = ["UV", "visible", "infrared"]
 
 
 static func make_zero() -> PackedFloat32Array:
@@ -86,10 +93,3 @@ static func total(s: PackedFloat32Array) -> float:
 	for v in s:
 		t += v
 	return t
-
-
-# --- Bands: coarse groupings of bins for views and per-band deposits ---
-enum Band { UV, VISIBLE, INFRARED }
-const BAND_COUNT := 3
-const BAND_OF: Array[int] = [0, 1, 1, 1, 2, 2]
-const BAND_NAMES: Array[String] = ["UV", "visible", "infrared"]

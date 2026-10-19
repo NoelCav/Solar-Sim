@@ -160,7 +160,7 @@ func _update_status() -> void:
 		sky = "Sun %.0f°   %.0f W/m²" % [rad_to_deg(world.sun_elevation), world.sun_dni]
 	elif world.moon_is_up:
 		sky = "Moon %.0f°   %.0f%% lit   %s" % [rad_to_deg(world.moon_elevation),
-			world.moon_illuminated * 100.0, _irr(world.moon_dni)]
+			world.moon_illuminated * 100.0, Readout.irradiance(world.moon_dni)]
 	else:
 		sky = "Night   moon set (%.0f%% lit)" % (world.moon_illuminated * 100.0)
 	_status.text = clock + "\n" + sky + "   " + air
@@ -453,29 +453,29 @@ func _tile_text(i: int, cell: Vector2i) -> String:
 	s += "%.1f °C  [color=#8a93a0](%+.1f vs air)[/color]" % [SimConst.k_to_c(t), dt]
 	if def == null or not def.is_solid() and def.phase != MaterialDef.Phase.LIQUID:
 		return s
-	var light := _light_text(i, def)
+	var light := _light_text(i)
 	return s + ("\n" + light if light != "" else "")
 
 
-func _light_text(i: int, def: MaterialDef) -> String:
+func _light_text(i: int) -> String:
 	var tp := _light.tile_power
 	if tp.size() != world.grid.size():
 		return ""
-	var area := SimConst.TILE_M * SimConst.DEPTH_M
-	var scale := _light.power_scale(world) / area
+	var scale := _light.irradiance_scale(world)
 	var irr := tp[i] * scale
 	if irr <= 0.0:
 		return "[color=#8a93a0]in shadow[/color]" if world.light_is_up else ""
-	var absorptivity := 0.0
-	for b in Spectrum.BIN_COUNT:
-		absorptivity += def.surface_absorptivity[b] * Spectrum.AM15_SHARE[b]
-	var suns := times_light(world, irr / maxf(absorptivity, 0.05))
+	var faces := _light.face_light
+	var arriving := 0.0   # On the brightest face
+	for f in 4:
+		arriving = maxf(arriving, faces[i * 4 + f] * scale)
+	var suns := Readout.times_light(world, arriving)
 	var o := i * Spectrum.BAND_COUNT
 	var bp := _light.band_power
-	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, light_name(world)] if suns >= 1.5 \
-		else "in " + light_name(world) + "light"
-	return "%s · absorbing %s\n[color=#8a93a0]UV %s · visible %s · IR %s[/color]" % [head, _irr(irr),
-		_irr(bp[o] * scale), _irr(bp[o + 1] * scale), _irr(bp[o + 2] * scale)]
+	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, Readout.light_name(world)] if suns >= 1.5 \
+		else "in " + Readout.light_name(world) + "light"
+	return "%s · absorbing %s\n[color=#8a93a0]%s[/color]" % [head, Readout.irradiance(irr),
+		Readout.bands(bp[o] * scale, bp[o + 1] * scale, bp[o + 2] * scale)]
 
 
 func _object_text(obj: SimObject) -> String:
@@ -483,41 +483,17 @@ func _object_text(obj: SimObject) -> String:
 		wrapf(rad_to_deg(obj.angle), -180.0, 180.0)]
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		var irr := obj.probe_irradiance()
-		s += "\nreads %s  (%.1f× %s)" % [_irr(irr), times_light(world, irr), light_name(world)]
+		s += "\nreads %s  (%.1f× %s)" % [Readout.irradiance(irr), Readout.times_light(world, irr), Readout.light_name(world)]
 		var area := obj.def.size_m * SimConst.DEPTH_M
 		var bands := PackedFloat32Array([0, 0, 0])
 		for b in Spectrum.BIN_COUNT:
 			bands[Spectrum.BAND_OF[b]] += obj.incident[b] / area
-		s += "\n[color=#8a93a0]UV %s · visible %s · IR %s[/color]" % [_irr(bands[0]), _irr(bands[1]), _irr(bands[2])]
+		s += "\n[color=#8a93a0]%s[/color]" % Readout.bands(bands[0], bands[1], bands[2])
 	else:
 		s += "\nabsorbing %.1f W" % obj.absorbed_w
 		if obj.temperature_k > 0.0:
 			s += " · %.1f °C" % SimConst.k_to_c(obj.temperature_k)
 	return s + "\n"
-
-
-static func _irr(w_m2: float) -> String:
-	if w_m2 >= 1e6:
-		return "%.1f MW/m²" % (w_m2 / 1e6)
-	if w_m2 >= 1e4:
-		return "%.0f kW/m²" % (w_m2 / 1e3)
-	if w_m2 >= 1e3:
-		return "%.1f kW/m²" % (w_m2 / 1e3)
-	if w_m2 >= 1.0 or w_m2 <= 0.0:
-		return "%.0f W/m²" % w_m2
-	if w_m2 >= 1e-3:
-		return "%.1f mW/m²" % (w_m2 * 1e3)
-	return "%.1f µW/m²" % (w_m2 * 1e6)
-
-
-## "sun" or "moon": the light being traced, for readouts.
-static func light_name(world: SimWorld) -> String:
-	return "moon" if world.light_is_moon else "sun"
-
-
-## Irradiance as a multiple of plain light from the current source (0 when none is up).
-static func times_light(world: SimWorld, w_m2: float) -> float:
-	return w_m2 / world.light_dni if world.light_dni > 0.0 else 0.0
 
 
 # --- Helpers --------------------------------------------------------------------------------

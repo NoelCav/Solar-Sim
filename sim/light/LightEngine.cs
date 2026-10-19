@@ -91,6 +91,7 @@ public partial class LightEngine : RefCounted
         public int K0, K1, Key, Bin;
         public double SMin;
         public List<double> Deps = new();     // (tile, bin, watts, body)…
+        public List<double> Faces = new();    // (face index, watts arriving)…
         public readonly List<double> Probes = new();   // (owner, bin, watts)…
         public double Escaped, Scattered, Culled;
         public Vector2[] SegFrom = Array.Empty<Vector2>(), SegTo = Array.Empty<Vector2>();
@@ -123,6 +124,25 @@ public partial class LightEngine : RefCounted
                 outList.Add(key.Item3);
             }
             Deps = outList;
+            var faceSums = new Dictionary<int, double>();
+            var faceOrder = new List<int>();
+            for (int k = 0; k < Faces.Count; k += 2)
+            {
+                int f = (int)Faces[k];
+                if (faceSums.TryGetValue(f, out double v))
+                    faceSums[f] = v + Faces[k + 1];
+                else
+                {
+                    faceSums[f] = Faces[k + 1];
+                    faceOrder.Add(f);
+                }
+            }
+            Faces = new List<double>(faceOrder.Count * 2);
+            foreach (int f in faceOrder)
+            {
+                Faces.Add(f);
+                Faces.Add(faceSums[f]);
+            }
         }
     }
 
@@ -180,6 +200,7 @@ public partial class LightEngine : RefCounted
     // --- Results of the current pass -----------------------------------------------------------
     float[] _tilePower = Array.Empty<float>();
     float[] _bandPower = Array.Empty<float>();
+    float[] _faceLight = Array.Empty<float>();   // Watts arriving per tile face (FaceLight)
     readonly List<int> _lit = new();
     readonly Dictionary<int, double> _objAbsorbed = new();
     readonly Dictionary<int, double[]> _objIncident = new();
@@ -260,6 +281,7 @@ public partial class LightEngine : RefCounted
         _bulk = ToDouble(bulk);
         _surfAbs = ToDouble(surfAbs);
         _tilePower = new float[width * height];
+        _faceLight = new float[width * height * 4];
         _bandPower = new float[width * height * Bands];
     }
 
@@ -441,6 +463,7 @@ public partial class LightEngine : RefCounted
     {
         Array.Clear(_tilePower);
         Array.Clear(_bandPower);
+        Array.Clear(_faceLight);
         _lit.Clear();
         _objAbsorbed.Clear();
         _objIncident.Clear();
@@ -462,6 +485,8 @@ public partial class LightEngine : RefCounted
 
     public float[] TilePower() => (float[])_tilePower.Clone();
     public float[] BandPower() => (float[])_bandPower.Clone();
+    /// <summary>Watts arriving on each tile face (tile * 4 + face: 0 top, 1 bottom, 2 left, 3 right).</summary>
+    public float[] FaceLight() => (float[])_faceLight.Clone();
     public int[] LitTiles() => _lit.ToArray();
     public Vector2[] SegFrom() => _segFrom.ToArray();
     public Vector2[] SegTo() => _segTo.ToArray();
@@ -529,11 +554,26 @@ public partial class LightEngine : RefCounted
         }
     }
 
-    void AbsorbOpaqueBin(int i, int bin, double watts)
+    /// Light of `watts` arriving on face `side` of opaque tile i (-1: no face, e.g. a ray that
+    /// starts inside rock): recorded for display (D19), absorbed by the surface, the rest scattered.
+    void AbsorbOpaqueBin(int i, int side, int bin, double watts)
     {
+        LightFace(i, side, watts);
         double a = watts * _surfAbs[_mat[i] * Bins + bin];
         ApplyBin(i, bin, a);
         AddScattered(watts - a);
+    }
+
+    void LightFace(int i, int side, double watts)
+    {
+        if (side < 0 || watts <= 0)
+            return;
+        _faceLight[i * 4 + side] += (float)watts;
+        if (_log != null)
+        {
+            _log.Faces.Add(i * 4 + side);
+            _log.Faces.Add(watts);
+        }
     }
 
     /// <summary>Adds a probe reading.</summary>
@@ -581,33 +621,34 @@ public partial class LightEngine : RefCounted
     /// refs = tile) deposit there, lanes that hit nothing (noneKind) escape. Consecutive lanes on
     /// the same tile are settled together.
     /// </summary>
-    public void DirectDeposit(byte[] kind, int[] refs, float[] spectrum, double laneArea, int opaqueKind, int noneKind)
+    public void DirectDeposit(byte[] kind, int[] refs, byte[] sides, float[] spectrum, double laneArea,
+        int opaqueKind, int noneKind)
     {
         double total = 0;
         for (int b = 0; b < Bins; b++)
             total += spectrum[b];
         _emitted += total * laneArea * kind.Length;
-        int runTile = -1, runLanes = 0, none = 0;
+        int runFace = -1, runLanes = 0, none = 0;   // Face index: tile * 4 + side
         for (int k = 0; k < kind.Length; k++)
         {
-            int t = kind[k] == opaqueKind ? refs[k] : -1;
-            if (t != runTile)
+            int f = kind[k] == opaqueKind ? refs[k] * 4 + sides[k] : -1;
+            if (f != runFace)
             {
-                if (runTile >= 0)
-                    AbsorbOpaqueSpectrum(runTile, spectrum, runLanes * laneArea);
-                runTile = t;
+                if (runFace >= 0)
+                    AbsorbOpaqueSpectrum(runFace / 4, runFace % 4, spectrum, runLanes * laneArea);
+                runFace = f;
                 runLanes = 0;
             }
             runLanes++;
             if (kind[k] == noneKind)
                 none++;
         }
-        if (runTile >= 0)
-            AbsorbOpaqueSpectrum(runTile, spectrum, runLanes * laneArea);
+        if (runFace >= 0)
+            AbsorbOpaqueSpectrum(runFace / 4, runFace % 4, spectrum, runLanes * laneArea);
         _escaped += total * laneArea * none;
     }
 
-    void AbsorbOpaqueSpectrum(int i, float[] spectrum, double scale)
+    void AbsorbOpaqueSpectrum(int i, int side, float[] spectrum, double scale)
     {
         int m = _mat[i];
         double total = 0, absorbed = 0;
@@ -626,6 +667,7 @@ public partial class LightEngine : RefCounted
             _tilePower[i] += (float)absorbed;
             _absorbed += absorbed;
         }
+        LightFace(i, side, total);
         AddScattered(total - absorbed);
     }
 
@@ -676,11 +718,11 @@ public partial class LightEngine : RefCounted
                 AddEscaped(Sum(p));
                 break;
             case Ev.StartOpaque:
-                AbsorbOpaque(_evTile, p);
+                AbsorbOpaque(_evTile, -1, p);
                 break;
             case Ev.Opaque:
                 Emit(start, hit, p0);
-                AbsorbOpaque(_evTile, p);
+                AbsorbOpaque(_evTile, FaceCode(_evFace), p);
                 break;
             case Ev.Media:
                 Emit(start, hit, p0);
@@ -693,11 +735,11 @@ public partial class LightEngine : RefCounted
         }
     }
 
-    void AbsorbOpaque(int i, double[] p)
+    void AbsorbOpaque(int i, int side, double[] p)
     {
         for (int b = 0; b < Bins; b++)
             if (p[b] > 0)
-                AbsorbOpaqueBin(i, b, p[b]);
+                AbsorbOpaqueBin(i, side, b, p[b]);
     }
 
     void SurfaceHit(int s, double u, D2 hit, D2 d, double[] p, int medium, int body, int events)
@@ -1299,6 +1341,9 @@ public partial class LightEngine : RefCounted
         var probes = t.Probes;
         for (int k = 0; k < probes.Count; k += 3)
             AddProbe((int)probes[k], (int)probes[k + 1], probes[k + 2]);
+        var faces = t.Faces;
+        for (int k = 0; k < faces.Count; k += 2)
+            _faceLight[(int)faces[k]] += (float)faces[k + 1];
         _escaped += t.Escaped;
         _scattered += t.Scattered;
         _culled += t.Culled;
@@ -1662,7 +1707,7 @@ public partial class LightEngine : RefCounted
                     AddEscaped(arriving);
                 else
                     foreach (var (tile, wgt) in iv.Spread)
-                        AbsorbOpaqueBin(tile, bin, arriving * wgt);
+                        AbsorbOpaqueBin(tile, ra.TermSide, bin, arriving * wgt);
                 RenderStrip(ra, rb, half * 2.0, bin);
                 break;
             }
@@ -1783,7 +1828,7 @@ public partial class LightEngine : RefCounted
                 AddEscaped(arriving);
                 break;
             case Term.Opaque:
-                AbsorbOpaqueBin(r.TermTile, bin, arriving);
+                AbsorbOpaqueBin(r.TermTile, r.TermSide, bin, arriving);
                 break;
             default:
                 AddCulled(arriving);
