@@ -35,7 +35,7 @@ Headless sim tests (a test also fails on any script error raised while it runs):
 godot --headless --path . -s res://tests/run_tests.gd
 ```
 
-Per-system timings on a full-size site:
+Per-system timings on a full-size site (demo rig and a 30-lens field; full passes, mesh build, heat, ticks, dragging a lens), with a checksum to confirm optimizations don't change results:
 
 ```bash
 godot --headless --path . -s res://tests/bench.gd

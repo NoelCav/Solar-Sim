@@ -385,6 +385,29 @@ What shipped, and decisions made while building it (none change a LOCKED decisio
 - Views: Normal (visible light; lit surfaces glow with absorbed light; ×-sun marker at the hottest spot of light), Light (all bins in false color + absorbed-light overlay), UV, Infrared (single-band beams + absorbed-band overlay), Heat (temperature, hidden within the daily swing of the site mean). Legend and peak marker per view; cursor inspector shows material, temperature, sun/shadow/concentration and absorbed light by band, and object readings.
 - Still GDScript-bound: a primary path costs ~70–100 µs (PathRec bookkeeping and marching). 1× is comfortable; 4× in the editor's debug build runs ~14 fps. The native port remains the next performance step, now on a port-friendly algorithm (flat arrays, no recursion besides shallow refinement).
 
+### 18.3 Performance pass (2026-10-19)
+
+Goal: cheaper light and heat without changing results. Measured headless, plugged in (`tests/bench.gd`: demo rig and a 30-lens field; each line carries an absorbed-light checksum and energy balance to prove results are unchanged).
+
+| | Before | After |
+|---|---|---|
+| Full light pass, demo rig 09:00 | 55 ms | 37 ms |
+| Full light pass, lens field 09:00 | 2,505 ms | ~340 ms |
+| Beam mesh build, lens field 09:00 | 255 ms | ~30 ms |
+| Heat per tick | 1.2 ms | 0.77 ms |
+| Dragging a lens in the field (1×) | 18.8 ms/tick, light never updated | ~5–6 ms/tick, light updates every ~0.4 s |
+| Worst tick, lens field | 34–45 ms | ~10–20 ms |
+
+What changed, in order of impact:
+
+- **Incremental passes.** Each pass owns a snapshot of the geometry and runs to completion. Every beam task (one run of lanes, one bin) logs its contributions and the area its rays touched; a geometry-only pass keeps the shown sun and replays every task the edit can't have affected (beam bounds, plus secondary rays as segments), re-tracing only the rest. An edit during a long sun-triggered pass preempts it with such a pass. Tested equal to a full trace.
+- **Object cache.** Within a pass, identical convex objects at the same angle share the in-glass part of every sample ray (object-fixed sample grid); only the outside part is traced per object.
+- **Render data off the sim.** Beam tracing writes compact records into one float buffer; the renderer builds triangles only for the bins the current view shows, with slice counts ∝ log of the width ratio. Traced paths are freed per run instead of all at publish (that free was a ~25 ms spike).
+- **Leaner tracing.** Flat segment arrays in the intersection loop; 16-segment lens faces (shape error < 0.5 mm, normals interpolated); refinement stops at one lane (2 cm); an air distance field (updated locally after edits; tested equal to a rebuild) replaces 8×8 empty blocks.
+- **Heat quiet rows.** Rows at one temperature next to an equal row exchange nothing and are skipped (tested < 0.01 K from full conduction).
+
+Still GDScript-bound: a primary path costs ~40 µs, a full field pass ~0.3 s spread over ticks. The native port (tracer core, heat loop) remains the next large step; the code is now organised around flat arrays and self-contained tasks, which is what a port wants.
+
 ## 19. Open questions
 
 - Art direction: pixel art at 16 px (fits scale) vs. clean vector? Light rendering looks good either way.
