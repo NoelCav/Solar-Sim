@@ -2,8 +2,9 @@ class_name LightPass
 extends RefCounted
 ## One complete trace of sunlight for the sun and geometry at its start (design doc §6.4.1):
 ## stage 1 settles direct light with the sun map in one go; stage 2 traces each optical run
-## in each spectral bin with the beam tracer, a few tasks per call so it can be spread over
-## ticks. Results accumulate in `tracer`; render data in `sheet_*` and `beams`.
+## in each spectral bin as beams, a few tasks per call so it can be spread over ticks.
+## The ray work runs in compiled code (LightEngine, C#); this class builds the geometry
+## (SurfaceSet, SunMap), decides what can be reused, and drives the engine.
 ## A pass owns a snapshot of the geometry (optical surfaces, tile materials), so edits made
 ## while it runs don't disturb it; they are picked up by the next pass.
 ##
@@ -13,20 +14,21 @@ extends RefCounted
 ## unchanged and whose rays came nowhere near the edit; only the rest are traced again.
 
 const SHEET_STRIDE := 2   ## Draw the direct-light sheet from every Nth lane
-const REPLAY_DEPS_PER_PATH := 30     ## A replay costs about one ray path per this many deposits
 
-var tracer: Tracer
+var engine := LightEngine.new()
 var map := SunMap.new()
-var beams := BeamTracer.new()
 var surfaces := SurfaceSet.new()
 var grid: TileGrid
-var structure_version := -1      ## Geometry this pass traces
+var opaque := PackedByteArray()        ## Per material: blocks light (for the sun map)
+var material := PackedInt32Array()     ## Tile materials as of this pass's geometry
+var structure_version := -1            ## Geometry this pass traces
 var objects_version := -1
 
 var dir := Vector2.ZERO          ## Sun direction this pass traced (ZERO = sun down)
 var dni := 0.0
 var spectrum := Spectrum.make_zero()
 var done := true
+var incremental := false         ## This pass reuses the previous one (geometry-only pass)
 var ms := 0.0                    ## CPU time spent on this pass so far
 var stage_ms := {"map": 0.0, "direct": 0.0, "beams": 0.0}   ## Breakdown of ms
 
@@ -35,22 +37,43 @@ var stage_ms := {"map": 0.0, "direct": 0.0, "beams": 0.0}   ## Breakdown of ms
 var sheet_from := PackedVector2Array()
 var sheet_to := PackedVector2Array()
 
-var _tasks: Array = []           ## [run, bin, TaskLog to replay or null]
-var _next := 0
-var logs: Dictionary = {}        ## Vector4i task key → TaskLog, for the next pass to reuse
-var replayed := 0                ## Tasks reused from the previous pass (stats)
-var incremental := false         ## This pass reuses the previous one (geometry-only pass)
 var _objects: Dictionary = {}    ## Object id → [position, angle, definition] at the start
-var _accel_key := Vector2i(-1, -1)   ## Geometry the tracer's acceleration was built for
+var _accel_key := Vector2i(-1, -1)   ## Geometry the engine's acceleration was built for
 var _accel_objects: Dictionary = {}  ## Object id → [position, angle, definition] at that build
 var _def_index: Dictionary = {}  ## ObjectDef → small int, for cache keys
-var _cacheable: Dictionary = {}  ## Object id → bool, for the surfaces version below
+var _cacheable: Dictionary = {}  ## Object id → first piece, for the surfaces version below
 var _cacheable_version := -1
 
 
 func _init(p_grid: TileGrid, materials: MaterialDB) -> void:
 	grid = p_grid
-	tracer = Tracer.new(grid, materials, surfaces)
+	var n := materials.count()
+	opaque.resize(n)
+	var dispersive := PackedByteArray()
+	var has_bulk := PackedByteArray()
+	var index := PackedFloat32Array()
+	var bulk := PackedFloat32Array()
+	var surf := PackedFloat32Array()
+	dispersive.resize(n)
+	has_bulk.resize(n)
+	for arr in [index, bulk, surf]:
+		arr.resize(n * Spectrum.BIN_COUNT)
+	for id in n:
+		var def := materials.get_def(id)
+		opaque[id] = 1
+		if def == null:
+			continue
+		opaque[id] = 0 if def.transparent else 1
+		dispersive[id] = 1 if def.cauchy_b != 0.0 else 0
+		for b in Spectrum.BIN_COUNT:
+			index[id * Spectrum.BIN_COUNT + b] = def.refractive_index(Spectrum.WAVELENGTH_UM[b])
+			bulk[id * Spectrum.BIN_COUNT + b] = def.bulk_absorption[b]
+			surf[id * Spectrum.BIN_COUNT + b] = def.surface_absorptivity[b]
+			if def.bulk_absorption[b] > 0.0:
+				has_bulk[id] = 1
+	engine.Setup(grid.width, grid.height, SimConst.TILE_M, SimConst.DEPTH_M, SimConst.MAX_RAY_EVENTS,
+		SimConst.MIN_CHILD_W, SimConst.MIN_RAY_W, SimConst.REFL_POOL_M, opaque, dispersive, has_bulk,
+		index, bulk, surf)
 
 
 ## Begins a pass over the world as it is now. With `prev` (the last completed pass), tasks
@@ -59,7 +82,6 @@ func _init(p_grid: TileGrid, materials: MaterialDB) -> void:
 ## (up to RESTART_ANGLE_DEG), so edits show quickly; a later pass catches up with the sun.
 func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	var t0 := Time.get_ticks_usec()
-	var prev_material := prev.tracer.material if prev != null else PackedInt32Array()
 	structure_version = world.grid.structure_version
 	if objects_version != world.objects_version:
 		_sync_surfaces(world)
@@ -67,11 +89,7 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	if _accel_key != key:
 		_update_accel(world)
 		_accel_key = key
-	tracer.begin()
-	_tasks.clear()
-	_next = 0
-	logs = {}
-	replayed = 0
+	engine.Begin()
 	incremental = false
 	sheet_from.clear()
 	sheet_to.clear()
@@ -99,82 +117,70 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 			dir = world.sun_direction
 			dni = world.sun_dni
 			spectrum = world.sun_spectrum.duplicate()
-		map.build(grid, tracer.opaque, surfaces, dir, SimConst.LANE_WIDTH_M)
+		map.build(grid, opaque, surfaces, dir, SimConst.LANE_WIDTH_M)
 		var t1 := Time.get_ticks_usec()
 		stage_ms.map = (t1 - t0) / 1000.0
-		beams.begin(tracer, map, grid, spectrum)
-		beams.objects = _object_cache_info(world)
 		_direct()
 		stage_ms.direct = (Time.get_ticks_usec() - t1) / 1000.0
-		var changed := _changed_areas(prev, prev_material, objects_now) if reuse else []
+		var runs := PackedInt32Array()
+		var s_mins := PackedFloat64Array()
 		for run in map.runs:
-			for b in Spectrum.BIN_COUNT:
-				if spectrum[b] <= 0.0:
-					continue
-				var old: Tracer.TaskLog = null
-				if reuse:
-					old = prev.logs.get(Vector4i(run[0], run[1], run[3], b))
-					if old != null and (old.s_min != run[2] or _touches(old, changed)):
-						old = null
-				_tasks.append([run, b, old])
+			runs.append_array([run[0], run[1], run[3]])
+			s_mins.append(run[2])
+		var areas := PackedFloat32Array()
+		if reuse:
+			for r: Rect2 in _changed_areas(prev, objects_now):
+				areas.append_array([r.position.x, r.position.y, r.size.x, r.size.y])
+		engine.StartBeams(runs, s_mins, spectrum, map.u0, map.lane_w, map.perp, map.dir,
+			_object_cache_info(world), prev.engine if prev != null else null, areas, reuse)
 	_objects = objects_now
 	ms = (Time.get_ticks_usec() - t0) / 1000.0
-	done = _tasks.is_empty()
+	done = engine.TaskCount() == 0
 
 
 ## Fraction of tasks done.
 func progress() -> float:
-	return float(_next) / _tasks.size() if not _tasks.is_empty() else 1.0
+	return engine.Progress()
 
 
-## Runs tasks until about `max_paths` more ray paths' worth of work is done (-1 = finish);
-## a replayed task counts by the size of its log. Returns done.
+## Runs tasks until about `max_paths` more ray paths' worth of work is done (-1 = finish).
+## Returns done.
 func step(max_paths: int) -> bool:
 	var t0 := Time.get_ticks_usec()
-	var budget := max_paths if max_paths >= 0 else 1 << 62
-	var start_paths := tracer.ray_count
-	var replay_work := 0.0
-	while _next < _tasks.size() and tracer.ray_count - start_paths + replay_work < budget:
-		var task: Array = _tasks[_next]
-		var log: Tracer.TaskLog = task[2]
-		if log != null:
-			beams.replay(log)
-			replayed += 1
-			replay_work += float(log.deps.size() / 4) / REPLAY_DEPS_PER_PATH
-		else:
-			log = beams.trace_run(task[0], task[1])
-		if log != null:
-			logs[log.key] = log
-		_next += 1
-	done = _next >= _tasks.size()
+	done = engine.Step(max_paths)
 	var spent := (Time.get_ticks_usec() - t0) / 1000.0
 	ms += spent
 	stage_ms.beams += spent
 	return done
 
 
-## Brings the tracer's material snapshot and acceleration up to date, recomputing only around
-## what changed since this pass object last built them.
+## Brings the material snapshot and the engine's acceleration up to date, recomputing only
+## around what changed since this pass object last built them.
 func _update_accel(world: SimWorld) -> void:
 	var now := {}
 	for obj: SimObject in world.objects.values():
 		now[obj.id] = [obj.position, obj.angle, obj.def]
-	if _accel_key.x < 0:
-		tracer.material = grid.material.duplicate()
-		tracer.build_blocks()
-	else:
-		var tile_areas := []
+	var tile_areas := []
+	var objs := PackedInt32Array()
+	var full := _accel_key.x < 0
+	if not full:
 		if _accel_key.x != structure_version:
-			tile_areas = _changed_tiles(tracer.material)
-		var objs := []
+			tile_areas = _changed_tiles(material)
 		for id in _accel_objects:
 			if now.get(id, []) != _accel_objects[id]:
 				objs.append(id)
 		for id in now:
 			if not _accel_objects.has(id):
 				objs.append(id)
-		tracer.material = grid.material.duplicate()
-		tracer.update_accel(tile_areas, objs)
+	material = grid.material.duplicate()
+	engine.SetMaterial(material)
+	if full:
+		engine.BuildAccel()
+	else:
+		var areas := PackedFloat32Array()
+		for r: Rect2 in tile_areas:
+			areas.append_array([r.position.x, r.position.y, r.size.x, r.size.y])
+		engine.UpdateAccel(areas, objs)
 	_accel_objects = now
 
 
@@ -199,59 +205,23 @@ func _changed_tiles(old: PackedInt32Array) -> Array:
 
 ## Areas (m) that changed since `prev` started: tiles whose material differs, and the old and
 ## new bounds of objects that moved, changed, appeared or disappeared.
-func _changed_areas(prev: LightPass, prev_material: PackedInt32Array, objects_now: Dictionary) -> Array:
+func _changed_areas(prev: LightPass, objects_now: Dictionary) -> Array:
 	var areas := []
-	var tm := SimConst.TILE_M
-	if structure_version != prev.structure_version or prev_material.size() != grid.size():
-		areas.append_array(_changed_tiles(prev_material))
+	if structure_version != prev.structure_version or prev.material.size() != grid.size():
+		areas.append_array(_changed_tiles(prev.material))
 	for id in prev._objects:
 		var now: Array = objects_now.get(id, [])
 		if now != prev._objects[id]:
-			areas.append(prev.tracer.body_bounds(id))
+			areas.append(prev.engine.BodyBounds(id))
 			if not now.is_empty():
-				areas.append(tracer.body_bounds(id))
+				areas.append(engine.BodyBounds(id))
 	for id in objects_now:
 		if not prev._objects.has(id):
-			areas.append(tracer.body_bounds(id))
+			areas.append(engine.BodyBounds(id))
 	return areas
 
 
-## Whether a logged task's rays came near any changed area: its beam bounds, or any of its
-## secondary rays (as segments).
-static func _touches(log: Tracer.TaskLog, areas: Array) -> bool:
-	var b := log.bbox.grow(0.01)
-	for area: Rect2 in areas:
-		var a := area.grow(0.01)
-		if b.intersects(a, true):
-			return true
-		for k in log.seg_from.size():
-			if _segment_hits_rect(log.seg_from[k], log.seg_to[k], a):
-				return true
-	return false
-
-
-## Liang–Barsky: does segment p0–p1 pass through rect r?
-static func _segment_hits_rect(p0: Vector2, p1: Vector2, r: Rect2) -> bool:
-	var d := p1 - p0
-	var t0 := 0.0
-	var t1 := 1.0
-	for axis in 2:
-		var lo: float = r.position[axis]
-		var hi: float = r.end[axis]
-		if absf(d[axis]) < 1e-12:
-			if p0[axis] < lo or p0[axis] > hi:
-				return false
-			continue
-		var ta := (lo - p0[axis]) / d[axis]
-		var tb := (hi - p0[axis]) / d[axis]
-		t0 = maxf(t0, minf(ta, tb))
-		t1 = minf(t1, maxf(ta, tb))
-		if t0 > t1:
-			return false
-	return true
-
-
-## Rebuilds this pass's optical surfaces from the world's objects.
+## Rebuilds this pass's optical surfaces from the world's objects and hands them to the engine.
 func _sync_surfaces(world: SimWorld) -> void:
 	surfaces.clear()
 	var mats := world.materials
@@ -270,16 +240,21 @@ func _sync_surfaces(world: SimWorld) -> void:
 			surfaces.add_polyline(piece[0], piece[1], MaterialDB.AIR_ID, back, coating, obj.id,
 				def.reflectance)
 	surfaces.build_buckets(world.grid.width, world.grid.height)
+	var reflectance := PackedFloat32Array()
+	for r in surfaces.reflectance:
+		reflectance.append_array(r if r.size() == Spectrum.BIN_COUNT else Spectrum.make_zero())
+	engine.SetSurfaces(surfaces.ax, surfaces.ay, surfaces.ex, surfaces.ey, surfaces.normal,
+		surfaces.normal_a, surfaces.normal_b, surfaces.front_mat, surfaces.back_mat, surfaces.coating,
+		surfaces.owner, surfaces.piece, reflectance, surfaces.cell_start, surfaces.cell_items)
 	objects_version = world.objects_version
 
 
-## Cache info for the beam tracer's object cache: convex optical bodies whose bounds hold no
-## other object's surfaces (tiles inside a body don't matter: rays inside ignore them).
+## Cache info for the engine's object cache: convex optical bodies whose bounds hold no other
+## object's surfaces (tiles inside a body don't matter: rays inside ignore them).
+## id → [definition index, angle key, first piece, position, u of its center, s of its start line]
 func _object_cache_info(world: SimWorld) -> Dictionary:
-	var key := world.objects_version
-	if _cacheable_version != key:
+	if _cacheable_version != world.objects_version:
 		_cacheable.clear()
-		var foreign := {}   # Object id → true if another owner's segment shares its tiles
 		var first_piece := {}
 		for s in surfaces.count():
 			var owner := surfaces.owner[s]
@@ -289,7 +264,7 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 			if not obj.def.is_body():
 				continue
 			var ok := true
-			var rect := tracer.body_bounds(obj.id)
+			var rect := engine.BodyBounds(obj.id)
 			for y in range(floori(rect.position.y / SimConst.TILE_M), floori(rect.end.y / SimConst.TILE_M) + 1):
 				for x in range(floori(rect.position.x / SimConst.TILE_M), floori(rect.end.x / SimConst.TILE_M) + 1):
 					if not grid.in_bounds(x, y):
@@ -301,17 +276,15 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 							ok = false
 			if ok:
 				_cacheable[obj.id] = first_piece.get(obj.id, 0)
-		_cacheable_version = key
+		_cacheable_version = world.objects_version
 	var info := {}
-	if _cacheable.is_empty():
-		return info
 	for id in _cacheable:
 		var obj: SimObject = world.objects[id]
 		if not _def_index.has(obj.def):
 			_def_index[obj.def] = _def_index.size()
 		# Sample rays start before the object's bounding box along the light: everything in
 		# front of an object along its run is empty, so starting earlier is safe.
-		var r := tracer.body_bounds(id)
+		var r := engine.BodyBounds(id)
 		var s_min := minf(minf(r.position.dot(dir), r.end.dot(dir)),
 			minf(Vector2(r.end.x, r.position.y).dot(dir), Vector2(r.position.x, r.end.y).dot(dir)))
 		info[id] = [_def_index[obj.def], roundi(obj.angle * 1e6), _cacheable[id], obj.position,
@@ -323,32 +296,12 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 ## Probes read the lanes that cross them before their first hit.
 func _direct() -> void:
 	var lane_area := map.lane_w * SimConst.DEPTH_M
-	var total := Spectrum.total(spectrum)
-	tracer.emitted_w += total * lane_area * map.count
-	# Lanes landing on the same tile are consecutive; settle each stretch in one call.
-	var kind := map.kind
-	var ref := map.ref
-	var run_tile := -1
-	var run_lanes := 0
-	var none_lanes := 0
-	for k in map.count:
-		var t := ref[k] if kind[k] == SunMap.Hit.OPAQUE else -1
-		if t != run_tile:
-			if run_tile >= 0:
-				tracer.absorb_opaque_spectrum(run_tile, spectrum, run_lanes * lane_area)
-			run_tile = t
-			run_lanes = 0
-		run_lanes += 1
-		if kind[k] == SunMap.Hit.NONE:
-			none_lanes += 1
-	if run_tile >= 0:
-		tracer.absorb_opaque_spectrum(run_tile, spectrum, run_lanes * lane_area)
-	tracer.escaped_w += total * lane_area * none_lanes
+	engine.DirectDeposit(map.kind, map.ref, spectrum, lane_area, SunMap.Hit.OPAQUE, SunMap.Hit.NONE)
 	for s in surfaces.count():
 		if surfaces.coating[s] == SurfaceSet.Coating.PROBE:
 			var n := map.lanes_reaching(surfaces.a[s], surfaces.b[s]).size()
 			for b in Spectrum.BIN_COUNT:
-				tracer.add_probe(surfaces.owner[s], b, spectrum[b] * lane_area * n)
+				engine.AddProbe(surfaces.owner[s], b, spectrum[b] * lane_area * n)
 	var far := (grid.width + grid.height) * SimConst.TILE_M
 	for k in range(0, map.count, SHEET_STRIDE):
 		var s_in := map.entry_s(k)

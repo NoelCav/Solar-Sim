@@ -13,10 +13,10 @@ func _place(world: SimWorld, def: ObjectDef, pos: Vector2, angle: float = 0.0) -
 	return world.objects[world.next_object_id - 1]
 
 
-func _tracer(world: SimWorld) -> Tracer:
+func _tracer(world: SimWorld) -> LightEngine:
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)   # Builds surfaces + buckets
-	light.tracer().begin()
+	light.tracer().Begin()
 	return light.tracer()
 
 
@@ -49,12 +49,14 @@ func test_lens_focal_length_matches_lensmaker() -> void:
 	_place(world, _lens_def(r, r, t), center)
 	var tr := _tracer(world)
 	var bin := Spectrum.Bin.GREEN
-	tr.trace(Vector2(center.x + 0.02, 0.5), Vector2.DOWN, _single_bin(bin, 1.0))
+	tr.Trace(Vector2(center.x + 0.02, 0.5), Vector2.DOWN, _single_bin(bin, 1.0))
 	# Find the transmitted leg below the lens and where it crosses x = center.x.
 	var crossing := INF
-	for k in tr.seg_from.size():
-		var a := tr.seg_from[k]
-		var b := tr.seg_to[k]
+	var seg_from: PackedVector2Array = tr.SegFrom()
+	var seg_to: PackedVector2Array = tr.SegTo()
+	for k in seg_from.size():
+		var a := seg_from[k]
+		var b := seg_to[k]
 		if a.y > center.y + t * 0.5 - 0.01 and absf(b.x - a.x) > 1e-9:
 			var s := (center.x - a.x) / (b.x - a.x)
 			if s >= 0.0 and s <= 1.0 and b.y > a.y:
@@ -81,11 +83,13 @@ func test_refraction_into_glass_tile_obeys_snell() -> void:
 	var theta_i := deg_to_rad(40.0)
 	var d := Vector2(sin(theta_i), cos(theta_i))
 	var bin := Spectrum.Bin.RED
-	tr.trace(Vector2(1.0, 1.0), d, _single_bin(bin, 1.0))
+	tr.Trace(Vector2(1.0, 1.0), d, _single_bin(bin, 1.0))
 	var inside := Vector2.ZERO
-	for k in tr.seg_from.size():
-		if tr.seg_from[k].y > 2.4999 and tr.seg_to[k].y > tr.seg_from[k].y:
-			inside = (tr.seg_to[k] - tr.seg_from[k]).normalized()
+	var seg_from: PackedVector2Array = tr.SegFrom()
+	var seg_to: PackedVector2Array = tr.SegTo()
+	for k in seg_from.size():
+		if seg_from[k].y > 2.4999 and seg_to[k].y > seg_from[k].y:
+			inside = (seg_to[k] - seg_from[k]).normalized()
 			break
 	var n := world.materials.get_def(glass).refractive_index(Spectrum.WAVELENGTH_UM[bin])
 	var air := world.materials.get_def(MaterialDB.AIR_ID).refractive_index(Spectrum.WAVELENGTH_UM[bin])
@@ -105,13 +109,13 @@ func test_total_internal_reflection() -> void:
 	world.flush_commands()
 	var tr := _tracer(world)
 	var theta := deg_to_rad(60.0)   # Critical angle for n ≈ 1.52 is ~41°
-	tr.trace(Vector2(0.5, 0.5), Vector2(sin(theta), cos(theta)), _single_bin(Spectrum.Bin.GREEN, 1.0))
+	tr.Trace(Vector2(0.5, 0.5), Vector2(sin(theta), cos(theta)), _single_bin(Spectrum.Bin.GREEN, 1.0))
 	var escaped_below := false
-	for k in tr.seg_from.size():
-		if tr.seg_to[k].y > 2.5 + 0.01:
+	for p: Vector2 in tr.SegTo():
+		if p.y > 2.5 + 0.01:
 			escaped_below = true
 	check(not escaped_below, "no light leaves through the bottom face")
-	check(tr.absorbed_w > 0.0, "the trapped ray is absorbed in the glass")
+	check(tr.Stats().absorbed > 0.0, "the trapped ray is absorbed in the glass")
 
 
 ## A prism bends blue more than red.
@@ -126,18 +130,21 @@ func test_prism_disperses() -> void:
 	var tr := _tracer(world)
 	var dirs := {}
 	for bin in [Spectrum.Bin.BLUE, Spectrum.Bin.RED]:
-		tr.begin()
-		tr.trace(face_mid - d * 2.0, d, _single_bin(bin, 1.0))
+		tr.Begin()
+		tr.Trace(face_mid - d * 2.0, d, _single_bin(bin, 1.0))
 		# Exit direction = the strongest leg that leaves the prism.
 		var best := -1
 		var best_w := 0.0
-		for k in tr.seg_from.size():
-			var w: float = tr.seg_power[k * Spectrum.BIN_COUNT + bin]
-			if tr.seg_from[k].distance_to(center) < 0.45 and tr.seg_to[k].distance_to(center) > 0.45 \
+		var seg_from: PackedVector2Array = tr.SegFrom()
+		var seg_to: PackedVector2Array = tr.SegTo()
+		var seg_power: PackedFloat32Array = tr.SegPower()
+		for k in seg_from.size():
+			var w: float = seg_power[k * Spectrum.BIN_COUNT + bin]
+			if seg_from[k].distance_to(center) < 0.45 and seg_to[k].distance_to(center) > 0.45 \
 					and w > best_w:
 				best = k
 				best_w = w
-		dirs[bin] = (tr.seg_to[best] - tr.seg_from[best]).normalized() if best >= 0 else d
+		dirs[bin] = (seg_to[best] - seg_from[best]).normalized() if best >= 0 else d
 	var dev_blue := d.angle_to(dirs[Spectrum.Bin.BLUE])
 	var dev_red := d.angle_to(dirs[Spectrum.Bin.RED])
 	check(absf(dev_blue) > absf(dev_red) + deg_to_rad(0.3), "blue deviates more (blue %.2f°, red %.2f°)" % [
@@ -155,11 +162,11 @@ func test_sun_trace_conserves_energy() -> void:
 	_place(world, load("res://data/objects/mirror_aluminum.tres"), Vector2(13.0, 3.0), 0.6)
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
-	var tr := light.tracer()
-	var out := tr.absorbed_w + tr.escaped_w + tr.scattered_w + tr.culled_w
-	check(tr.emitted_w > 0.0, "sun emitted light")
-	check_near(out / tr.emitted_w, 1.0, 1e-4, "energy balance")
-	check(tr.culled_w < 0.02 * tr.emitted_w, "culling stays small (%.2f%%)" % [100.0 * tr.culled_w / tr.emitted_w])
+	var s := light.stats
+	var out: float = s.absorbed + s.escaped + s.scattered + s.culled
+	check(s.emitted > 0.0, "sun emitted light")
+	check_near(out / s.emitted, 1.0, 1e-4, "energy balance")
+	check(s.culled < 0.02 * s.emitted, "culling stays small (%.2f%%)" % [100.0 * s.culled / s.emitted])
 
 
 ## A lens concentrates sunlight: the probe at its focus reads far above plain DNI.
@@ -268,18 +275,19 @@ func test_beams_match_ray_tree_at_focus() -> void:
 		beam_focus += light.tile_power[g.idx(x, 25)]
 	# Reference: dense plain rays across the lens only.
 	var tr := light.tracer()
-	tr.begin()
+	tr.Begin()
 	var spacing := 0.002
 	var x := 4.5
 	while x < 5.5:
 		var p := Spectrum.make_zero()
 		for b in Spectrum.BIN_COUNT:
 			p[b] = world.sun_spectrum[b] * spacing * SimConst.DEPTH_M
-		tr.trace(Vector2(x, 0.5), world.sun_direction, p)
+		tr.Trace(Vector2(x, 0.5), world.sun_direction, p)
 		x += spacing
 	var ray_focus := 0.0
+	var ray_power: PackedFloat32Array = tr.TilePower()
 	for xx in range(18, 22):
-		ray_focus += tr.tile_power[g.idx(xx, 25)]
+		ray_focus += ray_power[g.idx(xx, 25)]
 	check(beam_focus > 100.0, "focus collects light (%.1f W)" % beam_focus)
 	check_near(beam_focus / ray_focus, 1.0, 0.05, "beam vs ray tree at focus")
 
@@ -338,6 +346,6 @@ func test_incremental_distance_field_matches_rebuild() -> void:
 		world.flush_commands()
 		light.retrace(world)
 	var tr := light.tracer()
-	var incremental := tr._air_dist.duplicate()
-	tr.build_blocks()
-	check(incremental == tr._air_dist, "distance field after local updates equals a full rebuild")
+	var incremental: PackedByteArray = tr.AirDist()
+	tr.BuildAccel()
+	check(incremental == tr.AirDist(), "distance field after local updates equals a full rebuild")

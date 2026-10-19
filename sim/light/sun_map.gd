@@ -21,7 +21,7 @@ var _site_w := 0.0
 var depth := PackedFloat32Array()   ## Distance along dir (s = position · dir) of the first hit
 var kind := PackedByteArray()       ## Hit
 var ref := PackedInt32Array()       ## Tile index (faces) or segment index (surfaces)
-var side := PackedByteArray()       ## Face code of tile hits (Tracer.face_code)
+var side := PackedByteArray()       ## Face code of tile hits: 0 top, 1 bottom, 2 left, 3 right
 
 ## Optical runs: consecutive lanes whose first hit belongs to the same object (or to tile
 ## media). Each run is [first lane, last lane, min depth, key].

@@ -141,7 +141,7 @@ func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -
 	var to := _light.ray_to
 	var power := _light.ray_power
 	# A pooled reflection ray stands for REFL_POOL_M of wavefront.
-	var width_m := BeamTracer.REFL_POOL_M
+	var width_m := SimConst.REFL_POOL_M
 	for k in from.size():
 		var rgb := Vector3.ZERO
 		for b in Spectrum.BIN_COUNT:

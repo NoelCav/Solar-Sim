@@ -98,9 +98,9 @@ func is_stale(world: SimWorld) -> bool:
 	return _pass_active or _needs_retrace(world)
 
 
-## The tracer holding the last complete pass's accounting (tests).
-func tracer() -> Tracer:
-	return _pass.tracer
+## The engine holding the last complete pass (tests).
+func tracer() -> LightEngine:
+	return _pass.engine
 
 
 func _start_pass(world: SimWorld, edit_only := false) -> void:
@@ -111,31 +111,30 @@ func _start_pass(world: SimWorld, edit_only := false) -> void:
 
 
 func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
-	var tr := p.tracer
-	tile_power = tr.tile_power.duplicate()
-	band_power = tr.band_power.duplicate()
-	shown_lit = tr.lit_tiles.duplicate()
+	var e := p.engine
+	tile_power = e.TilePower()
+	band_power = e.BandPower()
+	shown_lit = e.LitTiles()
 	sheet_from = p.sheet_from.duplicate()
 	sheet_to = p.sheet_to.duplicate()
-	beam_render = p.beams.render.duplicate()
-	ray_from = tr.seg_from.duplicate()
-	ray_to = tr.seg_to.duplicate()
-	ray_power = tr.seg_power.duplicate()
+	beam_render = e.Render()
+	ray_from = e.SegFrom()
+	ray_to = e.SegTo()
+	ray_power = e.SegPower()
+	var absorbed: Dictionary = e.ObjectAbsorbed()
+	var incident: Dictionary = e.ObjectIncident()
 	for obj: SimObject in world.objects.values():
-		obj.absorbed_w = tr.object_absorbed.get(obj.id, 0.0)
-		obj.incident = tr.object_incident.get(obj.id, Spectrum.make_zero())
-	stats = {
-		"emitted": tr.emitted_w, "absorbed": tr.absorbed_w, "escaped": tr.escaped_w,
-		"scattered": tr.scattered_w, "culled": tr.culled_w, "rays": tr.ray_count,
-		"lanes": p.map.count if p.dir != Vector2.ZERO else 0, "replayed": p.replayed,
-	}
+		obj.absorbed_w = absorbed.get(obj.id, 0.0)
+		obj.incident = incident.get(obj.id, Spectrum.make_zero())
+	stats = e.Stats()
+	stats.lanes = p.map.count if p.dir != Vector2.ZERO else 0
 	shown_dni = p.dni
 	trace_version += 1
 	if not sim_state:
 		return
 	_pass_active = false
 	_shown = p
-	_lit_tiles = tr.lit_tiles.duplicate()
+	_lit_tiles = shown_lit.duplicate()
 	_lit_power.resize(_lit_tiles.size())
 	for k in _lit_tiles.size():
 		_lit_power[k] = tile_power[_lit_tiles[k]]
