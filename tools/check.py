@@ -124,6 +124,14 @@ def check_class_docs(findings):
             findings.append(f"{rel(p)}:1: missing ## doc comment under extends (docs)")
 
 
+def check_mid_line_tabs(findings):
+    """A tab after code on a line is a continuation (`\\` + newline) that got joined."""
+    for p in code_files((".gd", ".gdshader")):
+        for n, line in enumerate(read(p).splitlines(), 1):
+            if re.search(r"\S *\t", strip_comments_and_strings(line).rstrip()):
+                findings.append(f"{rel(p)}:{n}: tab inside a line (a joined line continuation?)")
+
+
 def check_line_endings(findings):
     for p in code_files((".gd", ".cs", ".gdshader")):
         data = p.read_bytes()
@@ -136,7 +144,7 @@ def check_line_endings(findings):
 def main() -> int:
     findings: list[str] = []
     for rule in (check_gdlint, check_layering, check_private_access, check_one_home,
-                 check_class_docs, check_line_endings):
+                 check_class_docs, check_mid_line_tabs, check_line_endings):
         rule(findings)
     for f in findings:
         print(f)

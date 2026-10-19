@@ -10,6 +10,9 @@ const BIN_COUNT := 6
 ## Representative wavelength per bin, micrometers (used for dispersion).
 const WAVELENGTH_UM: Array[float] = [0.350, 0.460, 0.540, 0.680, 0.950, 1.500]
 
+## Bin edges, micrometers: bin i spans BIN_EDGES_UM[i] to [i + 1] (consistent with AM0_SHARE).
+const BIN_EDGES_UM: Array[float] = [0.30, 0.40, 0.50, 0.60, 0.80, 1.10, 2.50]
+
 ## Photon energy per bin, eV (E = 1.240 / λ[µm]).
 const PHOTON_EV: Array[float] = [3.54, 2.70, 2.30, 1.82, 1.31, 0.83]
 
@@ -22,6 +25,10 @@ const AM0_SHARE: Array[float] = [0.08, 0.145, 0.135, 0.22, 0.17, 0.25]
 const TAU_RAYLEIGH: Array[float] = [0.633, 0.208, 0.108, 0.042, 0.0107, 0.0016]
 const TAU_HAZE: Array[float] = [0.314, 0.219, 0.178, 0.132, 0.086, 0.047]
 const TAU_ABSORB: Array[float] = [0.02, 0.0, 0.01, 0.01, 0.10, 0.20]
+
+## Reflectance of the lunar surface per bin (ROLO-style normal albedo): it roughly triples from
+## UV to near IR, so moonlight is redder than the sunlight it reflects.
+const MOON_REFLECTANCE: Array[float] = [0.065, 0.085, 0.100, 0.125, 0.155, 0.200]
 
 ## Approximate share of AM1.5 solar power per bin (sums to 1).
 const AM15_SHARE: Array[float] = [0.05, 0.14, 0.16, 0.25, 0.22, 0.18]
@@ -65,6 +72,19 @@ static func atmospheric(am: float) -> PackedFloat32Array:
 	for i in BIN_COUNT:
 		var tau := TAU_RAYLEIGH[i] + TAU_HAZE[i] + TAU_ABSORB[i]
 		s[i] = SimConst.SOLAR_CONSTANT * AM0_SHARE[i] * exp(-am * tau)
+	return s
+
+
+## Full-moon light per bin after crossing `am` air masses, per unit of the moon's brightness
+## ratio: sunlight reshaped by the lunar reflectance (normalized, so the total above the
+## atmosphere stays the solar constant), then the same atmosphere as sunlight.
+static func lunar(am: float) -> PackedFloat32Array:
+	var mean := 0.0
+	for i in BIN_COUNT:
+		mean += AM0_SHARE[i] * MOON_REFLECTANCE[i]
+	var s := atmospheric(am)
+	for i in BIN_COUNT:
+		s[i] *= MOON_REFLECTANCE[i] / mean
 	return s
 
 

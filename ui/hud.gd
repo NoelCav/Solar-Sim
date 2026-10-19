@@ -47,6 +47,7 @@ var _selection_label: Label
 var _help_label: Label
 var _inspector: PanelContainer
 var _inspect_label: RichTextLabel
+var _inspect_chart: SpectrumChart   ## Spectrum of a hovered probe
 
 
 func setup(p_world: SimWorld, p_runner: Main, p_brush: CreativeBrush, p_tool: ObjectTool,
@@ -416,7 +417,12 @@ func _build_inspector() -> void:
 	_inspect_label.scroll_active = false
 	_inspect_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_inspect_label.add_theme_font_size_override(&"normal_font_size", 13)
-	_inspector.add_child(_inspect_label)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_inspector.add_child(box)
+	box.add_child(_inspect_label)
+	_inspect_chart = SpectrumChart.new()
+	box.add_child(_inspect_chart)
 
 
 func _update_inspector() -> void:
@@ -432,6 +438,9 @@ func _update_inspector() -> void:
 	var obj: SimObject = world.objects.get(tool.hovered_id)
 	if obj != null:
 		lines.append(_object_text(obj))
+	_inspect_chart.visible = obj != null and obj.def.kind == ObjectDef.Kind.PROBE and obj.probe_irradiance() > 0.0
+	if _inspect_chart.visible:
+		_inspect_chart.show_spectrum(obj.probe_spectrum(), world.light_spectrum)
 	lines.append(_tile_text(g.idx(cell.x, cell.y), cell))
 	_inspect_label.text = "\n".join(lines)
 	_inspector.reset_size()
@@ -484,10 +493,10 @@ func _object_text(obj: SimObject) -> String:
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		var irr := obj.probe_irradiance()
 		s += "\nreads %s  (%.1f× %s)" % [Readout.irradiance(irr), Readout.times_light(world, irr), Readout.light_name(world)]
-		var area := obj.def.size_m * SimConst.DEPTH_M
+		var spectrum := obj.probe_spectrum()
 		var bands := PackedFloat32Array([0, 0, 0])
 		for b in Spectrum.BIN_COUNT:
-			bands[Spectrum.BAND_OF[b]] += obj.incident[b] / area
+			bands[Spectrum.BAND_OF[b]] += spectrum[b]
 		s += "\n[color=#8a93a0]%s[/color]" % Readout.bands(bands[0], bands[1], bands[2])
 	else:
 		s += "\nabsorbing %.1f W" % obj.absorbed_w

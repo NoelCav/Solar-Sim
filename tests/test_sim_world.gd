@@ -76,9 +76,45 @@ func test_moon_is_the_light_at_night() -> void:
 	var top := SimConst.SOLAR_CONSTANT * SimConst.MOON_FULL_RATIO * pow(world.moon_illuminated, 3.0)
 	check(world.light_dni < top and world.light_dni > 0.4 * top,
 		"moonlight %s W/m² (above the atmosphere %s)" % [String.num_scientific(world.light_dni), String.num_scientific(top)])
+	var am := EnvironmentSystem.air_mass_at(world.moon_elevation)
+	var sun := Spectrum.atmospheric(am)
+	var moon := world.moon_spectrum
+	check(moon[Spectrum.Bin.RED] / moon[Spectrum.Bin.BLUE] > 1.3 * sun[Spectrum.Bin.RED] / sun[Spectrum.Bin.BLUE],
+		"moonlight is redder than sunlight through the same air")
 	world.time_s = 4.0 * SimConst.DAY_LENGTH_S   # Midnight near new moon: moon down
 	world.refresh_environment()
 	check(not world.moon_is_up and not world.light_is_up, "no light with the moon set")
+
+
+## Objects can't overlap each other or solid ground (Placement): placing or moving into
+## occupied space is refused and the object stays put; a drag that ends blocked still
+## undoes in one step.
+func test_objects_cannot_overlap() -> void:
+	var world := _make_world()
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var sky := DemoRig.ground_y(world, 4.0) - 2.0
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.0, sky)))
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.0, sky)))          # On top: refused
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.6, sky + 0.05)))   # Edges cross: refused
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(6.0, sky)))
+	world.flush_commands()
+	check_eq(world.objects.size(), 2, "two of four placements fit")
+	var ids := world.objects.keys()
+	var a: SimObject = world.objects[ids[0]]
+	var b: SimObject = world.objects[ids[1]]
+	world.enqueue(TransformObjectCommand.new(b.id, a.position + Vector2(0.3, 0.0), b.angle, false))
+	world.enqueue(TransformObjectCommand.new(a.id, Vector2(4.0, DemoRig.ground_y(world, 4.0)), a.angle, false))
+	world.flush_commands()
+	check_eq(b.position, Vector2(6.0, sky), "moving into another lens is refused")
+	check_eq(a.position, Vector2(4.0, sky), "moving into the ground is refused")
+	# A drag: one allowed step, one blocked, then finish records the move once.
+	world.enqueue(TransformObjectCommand.new(b.id, Vector2(5.5, sky), b.angle, false))
+	world.enqueue(TransformObjectCommand.new(b.id, Vector2(4.5, sky), b.angle, false))
+	world.enqueue(TransformObjectCommand.finish(b.id, Vector2(6.0, sky), b.angle))
+	world.flush_commands()
+	check_eq(b.position, Vector2(5.5, sky), "a drag stops at the last free spot")
+	world.undo_last()
+	check_eq(b.position, Vector2(6.0, sky), "one undo returns to the drag's start")
 
 
 func test_paint_command_applies_and_undoes() -> void:

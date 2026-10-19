@@ -103,9 +103,14 @@ func _target_id() -> int:
 	return selected_id if world.objects.has(selected_id) else hovered_id
 
 
-## The object under the cursor (inside a body, or near a line), or -1.
+## The object under the cursor (a probe's reading tag, inside a body, or near a line), or -1.
 func hovered_object() -> int:
 	var m := mouse_m()
+	var zoom := _zoom()
+	var at := m * SimConst.TILE_PX / SimConst.TILE_M * zoom   # Zoomed canvas units, as tags
+	for obj: SimObject in world.objects.values():
+		if obj.def.kind == ObjectDef.Kind.PROBE and MapMarkers.probe_tag_rect(world, obj, zoom).has_point(at):
+			return obj.id
 	var best := -1
 	var best_d := PICK_PX / (SimConst.TILE_PX / SimConst.TILE_M * _zoom())
 	for obj: SimObject in world.objects.values():
@@ -243,13 +248,11 @@ func _release() -> void:
 	if _rotating:
 		var obj := selected_object()
 		if obj != null:
-			world.enqueue(TransformObjectCommand.new(obj.id, obj.position, _pointer_angle(obj))
-				.with_origin(obj.position, _from_angle))
+			world.enqueue(TransformObjectCommand.finish(obj.id, obj.position, _from_angle))
 	elif _drag_id >= 0:
 		var obj: SimObject = world.objects.get(_drag_id)
 		if obj != null:
-			world.enqueue(TransformObjectCommand.new(_drag_id, mouse_m() + _drag_offset, obj.angle)
-				.with_origin(_drag_from, obj.angle))
+			world.enqueue(TransformObjectCommand.finish(_drag_id, _drag_from, obj.angle))
 	_end_gestures()
 
 
@@ -323,10 +326,12 @@ func _draw() -> void:
 	var def := selected_def()
 	if def == null or _drag_id >= 0 or hovered_id >= 0:
 		return
-	# Placement ghost.
+	# Placement ghost, red where the space is occupied (Placement).
 	var xf := Transform2D(ghost_angle, mouse_m())
+	var clear := Placement.is_clear(world, def, mouse_m(), ghost_angle)
+	var col := Color(1, 1, 1, 0.5) if clear else Color(1.0, 0.3, 0.25, 0.8)
 	for piece in OpticsGen.transformed(def.build_pieces(), xf):
 		var pts := PackedVector2Array()
 		for p: Vector2 in piece[0]:
 			pts.append(p * px)
-		draw_polyline(pts, Color(1, 1, 1, 0.5), 1.5, true)
+		draw_polyline(pts, col, 1.5, true)

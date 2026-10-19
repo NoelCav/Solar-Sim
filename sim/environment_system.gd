@@ -55,8 +55,8 @@ static func air_mass_at(h: float) -> float:
 ## Direct normal irradiance per bin from air mass (Kasten–Young air mass, per-bin optical
 ## depths in Spectrum.atmospheric), so low sun is dimmer and redder (§6.2).
 ## The moon reflects sunlight: SimConst.MOON_FULL_RATIO of it at full, falling as the lit
-## fraction cubed (a quarter moon is about 1/8 of full, like the real phase curve), through
-## the atmosphere at its own air mass.
+## fraction cubed (a quarter moon is about 1/8 of full, like the real phase curve), redder by
+## the lunar reflectance and through the atmosphere at its own air mass (Spectrum.lunar).
 func _update_irradiance(world: SimWorld) -> void:
 	if world.sun_is_up:
 		var h := world.sun_elevation
@@ -74,7 +74,7 @@ func _update_irradiance(world: SimWorld) -> void:
 	world.moon_dni = 0.0
 	if world.moon_is_up:
 		var k := SimConst.MOON_FULL_RATIO * pow(world.moon_illuminated, 3.0)
-		var spectrum := Spectrum.atmospheric(air_mass_at(world.moon_elevation))
+		var spectrum := Spectrum.lunar(air_mass_at(world.moon_elevation))
 		for b in Spectrum.BIN_COUNT:
 			spectrum[b] *= k
 		world.moon_spectrum = spectrum

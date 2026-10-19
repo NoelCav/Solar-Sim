@@ -43,6 +43,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D17 | **Systems exchange energy only through the heat field and object ports** (power, pipe). No system reads another's internals | Keeps thermal power, cells, fluids and light composable as scope grows |
 | D18 | **Lit faces carry a thin surface skin** split into strips (~2.5 cm) that take the light deposits at the light engine's resolution; the skin couples to its 25 cm tile by conduction. Charring, ignition, melting and cell damage read the skin | Focal spots heat a spot, not a whole tile: a magnifying glass singes wood in seconds while the block stays cool |
 | D19 | **Light is shown where it lands.** Terrain is lit on its exposed faces only, never through a block; things behind the play plane are **background props** (trees, stands, panel frames, machine bodies) that catch light for display but never block, absorb or heat. Daylight lights everything; at night only lit faces and props show (`DisplayLight`) | Keeps optics and heat 2D while the world reads as lit by real light: focused moonlight, later lamps, light up spots in a dark world |
+| D20 | **Objects occupy space.** An object's shape may not overlap another object's shape or a solid tile (air and liquids are free). Placing or moving into occupied space is refused (`Placement`, checked in the commands); a drag stops at the last free spot and still undoes in one step | No stacked lenses or lenses sunk into rock; one rule for every placement path (tools, SimProbe, saves) |
 
 ## 4. World & scale
 
@@ -153,7 +154,7 @@ Shares are approximate and live in data.
 
 The atmosphere is per bin: direct sunlight is the AM0 spectrum attenuated by Rayleigh scattering (λ^-4), haze (Ångström λ^-1.3) and water/ozone absorption, times the Kasten–Young air mass (`Spectrum.atmospheric`). Low sun is dimmer and redder without a fudge factor (≈1010 W/m² overhead, ≈770 at 30°, ≈110 at 5°, mostly red/IR); the sky color is the same light weighted by scattering.
 
-**The moon** is a second light source. Its phase runs over `MOON_CYCLE_DAYS` (8) game days and it trails the sun by phase × 24 h on the same arc, so a full moon rises at sunset and each moonrise comes a day/7 (≈3.4 h) later. Moonlight is reflected sunlight: `MOON_FULL_RATIO` (2.2 × 10⁻⁶, the real full-moon/sun ratio) of the AM0 spectrum at full, times the lit fraction cubed (a quarter moon ≈ 1/8 of full, close to the real phase curve), through the atmosphere at the moon's own air mass. The light passes trace one source, `world.light_*`: the sun when it is up, else the moon. Cull thresholds scale with the traced DNI, so dim light keeps the same relative detail. Display: moonlight is drawn at a night exposure (a full moon at `MOON_DISPLAY` ≈ 0.35 of daylight) in a pale-blue tint, and the sky's moon glow follows the real moon; readouts stay physical (mW/m², "× moon").
+**The moon** is a second light source. Its phase runs over `MOON_CYCLE_DAYS` (8) game days and it trails the sun by phase × 24 h on the same arc, so a full moon rises at sunset and each moonrise comes a day/7 (≈3.4 h) later. Moonlight is reflected sunlight: `MOON_FULL_RATIO` (2.2 × 10⁻⁶, the real full-moon/sun ratio) of the AM0 spectrum at full, reshaped by the lunar reflectance (`Spectrum.MOON_REFLECTANCE`, roughly tripling from UV to near IR, so moonlight is redder than sunlight), times the lit fraction cubed (a quarter moon ≈ 1/8 of full, close to the real phase curve), through the atmosphere at the moon's own air mass. The light passes trace one source, `world.light_*`: the sun when it is up, else the moon. Cull thresholds scale with the traced DNI, so dim light keeps the same relative detail. Display: moonlight is drawn at a night exposure (a full moon at `MOON_DISPLAY` ≈ 0.35 of daylight) in a pale-blue tint, and the sky's moon glow follows the real moon; readouts stay physical (mW/m², "× moon").
 
 ### 6.3 Geometry (D4)
 
@@ -487,6 +488,13 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Rules and tooling:** `docs/style.md` (principles, layers, naming, docs); `python tools/check.py` runs gdlint (config `gdlintrc`, 120 columns) plus layering, privacy, one-home, docs and line-ending checks. gdformat is not used (it strips aligned comments).
 - **Light per face:** the light engine records the watts arriving on each tile face (`LightEngine.FaceLight`, published as `LightSystem.face_light`, replayed by incremental passes). The tile shader lights each face's skin from its own value, so only faces light really reaches show at night, and the inspector's "≈ N× sun" reads the light arriving instead of estimating it back from absorption.
 - **Known cost:** geometric beam slicing (§18.5 fixes) raised the lens-field beam mesh build from ~12 to ~17 ms (debug build, 09:00); candidate for the next performance pass.
+
+### 18.8 Occupancy and probe spectra (2026-10-19)
+
+- **D20:** `Placement.is_clear` tests outlines (closed for bodies, open for mirrors/probes) against other objects and solid tiles; Place/Transform commands refuse overlaps, `TransformObjectCommand.finish` records a whole drag as one undo step to wherever it stopped; the build ghost turns red where it can't go.
+- **Probe spectrum:** hovering a probe shows its spectrum (`SpectrumChart`): W/m² per µm across each bin's wavelength range (`Spectrum.BIN_EDGES_UM`, log axis), with the source's plain spectrum outlined at the same total. Moonlight is now redder than sunlight (lunar reflectance). SimProbe `objects` reports each probe's spectrum.
+- **Probe readability:** probe readings are tags drawn by `MapMarkers` (dark box, never dimmed at night), and clicking a tag picks the probe; the probe line is thicker with a dark underlay.
+- **Tooling:** `tools/check.py` flags tabs inside a line (a joined `\` continuation).
 
 ## 19. Open questions
 

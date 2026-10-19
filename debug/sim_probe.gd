@@ -9,7 +9,8 @@ const ASCII := " .:-=+*#%@"
 ## `_cmd_<name>(args)`.
 const COMMANDS := {
 	"state": "time, sun, moon (phase, lit), traced light, ambient, speed/pause, view, light and heat stats",
-	"objects": "all placed objects: id, key, kind, position, angle, absorbed W, probe reading",
+	"objects": "all placed objects: id, key, kind, position, angle, absorbed W, probe reading and spectrum "
+		+ "(W/m² per bin, UV..IR)",
 	"defs": "object definitions that can be placed (keys)",
 	"object": "{id}: one object with its bounds",
 	"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light",
@@ -93,7 +94,9 @@ func _object_info(obj: SimObject) -> Dictionary:
 		"absorbed_w": snappedf(obj.absorbed_w, 0.01),
 		"temp_c": snappedf(SimConst.k_to_c(obj.temperature_k), 0.01) if obj.temperature_k > 0.0 else null}
 	if obj.def.kind == ObjectDef.Kind.PROBE:
-		d["probe_w_m2"] = snappedf(obj.probe_irradiance(), 0.1)
+		# Unrounded: moonlight readings are mW/m².
+		d["probe_w_m2"] = obj.probe_irradiance()
+		d["spectrum_w_m2"] = Array(obj.probe_spectrum())
 	return d
 
 

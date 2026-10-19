@@ -1,7 +1,8 @@
 class_name ObjectRenderer
 extends Node2D
 ## Draws placed objects from their optical polylines: lens and prism bodies as tinted
-## glass, mirrors as a bright face over a dark back, probes as a dashed line with readout.
+## glass, mirrors as a bright face over a dark back, probes as a dashed line (their readings
+## are tags drawn by MapMarkers).
 ## In the heat view, lenses, prisms and mirrors are filled with their own temperature color.
 
 var world: SimWorld
@@ -10,13 +11,10 @@ var selected_id := -1
 var view := ViewMode.NORMAL
 var overlay: OverlayRenderer   ## For the heat scale
 
-var _font: Font
-
 
 func setup(p_world: SimWorld) -> void:
 	world = p_world
 	z_index = 4
-	_font = ThemeDB.fallback_font
 
 
 func _process(_delta: float) -> void:
@@ -59,12 +57,8 @@ func _draw() -> void:
 			ObjectDef.Kind.PROBE:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
-				draw_dashed_line(a, b, def.color, 2.0 if hl else 1.5, 4.0)
-				var label := "%s  (%.1f×)" % [Readout.irradiance(obj.probe_irradiance()),
-					Readout.times_light(world, obj.probe_irradiance())]
-				draw_string_outline(_font, b + Vector2(6, 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 3,
-					Color(0, 0, 0, 0.6))
-				draw_string(_font, b + Vector2(6, 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, def.color)
+				draw_line(a, b, Color(0, 0, 0, 0.6), 5.0 if hl else 4.0, true)
+				draw_dashed_line(a, b, def.color, 3.0 if hl else 2.5, 6.0)
 
 
 func _heat_color(obj: SimObject) -> Color:

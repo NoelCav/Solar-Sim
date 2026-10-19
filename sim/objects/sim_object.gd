@@ -34,9 +34,18 @@ func world_pieces() -> Array:
 	return OpticsGen.transformed(def.build_pieces(), transform())
 
 
+## Probe reading per spectral bin, W/m² across its face.
+func probe_spectrum() -> PackedFloat32Array:
+	var s := incident.duplicate()
+	var area := def.size_m * SimConst.DEPTH_M
+	for b in Spectrum.BIN_COUNT:
+		s[b] /= area
+	return s
+
+
 ## Probe irradiance, W/m² across its face.
 func probe_irradiance() -> float:
-	return Spectrum.total(incident) / (def.size_m * SimConst.DEPTH_M)
+	return Spectrum.total(probe_spectrum())
 
 
 ## Tiles whose area the object's bounding box touches.

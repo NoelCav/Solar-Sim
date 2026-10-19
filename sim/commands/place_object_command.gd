@@ -1,6 +1,7 @@
 class_name PlaceObjectCommand
 extends SimCommand
-## Places a new object instance (creative mode: free and instant).
+## Places a new object instance (creative mode: free and instant), unless the space is
+## occupied (Placement).
 
 var def: ObjectDef
 var position: Vector2
@@ -16,7 +17,7 @@ func _init(p_def: ObjectDef, p_position: Vector2, p_angle: float = 0.0) -> void:
 
 
 func apply(world: SimWorld) -> bool:
-	if def == null:
+	if def == null or not Placement.is_clear(world, def, position, angle):
 		return false
 	placed_id = world.next_object_id
 	world.add_object(SimObject.new(placed_id, def, position, angle))
