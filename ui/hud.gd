@@ -8,12 +8,13 @@ extends Control
 const PANEL_BG := Color(0.05, 0.07, 0.10, 0.92)
 const DIM := Color(0.70, 0.75, 0.82)
 const ACCENT := Color(1.0, 0.85, 0.45)
-const TOOL_NAMES: Array[String] = ["Select", "Build", "Paint"]
-const TOOL_KEYS: Array[String] = ["Esc", "B", "T"]
+const TOOL_NAMES: Array[String] = ["Select", "Build", "Paint", "Wire"]
+const TOOL_KEYS: Array[String] = ["Esc", "B", "T", "V"]
 const TOOL_HINTS: Array[String] = [
 	"Move and tilt objects; drag empty space to pan",
 	"Place lenses, prisms, mirrors and probes",
 	"Paint tiles: LMB paint, RMB erase",
+	"Lay wire: LMB lay, RMB remove; objects connect at the foot of their stand",
 ]
 
 var world: SimWorld
@@ -378,15 +379,22 @@ func _rebuild_context() -> void:
 			picked.custom_minimum_size.x = 100
 			_context.add_child(picked)
 			_context.add_child(VSeparator.new())
-			_context.add_child(_button("−", "Smaller brush ([)",
-				func() -> void: brush.brush_radius = maxi(brush.brush_radius - 1, 0)))
-			var size_label := Label.new()
-			size_label.text = "%d" % (brush.brush_radius * 2 + 1)
-			size_label.custom_minimum_size.x = 24
-			size_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			_context.add_child(size_label)
-			_context.add_child(_button("+", "Bigger brush (])",
-				func() -> void: brush.brush_radius = mini(brush.brush_radius + 1, 8)))
+			_add_brush_size()
+		ObjectTool.Mode.WIRE:
+			_add_brush_size()
+
+
+## Brush size buttons (Paint and Wire tools).
+func _add_brush_size() -> void:
+	_context.add_child(_button("−", "Smaller brush ([)",
+		func() -> void: brush.brush_radius = maxi(brush.brush_radius - 1, 0)))
+	var size_label := Label.new()
+	size_label.text = "%d" % (brush.brush_radius * 2 + 1)
+	size_label.custom_minimum_size.x = 24
+	size_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_context.add_child(size_label)
+	_context.add_child(_button("+", "Bigger brush (])",
+		func() -> void: brush.brush_radius = mini(brush.brush_radius + 1, 8)))
 
 
 func _help_text() -> String:
@@ -400,6 +408,8 @@ func _help_text() -> String:
 				% tool.defs.size()
 		ObjectTool.Mode.PAINT:
 			line = "LMB paint · RMB erase · Q/E material · [ ] size"
+		ObjectTool.Mode.WIRE:
+			line = "LMB lay wire · RMB remove · [ ] size · objects connect at the foot of their stand"
 	return line + "\nWheel zoom · WASD / middle drag pan · H view · G/J wavelength · , . time · " + \
 		"Space pause · Tab speed · Ctrl+Z undo · F1 hide help"
 

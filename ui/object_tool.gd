@@ -7,10 +7,14 @@ extends Node2D
 ##   existing objects can still be dragged. RMB goes back to Select. Objects go on stands
 ##   (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
 ## - Paint (T): the tile brush (CreativeBrush) owns the mouse.
+## - Wire (V): the same brush lays wire (LMB) and removes it (RMB).
 ## In any mode R / F rotate the selected or hovered object (Shift for fine steps), as does
 ## Shift + wheel, and X / Delete removes it.
 
-enum Mode { SELECT, BUILD, PAINT }
+enum Mode { SELECT, BUILD, PAINT, WIRE }
+
+const TOOL_ACTIONS := {&"tool_select": Mode.SELECT, &"tool_build": Mode.BUILD, &"tool_paint": Mode.PAINT,
+	&"tool_wire": Mode.WIRE}
 
 const PICK_PX := 6.0            ## How close (screen pixels) the pointer must be to a line
 const ROTATE_STEP_DEG := 5.0
@@ -54,8 +58,14 @@ func set_mode(m: Mode) -> void:
 	mode = m
 	if mode == Mode.BUILD and (selected < 0 or selected >= defs.size()):
 		selected = 0
-	brush.enabled = mode == Mode.PAINT
+	brush.enabled = uses_brush()
+	brush.wire = mode == Mode.WIRE
 	_end_gestures()
+
+
+## Whether the brush owns the mouse (Paint and Wire tools).
+func uses_brush() -> bool:
+	return mode == Mode.PAINT or mode == Mode.WIRE
 
 
 ## Switches to Build with item `index` picked.
@@ -172,15 +182,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				set_mode(Mode.SELECT)
 			get_viewport().set_input_as_handled()
 			return
-	if event.is_action_pressed(&"tool_select"):
-		set_mode(Mode.SELECT)
-		return
-	if event.is_action_pressed(&"tool_build"):
-		set_mode(Mode.BUILD)
-		return
-	if event.is_action_pressed(&"tool_paint"):
-		set_mode(Mode.PAINT)
-		return
+	for action: StringName in TOOL_ACTIONS:
+		if event.is_action_pressed(action):
+			set_mode(TOOL_ACTIONS[action])
+			return
 	if event.is_action_pressed(&"obj_rotate_ccw") or event.is_action_pressed(&"obj_rotate_cw"):
 		var step := FINE_STEP_DEG if Input.is_key_pressed(KEY_SHIFT) else ROTATE_STEP_DEG
 		var direction := -1.0 if event.is_action_pressed(&"obj_rotate_ccw") else 1.0
@@ -208,7 +213,7 @@ func _mouse_button(mb: InputEventMouseButton) -> void:
 			rotate_by(direction * FINE_STEP_DEG)
 		get_viewport().set_input_as_handled()
 		return
-	if mode == Mode.PAINT:
+	if uses_brush():
 		return
 	if mb.button_index == MOUSE_BUTTON_LEFT:
 		if mb.pressed:
@@ -289,7 +294,7 @@ func _process(_delta: float) -> void:
 		return
 	if selected_id >= 0 and not world.objects.has(selected_id):
 		selected_id = -1
-	hovered_id = hovered_object() if mode != Mode.PAINT else -1
+	hovered_id = hovered_object() if not uses_brush() else -1
 	renderer.highlighted_id = _drag_id if _drag_id >= 0 else hovered_id
 	renderer.selected_id = selected_id
 	if mode == Mode.SELECT or mode == Mode.BUILD:
@@ -314,7 +319,7 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
 	var px := SimConst.TILE_PX / SimConst.TILE_M * zoom
 	var obj := selected_object()
-	if obj != null and mode != Mode.PAINT:
+	if obj != null and not uses_brush():
 		# Tilt ring: a faint circle, a line along the object's axis and a handle to drag.
 		var c := obj.position * px
 		var r := ring_radius(obj) * px

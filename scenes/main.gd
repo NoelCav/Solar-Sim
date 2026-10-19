@@ -62,6 +62,10 @@ func _ready() -> void:
 	_tiles.lit_materials.append(backdrop.material as ShaderMaterial)
 	_tiles.dimmed[backdrop.outside] = 0.0
 	_tiles.dimmed[_objects] = 0.12   # Objects stay faintly visible to edit in the dark
+	var wires := WireRenderer.new()
+	add_child(wires)
+	wires.setup(world)
+	_tiles.dimmed[wires] = 0.3
 	_objects.setup(world)
 	_beams.setup(world)
 	_overlay.setup(world)

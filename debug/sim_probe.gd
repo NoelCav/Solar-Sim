@@ -15,7 +15,7 @@ const COMMANDS := {
 	"object": "{id}: one object with its bounds",
 	"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light, and per skinned face "
 		+ "(top/bottom/left/right) its surface strips' temperature (°C) and arriving light (W/m²)",
-	"region": "{x0, y0, x1, y1, layer: light|heat|material, cols?: 60}: ASCII map plus summary",
+	"region": "{x0, y0, x1, y1, layer: light|heat|material|wire, cols?: 60}: ASCII map plus summary",
 	"peaks": "{layer: light|heat, n: 10}: hottest or brightest tiles",
 	"trace": "{x, y, angle (deg, 90 = straight down) or dx, dy, bin: 0-5 (UV..IR, default 2 green)}: "
 		+ "one test ray through current geometry; returns segments with power",
@@ -23,6 +23,8 @@ const COMMANDS := {
 	"move": "{id, x, y}",
 	"rotate": "{id, angle} absolute or {id, by}",
 	"remove": "{id}",
+	"wire": "{x0, y0, x1, y1, remove: false}: lay (or remove) wire along an L from (x0, y0) across, then "
+		+ "down/up to (x1, y1)",
 	"time": "{hour}: jump to that hour of the current day (24+ = next day)",
 	"pause": "{on: bool}",
 	"speed": "{n: 1|2|4|8|16}",
@@ -201,7 +203,7 @@ func _cmd_region(a: Dictionary) -> Dictionary:
 			match layer:
 				"heat":
 					v = g.temperature[i] - w.ambient_k
-				"material":
+				"material", "wire":
 					v = g.material[i]
 				_:
 					v = light.tile_power[i] * light.power_scale(w) if light.tile_power.size() == g.size() else 0.0
@@ -218,7 +220,10 @@ func _cmd_region(a: Dictionary) -> Dictionary:
 			for yy in range(y, mini(y + step, c1.y + 1)):
 				for xx in range(x, mini(x + step, c1.x + 1)):
 					v = maxf(v, values[g.idx(xx, yy)])
-			if layer == "material":
+			if layer == "wire":
+				var i := g.idx(x, y)
+				row += "=" if g.wire[i] != 0 else ("#" if w.materials.is_solid[g.material[i]] else ".")
+			elif layer == "material":
 				var def := w.materials.get_def(int(v))
 				row += "." if def == null or def.phase == MaterialDef.Phase.GAS else def.display_name.substr(0, 1)
 			elif top <= 0.0 or v <= 0.0:
@@ -312,6 +317,21 @@ func _cmd_rotate(a: Dictionary) -> Dictionary:
 	var angle := deg_to_rad(float(a.angle)) if a.has("angle") else obj.angle + deg_to_rad(float(a.get("by", 0)))
 	_main.world.enqueue(TransformObjectCommand.new(obj.id, obj.position, angle))
 	return {"ok": true}
+
+
+func _cmd_wire(a: Dictionary) -> Dictionary:
+	var g := _main.world.grid
+	var c0 := _cell({"x": a.get("x0", 0), "y": a.get("y0", 0)})
+	var c1 := _cell({"x": a.get("x1", 0), "y": a.get("y1", 0)})
+	var cells := PackedInt32Array()
+	for x in range(mini(c0.x, c1.x), maxi(c0.x, c1.x) + 1):
+		if g.in_bounds(x, c0.y):
+			cells.append(g.idx(x, c0.y))
+	for y in range(mini(c0.y, c1.y), maxi(c0.y, c1.y) + 1):
+		if g.in_bounds(c1.x, y):
+			cells.append(g.idx(c1.x, y))
+	_main.world.enqueue(PaintWiresCommand.new(cells, 0 if bool(a.get("remove", false)) else 1))
+	return {"ok": true, "tiles": cells.size()}
 
 
 func _cmd_remove(a: Dictionary) -> Dictionary:

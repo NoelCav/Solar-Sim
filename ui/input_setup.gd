@@ -23,6 +23,7 @@ const KEYS := {
 	&"tool_select": [KEY_ESCAPE],
 	&"tool_build": [KEY_B],
 	&"tool_paint": [KEY_T],
+	&"tool_wire": [KEY_V],
 	&"time_back": [KEY_COMMA],
 	&"time_forward": [KEY_PERIOD],
 	&"toggle_help": [KEY_F1],
