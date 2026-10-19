@@ -393,7 +393,7 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
 | M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
 | **Moonlight & moon cycle** ✅ | Done (§6.2, §18.6). Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
-| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell ✅, stands (D21 ✅), wires (D14), grid sale → money, shop pages with unlocks |
+| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell ✅, stands (D21 ✅), wires (D14 ✅), grid sale → money ✅, shop pages with unlocks |
 | M3b — Stands & crafter | Swappable stand contents (D16) and stand qualities (§9), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
 | M3 — Cells & power | Cell model, power network, batteries, grid market; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power |
@@ -509,6 +509,14 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 
 - **Cells (§9.1):** `SolarCell.max_power` per bin (Eg/E, collection, voltage rising with ln C, temperature, series loss), calibrated to 22 % for Si at 1 sun and 25 °C (voltage factor 0.5, r_s 0.002). `Kind.CELL` is a mirror-like panel (coating `CELL`): its coating reflects per bin, the rest heats its body (thin silicon sheet), and its front face records the light arriving per bin (`SimObject.incident`, shared with probes; "probe" readings renamed "incident"). The inspector and SimProbe `objects` show what a cell could make now; until wires exist (group 3) all of its light stays heat.
 - **D21 built:** `Mounting.snap_position/snap_angle/ground_y/stand_base`; `ObjectDef.mount` (STAND, GROUND, FREE); `SimObject.mounted`; Place/Transform commands snap mounted objects; the build ghost shows the snapped spot and its stand; `ObjectRenderer.draw_stand` draws poles behind optics. Tilt stays continuous (aiming needs fine angles). The demo rig stands on stands and includes a cell panel; a 25 cm surface cell lies on the ground.
+
+### 18.11 Wires, grid and money (2026-10-19, run 01 group 3)
+
+- **D14 built (wires):** `TileGrid.wire` is a conduit layer with its own `conduit_version` (wire edits don't touch light or heat); `PaintWiresCommand` (undo); `ConduitNetworks` flood-fills a layer into networks, rebuilt only when it changes, written to serve pipes later. Wire runs behind the play plane (D19) through air and ground alike. The Wire tool (V) is the Paint brush switched to the wire layer; `WireRenderer` redraws only on change.
+- **Ports:** an object connects at its foot (`Mounting.port_tiles`): the tile just above the ground in its column, or the ground tile below; a floating object at the tile it is in.
+- **Machines:** `ObjectDef.is_machine()` (the grid connection, `Kind.GRID_TIE`, first): a box behind the play plane, skipped by the light pass, colliding only with machines (`Placement`), resting on the ground (`Mounting` rests a ground object's lowest point on the tile). `is_closed()` (bodies and machines) replaces `is_body()` where only the outline's closedness matters.
+- **PowerSystem** (after light, before heat): on each network with a grid connection every cell delivers `SolarCell.object_power` (`SimObject.power_w`), which leaves its heat (`heat_in`), and the network sells it at `Market.price_per_kwh` (duck curve: 3 ¢ at noon, 35 ¢ at 19:00); energy is counted in real time (`Market.REAL_S_PER_GAME_S` = 120). Without a grid connection cells sit at open circuit. HUD status shows money and price; SimProbe `power`, `wire`, `region` layer `wire`.
+- **Not yet:** wire resistance and current limits, export caps, consumers and batteries (group 5); prices are realistic, so earnings are tiny until the shop (group 4) sets costs to match.
 
 ## 19. Open questions
 

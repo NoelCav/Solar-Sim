@@ -101,6 +101,38 @@ readings are published at the traced light level and not rescaled as the sun mov
 (cells are). I could not check this group in the running game: the open editor needs a project
 reload to see the new classes (see below).
 
+### Group 3: wires, grid and money (D14, §10)
+
+**What it does.** The Wire tool (V) paints wire on tiles with the paint brush (LMB lay, RMB
+remove, `[` `]` size). Wire runs behind everything, through air and ground. Wire tiles that touch
+edge to edge form one network. Objects connect at the foot of their stand (the tile just above
+the ground, or the ground tile under it). A new machine, the Grid Connection, is a box that sits
+on the ground; on a network with one, every cell delivers what it can make and the network sells
+it. Delivered power leaves the cell's heat, so a working cell runs cooler (40 °C against 48 °C at
+noon). The price follows a duck curve (3 ¢/kWh at noon, 35 ¢ at 19:00); money and the current
+price are on the status line.
+
+**Where to look.** `sim/conduits/conduit_networks.gd`, `sim/commands/paint_wires_command.gd`,
+`sim/power/power_system.gd`, `sim/power/market.gd`, `Mounting.port_tiles`,
+`render/wire_renderer.gd`.
+
+**Try it.** The demo's cell panel is wired along the ground to a Grid Connection two meters to its
+right; hover the cell ("making 45 W (19 % of 967 W/m²)") and the box ("selling 45 W at 3 ¢/kWh").
+Erase a wire tile with the Wire tool and the cell drops to "could make … (not wired to a grid
+connection)".
+
+**Choices made.**
+- Ports are at the foot of the stand, so wiring is painted along the ground like real cable runs.
+- Machines are background boxes (D19): they don't block light and don't collide with optics, only
+  with other machines.
+- Energy is counted in real time (a game day stands for 24 h), so a 45 W panel makes realistic
+  kWh. Real prices make that cents a day; the shop's costs in group 4 decide the game's scale.
+- No wire losses or limits yet; a network without a grid connection draws nothing.
+
+**Checked.** Tests: networks join and split (with undo), a wired cell sells exactly what the model
+gives and runs cooler, an unwired one sells nothing, the price curve. Headless boot of the game
+scene: the demo network has 11 wire tiles, grid on, 45.3 W sold. Tick cost unchanged (2.2 ms).
+
 ## Open questions
 
 - The editor has to be reloaded (Project → Reload Current Project) whenever a run adds a new

@@ -22,6 +22,7 @@ Controls (the window opens maximized and the interface scales with it; every key
 | Select tool (Esc, 0) — default | Click an object to select it, drag to move, drag its ring handle to tilt (Ctrl snaps 15°); drag empty space to pan |
 | Build tool (B, 1–7) | Pick an item from the bar, LMB place (R/F tilt the ghost first), RMB back to Select. Objects go on stands that snap to tile columns and 25 cm heights (surface cells lie on the ground); hold Alt to float one (creative) |
 | Paint tool (T) | LMB paint, RMB erase, Q/E or the swatches for material, `[` `]` size |
+| Wire tool (V) | LMB lay wire, RMB remove, `[` `]` size. Objects connect at the foot of their stand; cells wired to a Grid Connection sell their power (money and price top left) |
 | WASD / middle-drag, wheel | Pan, zoom (up to 64×; outlines and labels stay crisp) |
 | R / F (Shift = fine), Shift+wheel | Tilt the selected or hovered object |
 | X / Delete | Delete the selected or hovered object |
@@ -46,7 +47,7 @@ return SimProbe.run("step", {"n": 5})          # pause, then advance exactly 5 t
 return SimProbe.run("fan", {...})              # dense plain-ray ground truth (exit-angle histogram)
 ```
 
-Other commands: `state` (sun, moon, traced light), `defs`, `object`, `tile`, `peaks`, `beams`, `strips` (beam widths and concentration per leg), `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`). Prefer these over screenshots when checking behaviour: they return exact numbers and cost far less.
+Other commands: `state` (sun, moon, traced light), `power` (money, price, wire networks), `wire`, `defs`, `object`, `tile`, `peaks`, `beams`, `strips` (beam widths and concentration per leg), `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`). Prefer these over screenshots when checking behaviour: they return exact numbers and cost far less.
 
 Positions are meters (x right, y down), angles degrees. Commands go through the sim's command queue like player input.
 
