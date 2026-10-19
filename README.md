@@ -25,7 +25,7 @@ Controls (the window opens maximized and the interface scales with it; every key
 | X / Delete | Delete the selected or hovered object |
 | Space, Tab | Pause, cycle speed (1× 2× 4×) |
 | `,` `.` | Time −/+ 1 hour |
-| H, or the view bar (top right) | Views: Normal · Light (all wavelengths, false color) · UV · Infrared · Heat |
+| H, or the view bar (top right) | Views: Normal · Light (all wavelengths in false color, tiles show absorbed light) · Heat (every tile's temperature; hover the legend to read values) |
 | G / J, or the wavelength slider | Show one spectral band (UV, blue, green, red, near IR, IR) or all |
 | F1 | Hide/show the help lines |
 | Ctrl+Z | Undo |

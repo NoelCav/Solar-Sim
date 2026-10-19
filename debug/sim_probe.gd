@@ -51,7 +51,7 @@ func _help() -> Dictionary:
 		"trace": "{x, y, angle (deg, 90 = straight down) or dx, dy, bin: 0-5 (UV..IR, default 2 green)}: one test ray through current geometry; returns segments with power",
 		"place": "{key, x, y, angle}", "move": "{id, x, y}", "rotate": "{id, angle} absolute or {id, by}",
 		"remove": "{id}", "time": "{hour}", "pause": "{on: bool}", "speed": "{n: 1|2|4}",
-		"view": "{name: Normal|Light|UV|Infrared|Heat}", "wavelength": "{bin: -1..5}",
+		"view": "{name: Normal|Light|Heat}", "wavelength": "{bin: -1..5}",
 		"camera": "{x, y, zoom}: centre the view on a point (for screenshots)",
 		"step": "{n: 1}: pause, then advance exactly n sim ticks (light passes run within ticks)",
 		"fan": "{x0, y0, x1, y1 start line, n: 400, sun_offset_deg: 0, bin: 2, box: [bx0, by0, bx1, by1], hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the sun (rotated by sun_offset_deg) from the start line; histogram of directions of legs leaving the box, weighted by power",

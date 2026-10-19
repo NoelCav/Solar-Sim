@@ -37,6 +37,8 @@ var _legend_bar: TextureRect
 var _legend_ends: HBoxContainer
 var _legend_lo: Label
 var _legend_hi: Label
+var _legend_tip: PanelContainer
+var _legend_tip_label: Label
 var _view_hint: Label
 var _tool_buttons: Array[Button] = []
 var _context: HBoxContainer        ## Tool-specific row: item list, materials or selection
@@ -204,7 +206,18 @@ func _build_view_panel() -> void:
 	_legend_bar = TextureRect.new()
 	_legend_bar.custom_minimum_size = Vector2(256, 12)
 	_legend_bar.stretch_mode = TextureRect.STRETCH_SCALE
+	_legend_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+	_legend_bar.gui_input.connect(_on_legend_input)
+	_legend_bar.mouse_exited.connect(func() -> void: _legend_tip.visible = false)
 	box.add_child(_legend_bar)
+	# Value under the cursor when hovering the color bar.
+	_legend_tip = _panel()
+	_legend_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_legend_tip.visible = false
+	_legend_tip_label = Label.new()
+	_legend_tip_label.add_theme_color_override(&"font_color", ACCENT)
+	_legend_tip.add_child(_legend_tip_label)
+	add_child(_legend_tip)
 	_legend_ends = HBoxContainer.new()
 	box.add_child(_legend_ends)
 	_legend_lo = _small_label()
@@ -212,6 +225,18 @@ func _build_view_panel() -> void:
 	_legend_ends.add_child(_legend_lo)
 	_legend_hi = _small_label()
 	_legend_ends.add_child(_legend_hi)
+
+
+func _on_legend_input(event: InputEvent) -> void:
+	if not event is InputEventMouseMotion:
+		return
+	var local := (event as InputEventMouseMotion).position
+	var x := local.x / maxf(_legend_bar.size.x, 1.0)
+	_legend_tip_label.text = overlay.legend_value(x)
+	_legend_tip.visible = _legend_tip_label.text != ""
+	_legend_tip.reset_size()
+	var at := _legend_bar.get_global_transform() * local
+	_legend_tip.position = Vector2(at.x - _legend_tip.size.x * 0.5, at.y + 18.0)
 
 
 # --- Tool bar -------------------------------------------------------------------------------

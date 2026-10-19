@@ -124,6 +124,18 @@ func _fill_heat() -> void:
 	peak_value = temp[peak_tile] if peak_tile >= 0 else 0.0
 
 
+## The value at position x (0–1) along the current legend, as display text.
+func legend_value(x: float) -> String:
+	x = clampf(x, 0.0, 1.0)
+	match ViewMode.overlay(view):
+		ViewMode.Overlay.TEMPERATURE:
+			var c := HEAT_COLD_C + x / 0.5 * (HEAT_WARM_C - HEAT_COLD_C) if x <= 0.5 				else HEAT_WARM_C + exp((x - 0.5) / 0.5 * log(1.0 + HEAT_HOT_C - HEAT_WARM_C)) - 1.0
+			return "%.0f °C" % c
+		ViewMode.Overlay.ABSORBED:
+			return Hud._irr(exp(log(IRR_MIN) + x * (log(IRR_MAX) - log(IRR_MIN))))
+	return ""
+
+
 ## Position on the heat scale (0–1) of a temperature in °C: linear through everyday
 ## temperatures, logarithmic above so a 1000 °C focus still reads.
 static func heat_x(c: float) -> float:

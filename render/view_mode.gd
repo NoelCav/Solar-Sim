@@ -4,14 +4,12 @@ extends RefCounted
 ## in what colors, and what the tile overlay displays. A wavelength filter (one bin, or -1
 ## for all) narrows any view to a single bin, shown in its false color.
 
-enum { NORMAL, LIGHT, UV, INFRARED, HEAT }
-const COUNT := 5
-const NAMES: Array[String] = ["Normal", "Light", "UV", "Infrared", "Heat"]
+enum { NORMAL, LIGHT, HEAT }
+const COUNT := 3
+const NAMES: Array[String] = ["Normal", "Light", "Heat"]
 const HINTS: Array[String] = [
 	"Visible light as the eye sees it",
-	"All wavelengths in false color; tiles show absorbed light",
-	"Ultraviolet only; tiles show absorbed UV",
-	"Near and far infrared only; tiles show absorbed IR",
+	"Every wavelength in false color, tiles colored by absorbed light (slider: one band)",
 	"Temperature of every tile, ground and air",
 ]
 
@@ -45,12 +43,6 @@ static func bin_colors(view: int, wavelength := -1) -> Array[Color]:
 					col = Spectrum.DISPLAY_COLOR[b]
 			LIGHT:
 				col = _FALSE_COLORS[b]
-			UV:
-				if b == Spectrum.Bin.UV:
-					col = _FALSE_COLORS[b]
-			INFRARED:
-				if b >= Spectrum.Bin.NIR:
-					col = _FALSE_COLORS[b]
 		c.append(col)
 	return c
 
@@ -62,7 +54,7 @@ static func beam_gain(view: int) -> float:
 
 static func overlay(view: int) -> Overlay:
 	match view:
-		LIGHT, UV, INFRARED:
+		LIGHT:
 			return Overlay.ABSORBED
 		HEAT:
 			return Overlay.TEMPERATURE
@@ -79,12 +71,5 @@ static func wavelength_name(wavelength: int) -> String:
 
 
 ## Spectrum band the absorbed overlay shows, or -1 for all light.
-static func overlay_band(view: int, wavelength := -1) -> int:
-	if wavelength >= 0:
-		return Spectrum.BAND_OF[wavelength]
-	match view:
-		UV:
-			return Spectrum.Band.UV
-		INFRARED:
-			return Spectrum.Band.INFRARED
-	return -1
+static func overlay_band(_view: int, wavelength := -1) -> int:
+	return Spectrum.BAND_OF[wavelength] if wavelength >= 0 else -1
