@@ -132,7 +132,7 @@ func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) 
 
 
 func _build_beams(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
-	BeamGeometry.build(_light.beam_strips, _light.beam_slivers, _rgb, REFERENCE_DNI, px,
+	BeamGeometry.build(_light.beam_render, _rgb, REFERENCE_DNI, px,
 		VERTEX_SCALE, verts, cols)
 
 

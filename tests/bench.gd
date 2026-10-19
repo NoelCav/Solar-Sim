@@ -52,8 +52,8 @@ func _run(db: MaterialDB, objects: ObjectDB, scenario: String, hour: float) -> v
 	var checksum := 0.0
 	for i in light.tile_power.size():
 		checksum += light.tile_power[i] * float(i % 97 + 1)
-	print("%s @ %02.0fh: pass %.1f ms (map %.1f, direct %.1f, beams %.1f) · %d paths · %d strips · balance %.6f · checksum %.4f" % [
-		scenario, hour, total, stages.map, stages.direct, stages.beams, s.rays, light.beam_strips.size() + light.beam_slivers.size(),
+	print("%s @ %02.0fh: pass %.1f ms (map %.1f, direct %.1f, beams %.1f) · %d paths · %.0f KB beams · balance %.6f · checksum %.4f" % [
+		scenario, hour, total, stages.map, stages.direct, stages.beams, s.rays, light.beam_render.size() * 4 / 1024.0,
 		balance, checksum])
 	var r := BeamRenderer.new()
 	r.setup(world)

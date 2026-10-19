@@ -1,10 +1,14 @@
 class_name BeamGeometry
 extends RefCounted
-## Turns beam render records (BeamTracer.strips / slivers) into colored triangles.
+## Turns beam render records (BeamTracer.render) into colored triangles.
+## Record layout, all floats: STRIP, bin, watts, n, then n × (ax, ay, bx, by, frac_a, frac_b);
+## SLIVER, bin, watts, n, width, then n × (x, y, frac).
 ## Irradiance goes as 1/width, so each leg is cut into slices, packed toward the point where
 ## the two rays cross (a focus), and brightness is evaluated per slice. Only bins with a
 ## non-zero color are built, so a view pays only for what it shows.
 
+const STRIP := 0
+const SLIVER := 1
 const MIN_WIDTH_M := 0.001     ## Width floor where rays cross at a focus
 const SUN_LEVEL := 0.12        ## Brightness of plain sunlight (concentration 1)
 const LOG_GAIN := 3.5          ## How fast brightness grows with concentration
@@ -19,36 +23,44 @@ static func tone(c: float) -> float:
 	return SUN_LEVEL * (1.0 + LOG_GAIN * log(c))
 
 
-## Appends triangles for all strips and slivers. `rgb[bin]` is the bin's color per unit of
+## Appends triangles for every record in `buf`. `rgb[bin]` is the bin's color per unit of
 ## tone (zero = hidden); `px` converts meters to pixels; colors are divided by `vertex_scale`.
-static func build(strips: Array, slivers: Array, rgb: Array[Vector3],
-		reference_dni: float, px: float, vertex_scale: float,
-		verts: PackedVector2Array, cols: PackedColorArray) -> void:
-	for st in strips:
-		var bin: int = st[3]
-		if rgb[bin] == Vector3.ZERO:
-			continue
-		_strip(st[0], st[1], st[2], st[4], rgb[bin] / vertex_scale,
-			reference_dni * Spectrum.AM15_SHARE[bin], px, verts, cols)
-	for sl in slivers:
-		var bin: int = sl[3]
-		if rgb[bin] == Vector3.ZERO:
-			continue
-		_sliver(sl[0], sl[1], sl[2], sl[4], rgb[bin] / vertex_scale,
-			reference_dni * Spectrum.AM15_SHARE[bin], px, verts, cols)
+static func build(buf: PackedFloat32Array, rgb: Array[Vector3], reference_dni: float, px: float,
+		vertex_scale: float, verts: PackedVector2Array, cols: PackedColorArray) -> void:
+	var o := 0
+	var size := buf.size()
+	while o < size:
+		var kind := int(buf[o])
+		var bin := int(buf[o + 1])
+		var watts := buf[o + 2]
+		var n := int(buf[o + 3])
+		if kind == STRIP:
+			o += 4
+			if rgb[bin] != Vector3.ZERO:
+				_strip(buf, o, n, watts, rgb[bin] / vertex_scale, reference_dni * Spectrum.AM15_SHARE[bin],
+					px, verts, cols)
+			o += n * 6
+		else:
+			var width := buf[o + 4]
+			o += 5
+			if rgb[bin] != Vector3.ZERO:
+				_sliver(buf, o, n, watts, width, rgb[bin] / vertex_scale,
+					reference_dni * Spectrum.AM15_SHARE[bin], px, verts, cols)
+			o += n * 3
 
 
-static func _strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, last: int, rgb: Vector3,
-		ref: float, px: float, verts: PackedVector2Array, cols: PackedColorArray) -> void:
-	var end := ra.pts.size() - 1 if last < 0 else last
-	for k in range(1, end):
-		var a0 := ra.pts[k]
-		var a1 := ra.pts[k + 1]
-		var b0 := rb.pts[k]
-		var b1 := rb.pts[k + 1]
+## Strip record: n points, each (ax, ay, bx, by, frac_a, frac_b); legs join consecutive points.
+static func _strip(buf: PackedFloat32Array, o: int, n: int, watts: float, rgb: Vector3, ref: float,
+		px: float, verts: PackedVector2Array, cols: PackedColorArray) -> void:
+	for k in n - 1:
+		var q := o + k * 6
+		var a0 := Vector2(buf[q], buf[q + 1])
+		var b0 := Vector2(buf[q + 2], buf[q + 3])
+		var a1 := Vector2(buf[q + 6], buf[q + 7])
+		var b1 := Vector2(buf[q + 8], buf[q + 9])
 		var leg := (a1 - a0).normalized()
 		# Concentration per meter of width: divide by the local width to get C.
-		var p := watts * 0.5 * (ra.frac[k] + rb.frac[k]) / (SimConst.DEPTH_M * ref)
+		var p := watts * 0.5 * (buf[q + 4] + buf[q + 5]) / (SimConst.DEPTH_M * ref)
 		# Signed width along the leg is linear in t; a sign change is the crossing.
 		var w0 := leg.cross(b0 - a0)
 		var w1 := leg.cross(b1 - a1)
@@ -69,9 +81,9 @@ static func _strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, last: i
 		else:
 			# Slices grow with how strongly the leg converges or diverges.
 			var ratio := maxf(absf(w0), absf(w1)) / maxf(minf(absf(w0), absf(w1)), MIN_WIDTH_M)
-			var n := clampi(ceili(log(ratio) / log(2.0)) + 1, 1, 6)
-			for j in range(1, n + 1):
-				ts.append(float(j) / n)
+			var m := clampi(ceili(log(ratio) / log(2.0)) + 1, 1, 6)
+			for j in range(1, m + 1):
+				ts.append(float(j) / m)
 		var prev_a := a0 * px
 		var prev_b := b0 * px
 		var prev_c := _color(rgb, tone(p / maxf(absf(w0), MIN_WIDTH_M)))
@@ -92,13 +104,15 @@ static func _strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, last: i
 			prev_c = c
 
 
-static func _sliver(r: Tracer.PathRec, watts: float, width: float, first: int, rgb: Vector3,
+## Sliver record: width, then n points, each (x, y, frac).
+static func _sliver(buf: PackedFloat32Array, o: int, n: int, watts: float, width: float, rgb: Vector3,
 		ref: float, px: float, verts: PackedVector2Array, cols: PackedColorArray) -> void:
-	for k in range(first, r.pts.size() - 1):
-		var a := r.pts[k] * px
-		var b := r.pts[k + 1] * px
+	for k in n - 1:
+		var q := o + k * 3
+		var a := Vector2(buf[q], buf[q + 1]) * px
+		var b := Vector2(buf[q + 3], buf[q + 4]) * px
 		var side := (b - a).normalized().orthogonal() * (width * 0.5 * px)
-		var c := _color(rgb, tone(watts * r.frac[k] / (maxf(width, MIN_WIDTH_M) * SimConst.DEPTH_M * ref)))
+		var c := _color(rgb, tone(watts * buf[q + 2] / (maxf(width, MIN_WIDTH_M) * SimConst.DEPTH_M * ref)))
 		_tri(a - side, b - side, b + side, c, c, c, verts, cols)
 		_tri(a - side, b + side, a + side, c, c, c, verts, cols)
 

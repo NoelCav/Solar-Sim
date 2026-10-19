@@ -36,16 +36,9 @@ class PathRec:
 	var term_tile := -1
 	var term_side := -1                    ## Face code of the opaque face hit (see face_code)
 	var remain := 1.0                      ## Power arriving at the end
-	var dep_tile := PackedInt32Array()     ## Recorded absorption along the path
-	var dep_frac := PackedFloat32Array()
-	var dep_body := PackedInt32Array()
-	var probe_owner := PackedInt32Array()  ## Probes crossed, with power at the crossing
-	var probe_frac := PackedFloat32Array()
-	var refl_pos := PackedVector2Array()   ## Fresnel reflections left behind
-	var refl_dir := PackedVector2Array()
-	var refl_frac := PackedFloat32Array()
-	var refl_medium := PackedInt32Array()
-	var refl_body := PackedInt32Array()
+	var deps := PackedFloat64Array()       ## Absorption along the path: (tile, fraction, body)…
+	var probes := PackedFloat64Array()     ## Probes crossed: (owner, power at the crossing)…
+	var refls := PackedFloat64Array()      ## Fresnel reflections: (x, y, dx, dy, fraction, medium, body)…
 
 var grid: TileGrid
 var surfaces: SurfaceSet
@@ -247,9 +240,7 @@ func _deposit_bin(i: int, bin: int, watts: float, body: int) -> void:
 	if watts <= 0.0:
 		return
 	if _rec != null:
-		_rec.dep_tile.append(i)
-		_rec.dep_frac.append(watts)
-		_rec.dep_body.append(body)
+		_rec.deps.append_array([i, watts, body])
 	else:
 		apply_bin(i, bin, watts, body)
 
@@ -425,8 +416,7 @@ func trace_primary(origin: Vector2, dir: Vector2, bin: int) -> PathRec:
 				rec.sig.append(surfaces.piece[s] * 2 + (0 if from_front else 1))
 				match surfaces.coating[s]:
 					SurfaceSet.Coating.PROBE:
-						rec.probe_owner.append(owner)
-						rec.probe_frac.append(p[bin])
+						rec.probes.append_array([owner, p[bin]])
 					SurfaceSet.Coating.MIRROR:
 						var keep := p[bin] * surfaces.reflectance[s][bin]
 						_deposit_bin(_tile_at(hit), bin, p[bin] - keep, owner)
@@ -468,11 +458,7 @@ func _primary_interface(rec: PathRec, hit: Vector2, d: Vector2, nrm: Vector2, m1
 	var r_dir := d + nrm * (2.0 * cos_i)
 	if fr >= 1.0:
 		return r_dir
-	rec.refl_pos.append(hit)
-	rec.refl_dir.append(r_dir)
-	rec.refl_frac.append(p[bin] * fr)
-	rec.refl_medium.append(m1)
-	rec.refl_body.append(refl_body)
+	rec.refls.append_array([hit.x, hit.y, r_dir.x, r_dir.y, p[bin] * fr, m1, refl_body])
 	p[bin] *= 1.0 - fr
 	return _refract(d, nrm, cos_i, _index[m1][bin] / _index[m2][bin])
 

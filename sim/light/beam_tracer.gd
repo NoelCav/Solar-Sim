@@ -26,9 +26,9 @@ var map: SunMap
 var grid: TileGrid
 var irradiance := PackedFloat32Array()   ## Direct normal irradiance per bin, W/m²
 
-# Render output: references to traced paths; BeamGeometry turns them into triangles.
-var strips: Array = []    ## [ray a, ray b, watts, bin, last leg]
-var slivers: Array = []   ## [ray, watts, width m, bin, first leg]
+## Render output: flat beam records (layout in BeamGeometry); triangles are built by the
+## renderer, only for the bins a view shows.
+var render := PackedFloat32Array()
 
 var _intervals: Array = []   ## [ua, ra, ub, rb, Span, spread] in u order
 var _last_spread: Array = []
@@ -41,8 +41,7 @@ func begin(p_tracer: Tracer, p_map: SunMap, p_grid: TileGrid, p_irradiance: Pack
 	map = p_map
 	grid = p_grid
 	irradiance = p_irradiance
-	strips.clear()
-	slivers.clear()
+	render.clear()
 
 
 ## Traces one run ([first lane, last lane, min depth, key]) in one bin.
@@ -67,6 +66,7 @@ func trace_run(run: Array, bin: int) -> void:
 	for iv in _intervals:
 		_settle(iv, irr, bin)
 	_flush_reflections(bin)
+	_intervals.clear()   # Release the traced paths now rather than at the next run
 
 
 func _trace_at(u: float, s0: float, bin: int) -> Tracer.PathRec:
@@ -184,17 +184,20 @@ func _settle(iv: Array, irr: float, bin: int) -> void:
 
 ## Applies a path's recorded deposits, probe crossings and reflections for `watts` of input.
 func _apply_path(r: Tracer.PathRec, watts: float, bin: int, u: float) -> void:
-	for k in r.dep_tile.size():
-		tracer.apply_bin(r.dep_tile[k], bin, watts * r.dep_frac[k], r.dep_body[k])
-	for k in r.probe_owner.size():
-		tracer.add_probe(r.probe_owner[k], bin, watts * r.probe_frac[k])
-	for k in r.refl_pos.size():
+	var deps := r.deps
+	for k in range(0, deps.size(), 3):
+		tracer.apply_bin(int(deps[k]), bin, watts * deps[k + 1], int(deps[k + 2]))
+	var probes := r.probes
+	for k in range(0, probes.size(), 2):
+		tracer.add_probe(int(probes[k]), bin, watts * probes[k + 1])
+	var refls := r.refls
+	for k in range(0, refls.size(), 7):
 		var acc: Array = _refl.get(k, [0.0, Vector2.ZERO, Vector2.ZERO, 0, -1, u])
-		acc[0] += watts * r.refl_frac[k]
-		acc[1] = r.refl_pos[k]
-		acc[2] = r.refl_dir[k]
-		acc[3] = r.refl_medium[k]
-		acc[4] = r.refl_body[k]
+		acc[0] += watts * refls[k + 4]
+		acc[1] = Vector2(refls[k], refls[k + 1])
+		acc[2] = Vector2(refls[k + 2], refls[k + 3])
+		acc[3] = int(refls[k + 5])
+		acc[4] = int(refls[k + 6])
 		_refl[k] = acc
 		if u - acc[5] >= REFL_POOL_M and acc[0] >= SimConst.MIN_CHILD_W:
 			_emit_reflection(acc, bin)
@@ -232,13 +235,27 @@ func _emit_reflection(acc: Array, bin: int) -> void:
 
 
 # --- Render records ---------------------------------------------------------------------
-# Geometry is built by the renderer (BeamGeometry), only for the bins a view shows.
+# Written into one flat buffer (see BeamGeometry for the layout) as each interval settles,
+# so traced paths are released right after their run and publishing is one array copy.
 
 ## A coherent beam between two rays, drawn up to (not including) leg `last` (-1 = all).
 func _render_strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, bin: int, last := -1) -> void:
-	strips.append([ra, rb, watts, bin, last])
+	var end := ra.pts.size() - 1 if last < 0 else last
+	if end < 2:
+		return
+	render.append_array([BeamGeometry.STRIP, bin, watts, end])   # points 1..end
+	for k in range(1, end + 1):
+		var a := ra.pts[k]
+		var b := rb.pts[k]
+		render.append_array([a.x, a.y, b.x, b.y, ra.frac[k], rb.frac[k]])
 
 
 ## A lone ray drawn as a beam of fixed width from leg `first` on (incoherent slivers).
 func _render_ray(r: Tracer.PathRec, watts: float, width: float, bin: int, first := 1) -> void:
-	slivers.append([r, watts, width, bin, first])
+	var n := r.pts.size() - first
+	if n < 2:
+		return
+	render.append_array([BeamGeometry.SLIVER, bin, watts, n, width])
+	for k in range(first, r.pts.size()):
+		var a := r.pts[k]
+		render.append_array([a.x, a.y, r.frac[k]])
