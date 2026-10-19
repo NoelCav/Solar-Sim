@@ -12,7 +12,6 @@ const REFERENCE_DNI := 1000.0       ## Irradiance that tones to SUN_LEVEL
 const SUN_LEVEL := 0.12             ## Brightness of plain sunlight
 const LOG_GAIN := 3.5               ## How fast brightness grows with concentration
 const SHEET_LEVEL := 0.07           ## Brightness of the direct-light sheet
-const SHEET_BREAK_M := 0.3          ## Neighbouring lanes ending further apart than this: shadow edge
 const VERTEX_SCALE := 4.0           ## Vertex colors are stored /4 and scaled back by self_modulate
 const RAY_WIDTH_PX := 1.5
 
@@ -109,7 +108,7 @@ func _rebuild() -> void:
 func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
 	var from := _light.sheet_from
 	var to := _light.sheet_to
-	if from.size() < 2:
+	if from.is_empty():
 		return
 	# Tint from the current spectrum through the view's colors (reddens at sunset).
 	var rgb := Vector3.ZERO
@@ -124,14 +123,14 @@ func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) 
 			rgb += _rgb[b] * (world.sun_spectrum[b] / total) / Spectrum.AM15_SHARE[b] * share_sum
 	var level := SHEET_LEVEL * minf(total / REFERENCE_DNI, 1.0) / VERTEX_SCALE
 	var c := Color(rgb.x * level, rgb.y * level, rgb.z * level, 1.0)
-	for k in from.size() - 1:
-		if to[k].distance_to(to[k + 1]) > SHEET_BREAK_M:
-			continue
-		var a0 := from[k] * px
-		var a1 := from[k + 1] * px
-		var b0 := to[k] * px
-		var b1 := to[k + 1] * px
-		verts.append_array([a0, b0, b1, a0, b1, a1])
+	# One strip per drawn lane, exactly as wide as the lanes it stands for, so neighbours
+	# meet edge to edge whatever their lengths (shadow edges stay crisp, no slits).
+	var half := SimConst.LANE_WIDTH_M * LightPass.SHEET_STRIDE * 0.5 * px
+	for k in from.size():
+		var a := from[k] * px
+		var b := to[k] * px
+		var side := (b - a).normalized().orthogonal() * half
+		verts.append_array([a - side, b - side, b + side, a - side, b + side, a + side])
 		for j in 6:
 			cols.append(c)
 

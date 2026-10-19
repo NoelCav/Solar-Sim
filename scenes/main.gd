@@ -18,7 +18,7 @@ var view := ViewMode.NORMAL
 
 var _accumulator := 0.0
 var _light: LightSystem
-var _previewed := Vector2i(-1, -1)
+var _previewed := Vector3(-1, -1, -1)   ## Structure, objects, time of the last paused preview
 
 @onready var _sky: SkyRenderer = $Sky
 @onready var _tiles: TileRenderer = $Tiles
@@ -71,7 +71,7 @@ func _process(delta: float) -> void:
 		world.flush_commands()
 		_accumulator = 0.0
 		# Show edits made while paused without advancing the sim.
-		var key := Vector2i(world.grid.structure_version, world.objects_version)
+		var key := Vector3(world.grid.structure_version, world.objects_version, world.time_s)
 		if key != _previewed and _light.is_stale(world):
 			_light.preview(world)
 			_previewed = key
@@ -91,7 +91,7 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"sim_pause"):
 		paused = not paused
-		_previewed = Vector2i(-1, -1)
+		_previewed = Vector3(-1, -1, -1)
 	elif event.is_action_pressed(&"sim_speed"):
 		speed = SPEEDS[(SPEEDS.find(speed) + 1) % SPEEDS.size()]
 	elif event.is_action_pressed(&"overlay_cycle"):

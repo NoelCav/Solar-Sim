@@ -17,7 +17,10 @@ extends RefCounted
 const BASE_SPACING := 0.1      ## Initial sample spacing across a run, m (refinement finds edges)
 const MIN_SPACING := 0.01      ## Narrowest interval worth refining, m (tiles are 0.25 m)
 const MIN_WIDTH_M := 0.001     ## Rendering: beam width floor where rays cross at a focus
+const LANDING_TOL_M := 0.35   ## Same-path rays landing this close count as one beam (~1 tile)
 const REFL_POOL_M := 0.5       ## Pooled reflections: one secondary ray per this much wavefront
+
+enum Span { SPLIT, EXACT, NEAR }
 
 var tracer: Tracer
 var map: SunMap
@@ -73,11 +76,12 @@ func _trace_at(u: float, s0: float, bin: int) -> Tracer.PathRec:
 
 
 func _refine(ua: float, ra: Tracer.PathRec, ub: float, rb: Tracer.PathRec, s0: float, bin: int) -> void:
-	if _coherent(ra, rb):
-		_intervals.append([ua, ra, ub, rb, true])
+	var kind := _classify(ra, rb)
+	if kind != Span.SPLIT:
+		_intervals.append([ua, ra, ub, rb, kind])
 		return
 	if ub - ua <= MIN_SPACING:
-		_intervals.append([ua, ra, ub, rb, false])
+		_intervals.append([ua, ra, ub, rb, Span.SPLIT])
 		return
 	var um := (ua + ub) * 0.5
 	var rm := _trace_at(um, s0, bin)
@@ -85,14 +89,21 @@ func _refine(ua: float, ra: Tracer.PathRec, ub: float, rb: Tracer.PathRec, s0: f
 	_refine(um, rm, ub, rb, s0, bin)
 
 
-func _coherent(ra: Tracer.PathRec, rb: Tracer.PathRec) -> bool:
+## How an interval between two neighbouring rays is settled:
+## EXACT - same optical path, landing on one straight stretch of surface (or both escape);
+## NEAR  - same optical path, landing within LANDING_TOL_M of each other on uneven ground:
+##         drawn as one beam, energy split between the two landing tiles;
+## SPLIT - different paths: refine, or settle per ray once the interval is MIN_SPACING wide.
+func _classify(ra: Tracer.PathRec, rb: Tracer.PathRec) -> Span:
 	if ra.term != rb.term or ra.term == Tracer.Term.CULLED:
-		return false
+		return Span.SPLIT
 	if ra.pts.size() != rb.pts.size() or ra.sig != rb.sig:
-		return false
-	if ra.term == Tracer.Term.OPAQUE:
-		return not _spread(ra, rb).is_empty()
-	return true
+		return Span.SPLIT
+	if ra.term != Tracer.Term.OPAQUE or not _spread(ra, rb).is_empty():
+		return Span.EXACT
+	var end_a := ra.pts[ra.pts.size() - 1]
+	var end_b := rb.pts[rb.pts.size() - 1]
+	return Span.NEAR if end_a.distance_to(end_b) <= LANDING_TOL_M else Span.SPLIT
 
 
 ## Tiles (and weights) a coherent beam lands on between the two rays' end points:
@@ -143,22 +154,33 @@ func _settle(iv: Array, irr: float, bin: int) -> void:
 	var half := irr * (ub - ua) * SimConst.DEPTH_M * 0.5   # W each ray carries for this interval
 	_apply_path(ra, half, bin, ua)
 	_apply_path(rb, half, bin, ub)
-	if iv[4]:
-		var arriving := half * (ra.remain + rb.remain)
-		if ra.term == Tracer.Term.ESCAPE:
-			tracer.escaped_w += arriving
-		else:
-			var sp := _spread(ra, rb)
-			var tiles: PackedInt32Array = sp[0]
-			var weights: PackedFloat32Array = sp[1]
-			for k in tiles.size():
-				tracer.absorb_opaque_bin(tiles[k], bin, arriving * weights[k])
-		_render_strip(ra, rb, half * 2.0, bin)
-	else:
-		_terminal(ra, half, bin)
-		_terminal(rb, half, bin)
-		_render_ray(ra, half, (ub - ua) * 0.5, bin)
-		_render_ray(rb, half, (ub - ua) * 0.5, bin)
+	match iv[4]:
+		Span.EXACT:
+			var arriving := half * (ra.remain + rb.remain)
+			if ra.term == Tracer.Term.ESCAPE:
+				tracer.escaped_w += arriving
+			else:
+				var sp := _spread(ra, rb)
+				var tiles: PackedInt32Array = sp[0]
+				var weights: PackedFloat32Array = sp[1]
+				for k in tiles.size():
+					tracer.absorb_opaque_bin(tiles[k], bin, arriving * weights[k])
+			_render_strip(ra, rb, half * 2.0, bin)
+		Span.NEAR:
+			_terminal(ra, half, bin)
+			_terminal(rb, half, bin)
+			_render_strip(ra, rb, half * 2.0, bin)
+		_:
+			_terminal(ra, half, bin)
+			_terminal(rb, half, bin)
+			if ra.sig == rb.sig and ra.pts.size() == rb.pts.size():
+				# Same path, landing split by an occluding edge: one beam up to the last leg.
+				_render_strip(ra, rb, half * 2.0, bin, ra.pts.size() - 2)
+				_render_ray(ra, half, (ub - ua) * 0.5, bin, ra.pts.size() - 2)
+				_render_ray(rb, half, (ub - ua) * 0.5, bin, rb.pts.size() - 2)
+			else:
+				_render_ray(ra, half, (ub - ua) * 0.5, bin)
+				_render_ray(rb, half, (ub - ua) * 0.5, bin)
 
 
 ## Applies a path's recorded deposits, probe crossings and reflections for `watts` of input.
@@ -215,8 +237,9 @@ func _emit_reflection(acc: Array, bin: int) -> void:
 ## A coherent beam between two rays, leg by leg after the first interaction. Irradiance
 ## goes as 1/width, so each leg is cut into slices (packed toward the point where the rays
 ## cross, at a focus) and brightness is interpolated per slice rather than across the leg.
-func _render_strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, bin: int) -> void:
-	for k in range(1, ra.pts.size() - 1):
+## Draws legs after the first interaction, stopping before leg `last` (-1 = all legs).
+func _render_strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, bin: int, last := -1) -> void:
+	for k in range(1, ra.pts.size() - 1 if last < 0 else last):
 		var a0 := ra.pts[k]
 		var a1 := ra.pts[k + 1]
 		var b0 := rb.pts[k]
@@ -262,8 +285,8 @@ func _render_strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, bin: in
 
 
 ## A lone ray drawn as a beam of fixed width (incoherent slivers).
-func _render_ray(r: Tracer.PathRec, watts: float, width: float, bin: int) -> void:
-	for k in range(1, r.pts.size() - 1):
+func _render_ray(r: Tracer.PathRec, watts: float, width: float, bin: int, first := 1) -> void:
+	for k in range(first, r.pts.size() - 1):
 		var a := r.pts[k]
 		var b := r.pts[k + 1]
 		var side := (b - a).normalized().orthogonal() * (width * 0.5)

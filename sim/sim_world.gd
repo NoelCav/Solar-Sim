@@ -48,7 +48,7 @@ func _init(p_materials: MaterialDB, width: int, height: int, p_seed: int = 1) ->
 	grid = TileGrid.new(width, height, site_mean_ambient_k)
 	time_s = SimConst.START_TIME_OF_DAY * SimConst.DAY_LENGTH_S
 	systems = [EnvironmentSystem.new(), LightSystem.new(), ThermalSystem.new()]
-	_tick_environment_only()
+	refresh_environment()
 
 
 ## 0..1 fraction of the day; 0 = midnight, 0.5 = noon.
@@ -149,7 +149,8 @@ func _mark_footprint(obj: SimObject, value: int, only_if: int) -> void:
 			ids[i] = value
 
 
-func _tick_environment_only() -> void:
+## Recomputes sun and ambient for the current time without advancing it (setup, time skips).
+func refresh_environment() -> void:
 	var env := get_system(&"environment")
 	if env != null:
 		env.tick(self, 0.0)
