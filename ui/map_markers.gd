@@ -41,14 +41,14 @@ func _draw() -> void:
 			text = "≈%.0f× sun" % suns
 	var g := world.grid
 	var c := g.coords(overlay.peak_tile)
-	var center := (Vector2(c) + Vector2(0.5, 0.5)) * SimConst.TILE_PX
-	var inv := 1.0 / get_viewport().get_canvas_transform().get_scale().x
-	var r := 10.0 * inv
-	draw_arc(center, r, 0.0, TAU, 24, Color(1, 1, 1, 0.9), 2.0 * inv, true)
-	draw_line(center + Vector2(r, -r) * 0.7, center + Vector2(r * 2.2, -r * 2.2), Color(1, 1, 1, 0.9), 1.5 * inv)
+	# Screen units throughout (see ObjectRenderer), so the marker stays crisp at any zoom.
+	var zoom := get_viewport().get_canvas_transform().get_scale().x
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
+	var center := (Vector2(c) + Vector2(0.5, 0.5)) * SimConst.TILE_PX * zoom
+	var r := 10.0
+	draw_arc(center, r, 0.0, TAU, 32, Color(1, 1, 1, 0.9), 2.0, true)
+	draw_line(center + Vector2(r, -r) * 0.7, center + Vector2(r * 2.2, -r * 2.2), Color(1, 1, 1, 0.9), 1.5, true)
 	var pos := center + Vector2(r * 2.4, -r * 2.2)
-	draw_set_transform(pos, 0.0, Vector2(inv, inv))
 	var size := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14)
-	draw_rect(Rect2(Vector2(-4, -15), size + Vector2(8, 6)), Color(0.05, 0.07, 0.1, 0.8))
-	draw_string(_font, Vector2.ZERO, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.9, 0.6))
-	draw_set_transform(Vector2.ZERO)
+	draw_rect(Rect2(pos + Vector2(-4, -15), size + Vector2(8, 6)), Color(0.05, 0.07, 0.1, 0.8))
+	draw_string(_font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.9, 0.6))

@@ -136,10 +136,15 @@ func _build_status() -> void:
 	var label := _small_label()
 	label.text = "Jump clock"
 	jumps.add_child(label)
-	for h: float in [-6.0, -1.0, 1.0, 6.0]:
-		var tip := "Move the clock %+d h without simulating it (%s%s)" % [int(h), "Shift+" if absf(h) > 1.0 else "",
-			"." if h > 0.0 else ","]
-		jumps.add_child(_button("%+d h" % int(h), tip, runner.skip_hours.bind(h)))
+	for h: float in [-6.0, -1.0, -0.5, 0.5, 1.0, 6.0]:
+		var text := "%+d h" % int(h) if absf(h) >= 1.0 else "%+d m" % int(h * 60.0)
+		var keys := ""
+		if absf(h) == 1.0:
+			keys = " (%s)" % ("." if h > 0.0 else ",")
+		elif absf(h) == 6.0:
+			keys = " (Shift+%s)" % ("." if h > 0.0 else ",")
+		jumps.add_child(_button(text, "Move the clock %s without simulating the time between%s"
+			% [text, keys], runner.skip_hours.bind(h)))
 	_perf = Label.new()
 	_perf.add_theme_font_size_override(&"font_size", 11)
 	_perf.add_theme_color_override(&"font_color", DIM)

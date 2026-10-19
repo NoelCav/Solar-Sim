@@ -41,6 +41,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D15 | **Designs are data**: an object instance references a design (def parameters), saved by value; built-in `.tres` defs are just stock designs. Every buyable thing carries `cost` and `unlock` fields in its def | Lens bench, shop, saves and research all read the same data (D11) |
 | D16 | **Placed objects can hold components**: a stand holds a lens, a cell module holds its layers. Components are designs (D15) with their own state | Swap a lens without moving the stand; one inspector and save path for both |
 | D17 | **Systems exchange energy only through the heat field and object ports** (power, pipe). No system reads another's internals | Keeps thermal power, cells, fluids and light composable as scope grows |
+| D18 | **Lit faces carry a thin surface skin** split into strips (~2.5 cm) that take the light deposits at the light engine's resolution; the skin couples to its 25 cm tile by conduction. Charring, ignition, melting and cell damage read the skin | Focal spots heat a spot, not a whole tile: a magnifying glass singes wood in seconds while the block stays cool |
 
 ## 4. World & scale
 
@@ -148,6 +149,8 @@ Shares are approximate and live in data.
 - **Direct irradiance** (DNI) ~900–1000 W/m² at noon, reduced by **air mass** (longer path at low sun). Air mass also shifts the spectrum red (blue bins attenuate faster) → real red sunsets.
 - **Diffuse irradiance** is a separate, non-focusable term applied to sky-exposed surfaces (sky-visibility per tile). Clouds move power from direct to diffuse. **Lenses cannot focus diffuse light.**
 - Direct light is emitted as a bundle of parallel rays across the whole site width, perpendicular to the sun direction. Default spacing ~2 cm → each ray carries `DNI × spacing × depth` watts split across bins.
+
+The atmosphere is per bin: direct sunlight is the AM0 spectrum attenuated by Rayleigh scattering (λ^-4), haze (Ångström λ^-1.3) and water/ozone absorption, times the Kasten–Young air mass (`Spectrum.atmospheric`). Low sun is dimmer and redder without a fudge factor (≈1010 W/m² overhead, ≈770 at 30°, ≈110 at 5°, mostly red/IR); the sky color is the same light weighted by scattering.
 
 ### 6.3 Geometry (D4)
 

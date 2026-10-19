@@ -32,7 +32,6 @@ static func c_to_k(celsius: float) -> float:
 
 # --- Sun (§6.2) ---
 const SOLAR_CONSTANT := 1361.0      ## W/m² above the atmosphere (AM0)
-const REDDENING := 0.08             ## Rayleigh-style per-bin attenuation strength vs air mass
 const DIFFUSE_W_M2 := 110.0         ## Diffuse sky irradiance with the sun high (non-focusable)
 
 # --- Light (§6.4) ---

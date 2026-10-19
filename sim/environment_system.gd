@@ -26,8 +26,8 @@ func tick(world: SimWorld, _dt: float) -> void:
 	_update_irradiance(world)
 
 
-## Direct normal irradiance from air mass (Kasten–Young air mass, Meinel attenuation),
-## reddened per bin so low sun is red (§6.2).
+## Direct normal irradiance per bin from air mass (Kasten–Young air mass, per-bin optical
+## depths in Spectrum.atmospheric), so low sun is dimmer and redder (§6.2).
 func _update_irradiance(world: SimWorld) -> void:
 	if not world.sun_is_up:
 		world.air_mass = INF
@@ -38,6 +38,6 @@ func _update_irradiance(world: SimWorld) -> void:
 	var h := world.sun_elevation
 	var am := 1.0 / (sin(h) + 0.50572 * pow(rad_to_deg(h) + 6.07995, -1.6364))
 	world.air_mass = am
-	world.sun_dni = SimConst.SOLAR_CONSTANT * pow(0.7, pow(am, 0.678))
-	world.sun_spectrum = Spectrum.reddened(world.sun_dni, am)
+	world.sun_spectrum = Spectrum.atmospheric(am)
+	world.sun_dni = Spectrum.total(world.sun_spectrum)
 	world.diffuse_irradiance = SimConst.DIFFUSE_W_M2 * sqrt(sin(h))

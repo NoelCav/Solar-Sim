@@ -300,8 +300,10 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if world == null:
 		return
-	var px := SimConst.TILE_PX / SimConst.TILE_M
-	var w := 1.0 / _zoom()   # One screen pixel in canvas units
+	# Screen units (scaled back by 1/zoom), so lines and text stay crisp at any zoom.
+	var zoom := _zoom()
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
+	var px := SimConst.TILE_PX / SimConst.TILE_M * zoom
 	var obj := selected_object()
 	if obj != null and mode != Mode.PAINT:
 		# Tilt ring: a faint circle, a line along the object's axis and a handle to drag.
@@ -310,16 +312,14 @@ func _draw() -> void:
 		var h := handle_m(obj) * px
 		var hot := _rotating or _over_handle()
 		var ring_col := Color(1.0, 0.85, 0.45, 0.35)
-		draw_arc(c, r, 0.0, TAU, 64, ring_col, 1.5 * w, true)
-		draw_line(c, h, Color(1.0, 0.85, 0.45, 0.5), 1.0 * w, true)
-		draw_circle(h, HANDLE_PX * w * (1.25 if hot else 1.0), Color(1.0, 0.85, 0.45, 0.95))
-		draw_circle(h, HANDLE_PX * w * 0.45, Color(0.1, 0.1, 0.12))
+		draw_arc(c, r, 0.0, TAU, 96, ring_col, 1.5, true)
+		draw_line(c, h, Color(1.0, 0.85, 0.45, 0.5), 1.0, true)
+		draw_circle(h, HANDLE_PX * (1.25 if hot else 1.0), Color(1.0, 0.85, 0.45, 0.95), true, -1.0, true)
+		draw_circle(h, HANDLE_PX * 0.45, Color(0.1, 0.1, 0.12), true, -1.0, true)
 		var label := "%.1f°" % wrapf(rad_to_deg(obj.angle), -180.0, 180.0)
-		draw_set_transform(h, 0.0, Vector2(w, w))   # Label at a fixed screen size
-		draw_string_outline(_font, Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4,
+		draw_string_outline(_font, h + Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 4,
 			Color(0, 0, 0, 0.7))
-		draw_string(_font, Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.9, 0.6))
-		draw_set_transform(Vector2.ZERO)
+		draw_string(_font, h + Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.9, 0.6))
 	var def := selected_def()
 	if def == null or _drag_id >= 0 or hovered_id >= 0:
 		return
@@ -329,4 +329,4 @@ func _draw() -> void:
 		var pts := PackedVector2Array()
 		for p: Vector2 in piece[0]:
 			pts.append(p * px)
-		draw_polyline(pts, Color(1, 1, 1, 0.5), 1.5 * w, true)
+		draw_polyline(pts, Color(1, 1, 1, 0.5), 1.5, true)

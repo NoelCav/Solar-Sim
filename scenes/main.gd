@@ -53,6 +53,10 @@ func _ready() -> void:
 	_light.retrace(world)
 
 	_sky.setup(world)
+	var backdrop := BackdropRenderer.new()
+	add_child(backdrop)
+	move_child(backdrop, _sky.get_index() + 1)
+	backdrop.setup(world)
 	_tiles.setup(world)
 	_objects.setup(world)
 	_beams.setup(world)

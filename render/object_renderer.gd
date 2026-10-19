@@ -26,7 +26,11 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if world == null:
 		return
-	var px := SimConst.TILE_PX / SimConst.TILE_M
+	# Draw in screen units (scaled back by 1/zoom), so outlines, their anti-aliased edges and
+	# text stay one screen pixel sharp at any zoom instead of being magnified.
+	var zoom := get_viewport().get_canvas_transform().get_scale().x
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
+	var px := SimConst.TILE_PX / SimConst.TILE_M * zoom
 	var heat := view == ViewMode.HEAT and overlay != null
 	for obj: SimObject in world.objects.values():
 		var def := obj.def
@@ -48,8 +52,9 @@ func _draw() -> void:
 			ObjectDef.Kind.MIRROR:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
-				var back := Vector2.from_angle(obj.angle + PI * 0.5) * 2.0
-				draw_line(a + back, b + back, _heat_color(obj) if heat else Color(0.15, 0.15, 0.18), 3.0)
+				var back := Vector2.from_angle(obj.angle + PI * 0.5) * clampf(0.004 * px, 1.5, 12.0)
+				draw_line(a + back, b + back, _heat_color(obj) if heat else Color(0.15, 0.15, 0.18),
+					clampf(0.006 * px, 2.0, 16.0), true)
 				draw_line(a, b, def.color if not hl else Color.WHITE, 2.0, true)
 			ObjectDef.Kind.PROBE:
 				var a: Vector2 = pieces[0][0][0] * px
@@ -57,7 +62,9 @@ func _draw() -> void:
 				draw_dashed_line(a, b, def.color, 2.0 if hl else 1.5, 4.0)
 				var label := "%.0f W/m²  (%.1f×)" % [obj.probe_irradiance(),
 					obj.probe_irradiance() / maxf(world.sun_dni, 1.0)]
-				draw_string(_font, b + Vector2(4, 4), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, def.color)
+				draw_string_outline(_font, b + Vector2(6, 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 3,
+					Color(0, 0, 0, 0.6))
+				draw_string(_font, b + Vector2(6, 5), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, def.color)
 
 
 func _heat_color(obj: SimObject) -> Color:
