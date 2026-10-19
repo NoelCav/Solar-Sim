@@ -45,6 +45,8 @@ var cache_misses := 0
 
 var _cache: Dictionary = {}  ## Vector4i(definition, angle, bin, u offset) → local PathRec or null
 var _run_obj: Array = []     ## objects[] entry of the run being traced, or []
+var _bbox := Rect2()         ## Area touched by the task being traced
+var _bbox_empty := true
 var _run_id := -1
 var _intervals: Array = []   ## [ua, ra, ub, rb, Span, spread] in u order
 var _last_spread: Array = []
@@ -64,11 +66,21 @@ func begin(p_tracer: Tracer, p_map: SunMap, p_grid: TileGrid, p_irradiance: Pack
 	cache_misses = 0
 
 
-## Traces one run ([first lane, last lane, min depth, key]) in one bin.
-func trace_run(run: Array, bin: int) -> void:
+## Traces one run ([first lane, last lane, min depth, key]) in one bin and returns the log
+## of what it contributed (see Tracer.TaskLog), or null if the bin carries no light.
+func trace_run(run: Array, bin: int) -> Tracer.TaskLog:
 	var irr := irradiance[bin]
 	if irr <= 0.0:
-		return
+		return null
+	var log := Tracer.TaskLog.new()
+	log.key = Vector4i(run[0], run[1], run[3], bin)
+	log.s_min = run[2]
+	tracer.log = log
+	var paths0 := tracer.ray_count
+	var seg0 := tracer.seg_from.size()
+	var render0 := render.size()
+	_bbox = Rect2()
+	_bbox_empty = true
 	var u_lo := map.u0 + int(run[0]) * map.lane_w
 	var u_hi := map.u0 + (int(run[1]) + 1) * map.lane_w
 	_run_id = int(run[3])
@@ -100,6 +112,31 @@ func trace_run(run: Array, bin: int) -> void:
 		_settle(iv, irr, bin)
 	_flush_reflections(bin)
 	_intervals.clear()   # Release the traced paths now rather than at the next run
+	tracer.log = null
+	log.compact()
+	log.paths = tracer.ray_count - paths0
+	log.render = render.slice(render0)
+	log.seg_from = tracer.seg_from.slice(seg0)
+	log.seg_to = tracer.seg_to.slice(seg0)
+	log.seg_power = tracer.seg_power.slice(seg0 * Spectrum.BIN_COUNT)
+	# Secondary rays travel far (reflections leave toward the sky), so they are checked as
+	# segments (log.seg_from/seg_to) rather than widening the beam's bounds.
+	log.bbox = _bbox
+	return log
+
+
+## Adds a logged task's contributions to this pass without tracing it.
+func replay(log: Tracer.TaskLog) -> void:
+	tracer.replay(log)
+	render.append_array(log.render)
+
+
+func _grow(p: Vector2) -> void:
+	if _bbox_empty:
+		_bbox = Rect2(p, Vector2.ZERO)
+		_bbox_empty = false
+	else:
+		_bbox = _bbox.expand(p)
 
 
 func _trace_at(u: float, s0: float, bin: int) -> Tracer.PathRec:
@@ -240,7 +277,7 @@ func _spread(ra: Tracer.PathRec, rb: Tracer.PathRec) -> Array:
 	var length := hi - lo
 	var tiles := PackedInt32Array()
 	var weights := PackedFloat32Array()
-	var mat := grid.material
+	var mat := tracer.material
 	var opaque := tracer.opaque
 	for c in range(c0, c1 + 1):
 		var t := line * w + c if horizontal else c * w + line
@@ -260,13 +297,17 @@ func _settle(iv: Array, irr: float, bin: int) -> void:
 	var ub: float = iv[2]
 	var rb: Tracer.PathRec = iv[3]
 	var half := irr * (ub - ua) * SimConst.DEPTH_M * 0.5   # W each ray carries for this interval
+	for p in ra.pts:
+		_grow(p)
+	for p in rb.pts:
+		_grow(p)
 	_apply_path(ra, half, bin, ua)
 	_apply_path(rb, half, bin, ub)
 	match iv[4]:
 		Span.EXACT:
 			var arriving := half * (ra.remain + rb.remain)
 			if ra.term == Tracer.Term.ESCAPE:
-				tracer.escaped_w += arriving
+				tracer.add_escaped(arriving)
 			else:
 				var sp: Array = iv[5]
 				var tiles: PackedInt32Array = sp[0]
@@ -318,11 +359,11 @@ func _terminal(r: Tracer.PathRec, watts: float, bin: int) -> void:
 	var arriving := watts * r.remain
 	match r.term:
 		Tracer.Term.ESCAPE:
-			tracer.escaped_w += arriving
+			tracer.add_escaped(arriving)
 		Tracer.Term.OPAQUE:
 			tracer.absorb_opaque_bin(r.term_tile, bin, arriving)
 		_:
-			tracer.culled_w += arriving
+			tracer.add_culled(arriving)
 
 
 func _flush_reflections(bin: int) -> void:
@@ -331,7 +372,7 @@ func _flush_reflections(bin: int) -> void:
 		if acc[0] >= SimConst.MIN_RAY_W:
 			_emit_reflection(acc, bin)
 		else:
-			tracer.culled_w += acc[0]
+			tracer.add_culled(acc[0])
 	_refl.clear()
 
 

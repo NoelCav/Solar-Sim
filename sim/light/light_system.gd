@@ -7,10 +7,10 @@ extends SimSystem
 ## changed. Its direct-light stage runs at once; its beam stage traces a fixed number of
 ## ray paths per tick (deterministic, D7). Results are published when the pass completes;
 ## until then the previous results stay in use, scaled by the current DNI so intensity
-## stays smooth. Geometry changes or a sun jump restart a pass in progress.
+## stays smooth. A pass works on a snapshot of the geometry and always runs to completion,
+## so continuous edits (dragging a lens) still publish every pass, lagging by at most one
+## pass; only a sun jump (creative time skip) restarts a pass in progress.
 ## Diffuse sky light is not traced: it lands on each column's first non-gas tile (§6.2).
-
-var surfaces := SurfaceSet.new()
 
 # --- Published results (read by renderers, inspector) ---
 var trace_version := 0          ## Bumped on every publish
@@ -27,7 +27,9 @@ var ray_power := PackedFloat32Array()
 var stats := {}                 ## emitted/absorbed/escaped/scattered/culled W, rays
 var shown_dni := 0.0            ## DNI the published (displayed) results were traced at
 
-var _pass: LightPass
+var _pass: LightPass             ## The pass in progress (or the last one, when idle)
+var _shown: LightPass            ## The last completed sim pass (reused by the next one)
+var _passes: Array[LightPass] = []
 var _preview: LightPass
 var _traced_structure := -1
 var _traced_objects := -1
@@ -38,11 +40,6 @@ var _lit_power := PackedFloat32Array()
 var _diffuse_absorptivity := PackedFloat32Array()   ## AM1.5-weighted, per material
 
 var _pass_active := false
-var _pass_structure := -1
-var _pass_objects := -1
-var _surfaces_objects := -1
-var _blocks_key := Vector2i(-1, -1)
-var _preview_blocks_key := Vector2i(-1, -1)
 
 
 func system_name() -> StringName:
@@ -52,12 +49,10 @@ func system_name() -> StringName:
 func tick(world: SimWorld, dt: float) -> void:
 	if _pass == null:
 		_setup(world)
-	# Restart a running pass if its inputs are obsolete: geometry changed, or the sun jumped
-	# (creative time skip) far beyond normal drift during a pass.
-	var obsolete := world.grid.structure_version != _pass_structure \
-		or world.objects_version != _pass_objects \
-		or (world.sun_is_up and _pass.dir != Vector2.ZERO \
-			and absf(world.sun_direction.angle_to(_pass.dir)) > deg_to_rad(SimConst.RESTART_ANGLE_DEG))
+	# Restart a running pass only if the sun jumped (creative time skip) far beyond normal
+	# drift during a pass; geometry edits are picked up by the next pass.
+	var obsolete := world.sun_is_up and _pass.dir != Vector2.ZERO \
+		and absf(world.sun_direction.angle_to(_pass.dir)) > deg_to_rad(SimConst.RESTART_ANGLE_DEG)
 	if (_pass_active and obsolete) or (not _pass_active and _needs_retrace(world)):
 		_start_pass(world)
 	if _pass_active and _pass.step(SimConst.RAY_PATHS_PER_TICK):
@@ -80,12 +75,7 @@ func retrace(world: SimWorld) -> void:
 func preview(world: SimWorld) -> void:
 	if _pass == null:
 		_setup(world)
-	_sync_surfaces(world)
-	var key := Vector2i(world.grid.structure_version, world.objects_version)
-	if _preview_blocks_key != key:
-		_preview.tracer.build_blocks()
-		_preview_blocks_key = key
-	_preview.start(world)
+	_preview.start(world, _shown)
 	_preview.step(-1)
 	_publish(world, _preview, false)
 
@@ -106,15 +96,10 @@ func tracer() -> Tracer:
 
 
 func _start_pass(world: SimWorld) -> void:
-	_sync_surfaces(world)
-	var key := Vector2i(world.grid.structure_version, world.objects_version)
-	if _blocks_key != key:
-		_pass.tracer.build_blocks()
-		_blocks_key = key
-	_pass.start(world)
+	# Two passes alternate: the new one reuses what it can from the last completed one.
+	_pass = _passes[1] if _shown == _passes[0] else _passes[0]
+	_pass.start(world, _shown)
 	_pass_active = true
-	_pass_structure = world.grid.structure_version
-	_pass_objects = world.objects_version
 
 
 func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
@@ -134,19 +119,20 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	stats = {
 		"emitted": tr.emitted_w, "absorbed": tr.absorbed_w, "escaped": tr.escaped_w,
 		"scattered": tr.scattered_w, "culled": tr.culled_w, "rays": tr.ray_count,
-		"lanes": p.map.count if p.dir != Vector2.ZERO else 0,
+		"lanes": p.map.count if p.dir != Vector2.ZERO else 0, "replayed": p.replayed,
 	}
 	shown_dni = p.dni
 	trace_version += 1
 	if not sim_state:
 		return
 	_pass_active = false
+	_shown = p
 	_lit_tiles = tr.lit_tiles.duplicate()
 	_lit_power.resize(_lit_tiles.size())
 	for k in _lit_tiles.size():
 		_lit_power[k] = tile_power[_lit_tiles[k]]
-	_traced_structure = _pass_structure
-	_traced_objects = _pass_objects
+	_traced_structure = p.structure_version
+	_traced_objects = p.objects_version
 	_traced_dir = p.dir
 	_traced_dni = p.dni
 	last_trace_ms = p.ms
@@ -167,8 +153,9 @@ func _deposit(world: SimWorld, dt: float) -> void:
 
 
 func _setup(world: SimWorld) -> void:
-	_pass = LightPass.new(world.grid, world.materials, surfaces)
-	_preview = LightPass.new(world.grid, world.materials, surfaces)
+	_passes = [LightPass.new(world.grid, world.materials), LightPass.new(world.grid, world.materials)]
+	_pass = _passes[0]
+	_preview = LightPass.new(world.grid, world.materials)
 	var mats := world.materials
 	_diffuse_absorptivity.resize(mats.count())
 	_diffuse_absorptivity.fill(0.0)
@@ -191,26 +178,3 @@ func _needs_retrace(world: SimWorld) -> bool:
 		return true
 	# The spectrum reddens as DNI falls; re-trace on large intensity changes.
 	return absf(world.sun_dni / _traced_dni - 1.0) > 0.1
-
-
-func _sync_surfaces(world: SimWorld) -> void:
-	if _surfaces_objects == world.objects_version:
-		return
-	surfaces.clear()
-	var mats := world.materials
-	for obj: SimObject in world.objects.values():
-		var def := obj.def
-		var coating := SurfaceSet.Coating.NONE
-		var back := MaterialDB.AIR_ID
-		match def.kind:
-			ObjectDef.Kind.MIRROR:
-				coating = SurfaceSet.Coating.MIRROR
-			ObjectDef.Kind.PROBE:
-				coating = SurfaceSet.Coating.PROBE
-			_:
-				back = mats.id_of(def.material)
-		for piece in obj.world_pieces():
-			surfaces.add_polyline(piece[0], piece[1], MaterialDB.AIR_ID, back, coating, obj.id,
-				def.reflectance)
-	surfaces.build_buckets(world.grid.width, world.grid.height)
-	_surfaces_objects = world.objects_version

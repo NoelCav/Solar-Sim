@@ -44,8 +44,39 @@ class PathRec:
 	var cont_d := Vector2.ZERO
 	var cont_events := 0
 
+## Everything one beam task added to the pass results, so a later pass can replay it
+## instead of re-tracing (LightPass incremental passes), plus the area its rays touched.
+class TaskLog:
+	var key := Vector4i()                  ## (first lane, last lane, run key, bin)
+	var s_min := 0.0                       ## The run's first-hit depth (part of its identity)
+	var deps := PackedFloat64Array()       ## Absorbed: (tile, bin, watts, body)…
+	var probes := PackedFloat64Array()     ## Probe readings: (object, bin, watts)…
+	var escaped := 0.0
+	var scattered := 0.0
+	var culled := 0.0
+	var seg_from := PackedVector2Array()   ## Secondary rays for rendering
+	var seg_to := PackedVector2Array()
+	var seg_power := PackedFloat32Array()
+	var render := PackedFloat32Array()     ## Beam render records
+	var bbox := Rect2()                    ## Everything the task's rays touched
+	var paths := 0
+
+	## Merges deposits into the same tile, bin and object (replay cost ~4× lower).
+	func compact() -> void:
+		var sums := {}
+		for k in range(0, deps.size(), 4):
+			var key := Vector3i(int(deps[k]), int(deps[k + 1]), int(deps[k + 3]))
+			sums[key] = sums.get(key, 0.0) + deps[k + 2]
+		deps = PackedFloat64Array()
+		for key: Vector3i in sums:
+			deps.append_array([key.x, key.y, sums[key], key.z])
+
+
 var grid: TileGrid
 var surfaces: SurfaceSet
+## Tile materials as of the pass start (see LightPass): a pass in progress stays consistent
+## while the player edits the world.
+var material := PackedInt32Array()
 
 # Per-material optical tables, indexed by material id.
 var opaque := PackedByteArray()
@@ -75,6 +106,8 @@ var ray_count := 0         ## Ray paths traced (tree paths + primary paths)
 var _stack: Array = []
 ## While tracing a primary path, deposits and probe crossings are recorded here.
 var _rec: PathRec = null
+## While a beam task runs, everything it adds to the results is also logged here.
+var log: TaskLog = null
 
 ## Per tile, Chebyshev distance (in tiles, capped) to the nearest tile that is not plain
 ## air or holds a surface; the site border counts as occupied. A ray in a tile with
@@ -148,6 +181,49 @@ func begin() -> void:
 
 ## Rebuilds the air distance field and body bounds; call after tiles or surfaces change.
 func build_blocks() -> void:
+	_rebuild_bounds()
+	var n := grid.size()
+	if material.size() != n:
+		material = grid.material.duplicate()
+	_air_dist.resize(n)
+	_distance_window(0, 0, grid.width, grid.height)
+
+
+## Updates acceleration after local edits: the distance field is recomputed only within
+## AIR_DIST_CAP tiles of the changed areas (m) and of the old and new bounds of the changed
+## objects; elsewhere distances can't have changed. Falls back to a full rebuild if needed.
+func update_accel(changed_areas: Array, changed_objects: Array) -> void:
+	if _air_dist.size() != grid.size():
+		build_blocks()
+		return
+	var windows: Array = changed_areas.duplicate()
+	for id in changed_objects:
+		if _body_bounds.has(id):
+			windows.append(_body_bounds[id])
+	_rebuild_bounds()
+	for id in changed_objects:
+		if _body_bounds.has(id):
+			windows.append(_body_bounds[id])
+	var tm := SimConst.TILE_M
+	var cap := AIR_DIST_CAP
+	var tiles := 0
+	var boxes := []
+	for r: Rect2 in windows:
+		var x0 := maxi(0, floori(r.position.x / tm) - cap)
+		var y0 := maxi(0, floori(r.position.y / tm) - cap)
+		var x1 := mini(grid.width, floori(r.end.x / tm) + cap + 1)
+		var y1 := mini(grid.height, floori(r.end.y / tm) + cap + 1)
+		if x1 > x0 and y1 > y0:
+			boxes.append([x0, y0, x1, y1])
+			tiles += (x1 - x0) * (y1 - y0)
+	if tiles * 3 > grid.size():
+		_distance_window(0, 0, grid.width, grid.height)
+		return
+	for box in boxes:
+		_distance_window(box[0], box[1], box[2], box[3])
+
+
+func _rebuild_bounds() -> void:
 	_body_bounds.clear()
 	for s in surfaces.count():
 		var id := surfaces.owner[s]
@@ -155,21 +231,25 @@ func build_blocks() -> void:
 		_body_bounds[id] = r.expand(surfaces.a[s]).expand(surfaces.b[s])
 	for id in _body_bounds:
 		_body_bounds[id] = _body_bounds[id].grow(1e-3)
+
+
+## Chessboard distance transform over tiles [x0, x1) × [y0, y1); tiles outside the window
+## keep their values and act as boundary. Two passes with 8-neighbours.
+func _distance_window(x0: int, y0: int, x1: int, y1: int) -> void:
 	var w := grid.width
 	var h := grid.height
-	var n := w * h
 	var df := _air_dist
-	df.resize(n)
-	var mat := grid.material
+	var mat := material
 	var cs := surfaces.cell_start
-	var has_buckets := cs.size() == n + 1
+	var has_buckets := cs.size() == grid.size() + 1
 	var air_clear := not _has_bulk[MaterialDB.AIR_ID]
-	for i in n:
-		var empty := air_clear and mat[i] == MaterialDB.AIR_ID and not (has_buckets and cs[i + 1] > cs[i])
-		df[i] = AIR_DIST_CAP if empty else 0
-	# Two-pass chamfer transform with 8-neighbours gives the chessboard distance.
-	for y in h:
-		for x in w:
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var i := y * w + x
+			var empty := air_clear and mat[i] == MaterialDB.AIR_ID and not (has_buckets and cs[i + 1] > cs[i])
+			df[i] = AIR_DIST_CAP if empty else 0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
 			var i := y * w + x
 			var v := df[i]
 			if v == 0:
@@ -179,8 +259,8 @@ func build_blocks() -> void:
 			else:
 				v = mini(v, mini(mini(df[i - 1], df[i - w - 1]), mini(df[i - w], df[i - w + 1])) + 1)
 			df[i] = v
-	for y in range(h - 1, -1, -1):
-		for x in range(w - 1, -1, -1):
+	for y in range(y1 - 1, y0 - 1, -1):
+		for x in range(x1 - 1, x0 - 1, -1):
 			var i := y * w + x
 			var v := df[i]
 			if v <= 1:
@@ -210,18 +290,20 @@ func apply_bin(i: int, bin: int, watts: float, body: int = -1) -> void:
 	absorbed_w += watts
 	if body >= 0:
 		object_absorbed[body] = object_absorbed.get(body, 0.0) + watts
+	if log != null:
+		log.deps.append_array([i, bin, watts, body])
 
 
 ## Absorbs `watts` of one bin at the opaque face of tile i; the rest scatters.
 func absorb_opaque_bin(i: int, bin: int, watts: float) -> void:
-	var a := watts * surf_abs[grid.material[i]][bin]
+	var a := watts * surf_abs[material[i]][bin]
 	apply_bin(i, bin, a)
-	scattered_w += watts - a
+	add_scattered(watts - a)
 
 
 ## Absorbs `scale` × a whole spectrum (W per bin) at the opaque face of tile i.
 func absorb_opaque_spectrum(i: int, spectrum: PackedFloat32Array, scale: float) -> void:
-	var surf := surf_abs[grid.material[i]]
+	var surf := surf_abs[material[i]]
 	var o := i * Spectrum.BAND_COUNT
 	var total := 0.0
 	var absorbed := 0.0
@@ -236,13 +318,49 @@ func absorb_opaque_spectrum(i: int, spectrum: PackedFloat32Array, scale: float) 
 			lit_tiles.append(i)
 		tile_power[i] += absorbed
 		absorbed_w += absorbed
-	scattered_w += total - absorbed
+	add_scattered(total - absorbed)
 
 
 func add_probe(owner: int, bin: int, watts: float) -> void:
 	var acc: PackedFloat32Array = object_incident.get(owner, Spectrum.make_zero())
 	acc[bin] += watts
 	object_incident[owner] = acc
+	if log != null:
+		log.probes.append_array([owner, bin, watts])
+
+
+func add_escaped(watts: float) -> void:
+	escaped_w += watts
+	if log != null:
+		log.escaped += watts
+
+
+func add_scattered(watts: float) -> void:
+	scattered_w += watts
+	if log != null:
+		log.scattered += watts
+
+
+func add_culled(watts: float) -> void:
+	culled_w += watts
+	if log != null:
+		log.culled += watts
+
+
+## Adds a logged task's contributions again (a later pass reusing it).
+func replay(t: TaskLog) -> void:
+	var deps := t.deps
+	for k in range(0, deps.size(), 4):
+		apply_bin(int(deps[k]), int(deps[k + 1]), deps[k + 2], int(deps[k + 3]))
+	var probes := t.probes
+	for k in range(0, probes.size(), 3):
+		add_probe(int(probes[k]), int(probes[k + 1]), probes[k + 2])
+	escaped_w += t.escaped
+	scattered_w += t.scattered
+	culled_w += t.culled
+	seg_from.append_array(t.seg_from)
+	seg_to.append_array(t.seg_to)
+	seg_power.append_array(t.seg_power)
 
 
 func _deposit_bin(i: int, bin: int, watts: float, body: int, at := Vector2.ZERO) -> void:
@@ -272,7 +390,7 @@ func trace(origin: Vector2, dir: Vector2, power: PackedFloat32Array, count_emitt
 func _trace_path(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: int, events: int) -> void:
 	ray_count += 1
 	if events > SimConst.MAX_RAY_EVENTS:
-		culled_w += Spectrum.total(p)
+		add_culled(Spectrum.total(p))
 		return
 	var p0 := p.duplicate()
 	_march(o, d, p, medium, body)
@@ -280,10 +398,10 @@ func _trace_path(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, bod
 	var hit := start + d * _ev_t
 	match _ev_kind:
 		Ev.MISS:
-			escaped_w += Spectrum.total(p)
+			add_escaped(Spectrum.total(p))
 		Ev.EXIT:
 			_emit(start, hit, p0)
-			escaped_w += Spectrum.total(p)
+			add_escaped(Spectrum.total(p))
 		Ev.START_OPAQUE:
 			_absorb_opaque(_ev_tile, p)
 		Ev.OPAQUE:
@@ -367,7 +485,7 @@ func _push_child(hit: Vector2, dir: Vector2, p: PackedFloat32Array, medium: int,
 	if total <= 0.0:
 		return
 	if total < min_w:
-		culled_w += total
+		add_culled(total)
 		return
 	_stack.append([hit + dir * NUDGE, dir, p, medium, body, events + 1])
 
@@ -544,7 +662,7 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 			return
 		o += d * (t_in + NUDGE)
 	_ev_o = o
-	var mat := grid.material
+	var mat := material
 
 	# DDA setup over tiles.
 	var cx := clampi(floori(o.x / tm), 0, w - 1)

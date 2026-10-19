@@ -282,3 +282,62 @@ func test_beams_match_ray_tree_at_focus() -> void:
 		ray_focus += tr.tile_power[g.idx(xx, 25)]
 	check(beam_focus > 100.0, "focus collects light (%.1f W)" % beam_focus)
 	check_near(beam_focus / ray_focus, 1.0, 0.05, "beam vs ray tree at focus")
+
+
+## An incremental pass (replaying tasks the edit can't have affected) gives the same light as
+## tracing the edited world from scratch.
+func test_incremental_pass_matches_full_trace() -> void:
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var worlds: Array[SimWorld] = []
+	for k in 2:
+		var world := _flat_world(80, 40, 30)
+		world.time_s = 0.46 * SimConst.DAY_LENGTH_S
+		world.tick()
+		for j in 5:
+			_place(world, lens, Vector2(3.0 + j * 3.0, 4.0))
+		worlds.append(world)
+	var edited := worlds[0]
+	var fresh := worlds[1]
+	var light: LightSystem = edited.get_system(&"light")
+	light.retrace(edited)
+	# Move one lens and paint a tile far from the others, in both worlds.
+	for world in worlds:
+		var obj: SimObject = world.objects.values()[1]
+		world.enqueue(TransformObjectCommand.new(obj.id, obj.position + Vector2(0.3, 0.2), 0.1))
+		world.enqueue(PaintTilesCommand.new(PackedInt32Array([world.grid.idx(70, 29)]),
+			world.materials.id_of(&"stone")))
+		world.flush_commands()
+	light.retrace(edited)
+	var replayed: int = light.stats.replayed
+	var fresh_light: LightSystem = fresh.get_system(&"light")
+	fresh_light.retrace(fresh)
+	check(replayed > 0, "some tasks were replayed (%d)" % replayed)
+	check_eq(fresh_light.stats.replayed, 0, "fresh world traced everything")
+	var worst := 0.0
+	for i in light.tile_power.size():
+		worst = maxf(worst, absf(light.tile_power[i] - fresh_light.tile_power[i]))
+	check(worst < 1e-3, "tile power matches a full trace (max diff %.6f W)" % worst)
+	check_near(light.stats.absorbed, fresh_light.stats.absorbed, 1e-3, "absorbed total")
+
+
+## Updating the air distance field locally after edits gives the same field as a rebuild.
+func test_incremental_distance_field_matches_rebuild() -> void:
+	var world := _flat_world(80, 40, 30)
+	world.time_s = 0.46 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	for j in 4:
+		_place(world, lens, Vector2(3.0 + j * 4.0, 4.0))
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	for step in 3:
+		var obj: SimObject = world.objects.values()[step]
+		world.enqueue(TransformObjectCommand.new(obj.id, obj.position + Vector2(1.3, 0.7), 0.2))
+		world.enqueue(PaintTilesCommand.new(PackedInt32Array([world.grid.idx(10 + step * 9, 12)]),
+			world.materials.id_of(&"stone")))
+		world.flush_commands()
+		light.retrace(world)
+	var tr := light.tracer()
+	var incremental := tr._air_dist.duplicate()
+	tr.build_blocks()
+	check(incremental == tr._air_dist, "distance field after local updates equals a full rebuild")

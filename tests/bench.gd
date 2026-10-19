@@ -32,21 +32,23 @@ func _make(db: MaterialDB, objects: ObjectDB, scenario: String) -> SimWorld:
 
 
 func _run(db: MaterialDB, objects: ObjectDB, scenario: String, hour: float) -> void:
-	var world := _make(db, objects, scenario)
-	world.time_s = hour / 24.0 * SimConst.DAY_LENGTH_S
-	world.tick()
-	var light: LightSystem = world.get_system(&"light")
-	var heat: ThermalSystem = world.get_system(&"heat")
-	light.retrace(world)   # Warm-up (builds faces, buckets, blocks)
-	# Fastest of several runs: timings on a desktop are noisy, the minimum is repeatable.
+	# A full pass on a fresh world (nothing to replay), fastest of three: desktop timings are
+	# noisy, the minimum is repeatable.
+	var world: SimWorld
+	var light: LightSystem
 	var stages := {}
 	var total := INF
-	for k in 4:
+	for k in 3:
+		world = _make(db, objects, scenario)
+		world.time_s = hour / 24.0 * SimConst.DAY_LENGTH_S
+		world.tick()
+		light = world.get_system(&"light")
 		light.retrace(world)
 		var p: LightPass = light._pass
 		if p.ms < total:
 			total = p.ms
 			stages = p.stage_ms.duplicate()
+	var heat: ThermalSystem = world.get_system(&"heat")
 	var s := light.stats
 	var bt: BeamTracer = light._pass.beams
 	var balance: float = (s.absorbed + s.escaped + s.scattered + s.culled) / s.emitted
