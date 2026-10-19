@@ -2,7 +2,7 @@
 
 > Living document. Sections marked **LOCKED** are architecture decisions we build against and should not change without a deliberate migration. Everything else is tunable.
 >
-> Last updated: 2026-10-18 (M1)
+> Last updated: 2026-10-19 (M3 planning)
 
 ---
 
@@ -39,6 +39,8 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D13 | **Objects own internal thermal nodes** coupled to their footprint tiles by contact conductance | One mechanism for cells (M3), lens slices (M7), batteries, heatsinks. Replaces "lens absorption heats host air tiles" |
 | D14 | **Conduits are tile layers + rebuilt graphs**: wires, pipes (and later data) share one network framework; each kind plugs in its own per-tick solver | Graph rebuilt only when a conduit tile changes; per-tick work runs on the compact graph |
 | D15 | **Designs are data**: an object instance references a design (def parameters), saved by value; built-in `.tres` defs are just stock designs. Every buyable thing carries `cost` and `unlock` fields in its def | Lens bench, shop, saves and research all read the same data (D11) |
+| D16 | **Placed objects can hold components**: a stand holds a lens, a cell module holds its layers. Components are designs (D15) with their own state | Swap a lens without moving the stand; one inspector and save path for both |
+| D17 | **Systems exchange energy only through the heat field and object ports** (power, pipe). No system reads another's internals | Keeps thermal power, cells, fluids and light composable as scope grows |
 
 ## 4. World & scale
 
@@ -179,12 +181,18 @@ Ray tree rules (secondary light):
 - Child rays (reflections) spawn only above a power threshold. Max depth 8.
 - Output of a trace: (a) segment list with per-bin power → renderer, (b) energy deposits → sim.
 
-### 6.5 The big lens & lens bench
+### 6.5 Stands & the lens crafter
 
-- Large lenses are objects on a **mount** with handles: **raise/lower** and **tilt**. Early game: the player drags them manually. Later: motorized trackers adjust them automatically (consume power, can fail).
-- **Lens bench:** choose material, diameter, curvature (→ focal length), type (simple / Fresnel / achromatic doublet). The game shows predicted focal length, concentration, chromatic spread, and max safe temperature. Output is a lens object.
+- **Stands** (bought by size class) hold a lens (D16). Stand qualities: max lens diameter/mass, height and tilt range, adjustment precision (coarse steps → smooth), heat tolerance (a stand near a stray focus can sag or burn). Later: motorized sun tracking (uses power, can fail).
+- **Generic lenses** are sold in the shop from the start; the lens crafter unlocks custom ones.
+- **Lens crafter:** the player drags the **target focus** (and later shapes each face). The crafter traces the design together with its manufacturing tolerance and draws the **focus region** — where the focus will actually land and how spread it is. Early it is a big circle; upgrades shrink it to a dot. Clever designers can correct a poor lens with a second one, because the optics are real.
+- **Upgrades** add information and control, never different physics: focus region size (tolerance), predicted focal point / chromatic spread / concentration / safe temperature readouts, control of both faces, Fresnel and achromatic doublet types, better materials (acrylic → crown → flint → fused silica → sapphire), costs shown.
+- **Manufacturing error is real** (§6.6): each crafted lens gets a seeded profile perturbation, saved with its design. In 2D, real-lens flaws show as a focus that is smeared along the axis (wrong curvature / spherical aberration), shifted sideways (wedge), comet-shaped (asymmetric "coma" term) or blurred (surface ripple).
 
 ### 6.6 Lens heating, deformation & failure
+
+**One mechanism for every imperfection:** a lens surface is a polyline (D4), and manufacturing error, thermal sag and cracks are all perturbations of it. Manufacturing error is a fixed sum of a few smooth modes across the aperture (curvature, wedge, coma-like cubic, ripple) with amplitudes set by crafter quality; heat effects are added on top over time. The tracer needs nothing new. (Perturbed lenses are unique designs, so they don't share the object cache with other lenses.)
+
 
 Lenses are not rigid props — they have internal state:
 
@@ -259,6 +267,12 @@ For each bin with photon energy E absorbed by a junction of bandgap Eg:
 
 Junction materials: Ge 0.67, Si 1.12, GaAs 1.42, GaInP 1.9 eV; perovskite (tunable 1.5–2.3, degrades with heat/moisture).
 
+### 9.2 Cells in the world (no crafting screen)
+
+- Cells are placed in the world, Factorio-style, and must never feel clunky: drag to place rows, cells placed side by side **join into one array automatically**, one wire drag connects an array to the network.
+- **Stacks emerge from placement:** a cell passes the light it can't absorb (E < Eg), so a GaInP cell in front of a Si cell is a tandem; series current matching (§9.1) applies to cells wired as a stack. Research adds cell types and coatings (AR, back reflectors), not recipes.
+- **Emergent play comes from the shared physics, never recipes:** spectrum splitting with prisms/dichroic mirrors to matched cells, concentration vs heat vs series loss, current matching, unused IR to a boiler. Every cell reads the same traced light.
+
 ## 10. Power & economy (M3)
 
 - Networks are graphs of wires/ports. Per tick: production → consumers (priority) → batteries → grid export (capped).
@@ -274,6 +288,10 @@ Junction materials: Ge 0.67, Si 1.12, GaAs 1.42, GaInP 1.9 eV; perovskite (tunab
 - Each segment exchanges heat with its host tile (pipe material sets conductance; insulated pipes exist).
 - No general pressure sim. **Exception:** liquid that boils inside a pipe → overpressure → burst chance; burst spills liquid into the free-liquid layer and vents steam into the gas layer.
 - Coolants: water → glycol → thermal oil → molten salt.
+
+### 11.3 Thermal power (M4) — the Ivanpah path
+
+An alternative to cells: heliostat mirrors on tracking stands focus onto a **receiver/boiler** on a tower; steam drives a **turbine** (power ∝ heat flow × a Carnot-limited efficiency of the hot/cold temperatures); a **condenser/radiator** dumps the rest. Closed loop inside pipes (§11.1): no new simulation system — the boiler takes heat from the heat field, the turbine is an object with a pipe port and a power port (D17). Open loops (venting steam, rain falling back) wait for the free-liquid and gas layers (M6) and stay optional.
 
 ### 11.2 Free liquid (M6)
 
@@ -309,7 +327,7 @@ Water is a resource: open cooling (towers, evaporating pools) loses water; deser
 
 ## 15. Progression (sketch — later)
 
-- **Shop / buy menu:** the Build bar becomes the shop outside creative mode: lenses, cells, mirrors, wires, pipes, tiles, each with a price (D15). Bought items are placed directly (no inventory juggling at first); deconstruction refunds a fraction (D12). Creative mode ignores prices and locks.
+- **Shop / buy menu:** pages by category (Optics, Stands, Power, Cooling, Materials, Research); only unlocked items show. Start with simple versions (generic lenses, basic stands, Si cells). Each item has a price (D15). Bought items are placed directly (no inventory juggling at first); deconstruction refunds a fraction (D12). Creative mode (later) ignores prices and locks.
 - **Two currencies, two sources:** money from selling power (grid market, §10) buys items; **research** comes from feeding power into a research machine (kWh → research points), so "putting power in the machine" unlocks new materials and objects. Money may also buy research at a poor rate, so a stuck player can always progress.
 - Research unlocks materials, coatings (AR, texturing, passivation), lens types, cells, coolants, automation.
 - Sites as prestige: temperate → desert (high DNI, hot, dust, scarce water) → arctic (cold, low sun) → high altitude (UV) → orbit (AM0 1361 W/m², radiative cooling only).
@@ -362,7 +380,10 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 |---|---|
 | **M0 — Skeleton** | Godot project, `SimWorld` tick loop, command queue, tile grid with all layers allocated, material resources, debug tile renderer, camera |
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
-| **M2 — Environment & creative mode** | Simple terrain/site, sky & sunsets, creative tools (§16.1), lens mount handles |
+| M2 — Environment & creative mode | Deferred: sky & sunsets later; current free-placement tools stay as dev tools. Creative mode is a later concern |
+| **M3a — First playable loop** | Object thermal nodes (D13), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
+| M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error |
+| M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
 | M3 — Cells & power | Cell model, power network, batteries, grid market |
 | M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule |
 | M5 — Fire & destruction | Integrity, ignition, debris, mining/deconstruction |
