@@ -25,9 +25,11 @@ var liquid_type := PackedInt32Array()       ## Material id of the liquid, -1 if 
 var smoke := PackedFloat32Array()           ## Density 0..1
 var steam := PackedFloat32Array()           ## Density 0..1
 var energy_in := PackedFloat32Array()       ## Joules deposited this tick, consumed by heat step
+var wire := PackedByteArray()               ## Conduit layer (D14): 1 where a wire runs, 0 none
 
 ## Bumped on any structural change so renderers know to rebuild.
 var structure_version: int = 0
+var conduit_version: int = 0        ## Bumped when a conduit layer (wire) changes
 
 var _sky_tiles := PackedInt32Array()
 var _sky_version := -1
@@ -59,6 +61,7 @@ func _init(w: int, h: int, ambient_k: float = SimConst.DEFAULT_AMBIENT_K) -> voi
 	steam.fill(0.0)
 	energy_in.resize(n)
 	energy_in.fill(0.0)
+	wire.resize(n)
 
 
 func size() -> int:
@@ -122,4 +125,4 @@ func top_nonair_row() -> int:
 ## Content hash over all persistent layers, used by determinism tests and desync checks.
 func state_hash() -> int:
 	return hash([material, temperature, integrity, flags, object_id,
-		liquid_amount, liquid_type, smoke, steam])
+		liquid_amount, liquid_type, smoke, steam, wire])

@@ -63,3 +63,28 @@ func test_cell_reads_the_sun_on_its_front() -> void:
 func test_hot_cell_loses_output() -> void:
 	var def := ObjectDef.new()
 	check_near(_efficiency(def, 1.0, SolarCell.T_REF_K + 50.0) / _efficiency(def, 1.0), 0.8, 1e-4, "η_temp at +50 K")
+
+
+## Wires (D14): runs of wire joined through tile edges form networks (diagonals don't join);
+## a bridge merges two networks, undo splits them again.
+func test_wires_form_networks() -> void:
+	var world := SimWorld.new(load_materials(), 16, 8, 1)
+	var g := world.grid
+	var nets := ConduitNetworks.new()
+	world.enqueue(PaintWiresCommand.new(PackedInt32Array([g.idx(1, 2), g.idx(2, 2), g.idx(3, 2)])))
+	world.enqueue(PaintWiresCommand.new(PackedInt32Array([g.idx(6, 2), g.idx(6, 3), g.idx(7, 4)])))
+	world.flush_commands()
+	nets.sync(g, g.wire)
+	check_eq(nets.count, 3, "two runs and a diagonal neighbour")
+	check_eq(nets.at(g.idx(1, 2)), nets.at(g.idx(3, 2)), "a run is one network")
+	check(nets.at(g.idx(6, 3)) != nets.at(g.idx(7, 4)), "diagonals don't join")
+	check_eq(nets.at(g.idx(0, 0)), -1, "no wire, no network")
+	world.enqueue(PaintWiresCommand.new(PackedInt32Array([g.idx(4, 2), g.idx(5, 2)])))
+	world.flush_commands()
+	nets.sync(g, g.wire)
+	check_eq(nets.count, 2, "bridged")
+	check_eq(nets.at(g.idx(1, 2)), nets.at(g.idx(6, 3)), "one network across the bridge")
+	world.enqueue(UndoCommand.new())
+	world.flush_commands()
+	nets.sync(g, g.wire)
+	check_eq(nets.count, 3, "undo splits them")
