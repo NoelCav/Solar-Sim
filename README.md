@@ -30,6 +30,20 @@ Controls (the window opens maximized and the interface scales with it; every key
 | F1 | Hide/show the help lines |
 | Ctrl+Z | Undo |
 
+## Agent tools (inspect the running game)
+
+`debug/sim_probe.gd` is an autoload (`SimProbe`) that answers questions about the live sim and sends commands without a mouse. Call it through the Godot MCP's `game_eval`:
+
+```gdscript
+return SimProbe.run("help")                    # list commands
+return SimProbe.run("objects")                 # ids, positions, angles, absorbed W, probe readings
+return SimProbe.run("region", {"x0": 40, "y0": 14, "x1": 48, "y1": 20, "layer": "light"})  # ASCII map
+return SimProbe.run("trace", {"x": 43.4, "y": 17.0, "dx": 0.96, "dy": -0.28})  # one test ray, leg by leg
+return SimProbe.run("rotate", {"id": 4, "angle": 30})
+```
+
+Positions are meters (x right, y down), angles degrees. Commands go through the sim's command queue like player input.
+
 ## Tests
 
 Headless sim tests (a test also fails on any script error raised while it runs). Build the C# project first if it changed:
