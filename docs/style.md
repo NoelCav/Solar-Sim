@@ -40,11 +40,9 @@ The goal is a codebase that stays easy to change as it grows: one way to do each
 ## 5. Before committing
 
 ```
-python tools/check.py                                            # gdlint + house rules
-godot --headless --path . -s res://tests/run_tests.gd            # tests
-godot --headless --path . -s res://tests/bench.gd                # if it touches light, heat or meshes
+python tools/check.py           # gdlint + house rules
+python tools/test.py            # tests (re-registers new class_name scripts first)
+python tools/test.py --bench    # also the benchmark, if it touches light, heat or meshes
 ```
-
-New `class_name` scripts need a rescan before headless runs see them: `godot --headless --path . --import`.
 
 Every new system brings: SimProbe commands to read it, tests for its physics, and a note in the design doc (§18 pass notes, decisions in §3). Keep each file's existing line endings (mixed endings are flagged).

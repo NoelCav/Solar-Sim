@@ -52,18 +52,15 @@ Positions are meters (x right, y down), angles degrees. Commands go through the 
 
 ## Tests
 
-Headless sim tests (a test also fails on any script error raised while it runs). Build the C# project first if it changed:
+Headless sim tests (a test also fails on any script error raised while it runs). Build the C# project first if it changed; `tools/test.py` re-registers new `class_name` scripts first (an open editor rewrites the class cache) and uses `$GODOT` (the `_console.exe` on Windows) or `godot` on the PATH:
 
 ```bash
 dotnet build "Solar Sim.csproj"
-godot --headless --path . -s res://tests/run_tests.gd
+python tools/test.py            # tests
+python tools/test.py --bench    # tests, then the benchmark
 ```
 
-Per-system timings on a full-size site (demo rig and a 30-lens field; full passes, mesh build, heat, ticks, dragging a lens), with a checksum to confirm optimizations don't change results:
-
-```bash
-godot --headless --path . -s res://tests/bench.gd
-```
+The benchmark gives per-system timings on a full-size site (demo rig and a 30-lens field; full passes, mesh build, heat, ticks, dragging a lens), with a checksum to confirm optimizations don't change results.
 
 ## Code rules
 

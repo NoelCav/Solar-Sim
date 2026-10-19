@@ -9,6 +9,7 @@ const MAX_HISTORY := 200
 
 var materials: MaterialDB
 var grid: TileGrid
+var skin := SurfaceSkin.new()       ## Surfaces of solids: light lands and heat leaves here (D18)
 var rng := RandomNumberGenerator.new()
 var seed_value: int
 

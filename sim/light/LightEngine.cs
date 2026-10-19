@@ -91,7 +91,7 @@ public partial class LightEngine : RefCounted
         public int K0, K1, Key, Bin;
         public double SMin;
         public List<double> Deps = new();     // (tile, bin, watts, body)…
-        public List<double> Faces = new();    // (face index, watts arriving)…
+        public readonly List<double> Strips = new();   // (strip index, watts arriving, watts absorbed)…
         public readonly List<double> Probes = new();   // (owner, bin, watts)…
         public double Escaped, Scattered, Culled;
         public Vector2[] SegFrom = Array.Empty<Vector2>(), SegTo = Array.Empty<Vector2>();
@@ -124,25 +124,6 @@ public partial class LightEngine : RefCounted
                 outList.Add(key.Item3);
             }
             Deps = outList;
-            var faceSums = new Dictionary<int, double>();
-            var faceOrder = new List<int>();
-            for (int k = 0; k < Faces.Count; k += 2)
-            {
-                int f = (int)Faces[k];
-                if (faceSums.TryGetValue(f, out double v))
-                    faceSums[f] = v + Faces[k + 1];
-                else
-                {
-                    faceSums[f] = Faces[k + 1];
-                    faceOrder.Add(f);
-                }
-            }
-            Faces = new List<double>(faceOrder.Count * 2);
-            foreach (int f in faceOrder)
-            {
-                Faces.Add(f);
-                Faces.Add(faceSums[f]);
-            }
         }
     }
 
@@ -173,11 +154,10 @@ public partial class LightEngine : RefCounted
         public double Ua, Ub;
         public PathRec Ra, Rb;
         public Span Kind;
-        public List<(int tile, double w)> Spread;
     }
 
     // --- Settings and tables ---------------------------------------------------------------
-    int _w, _h, _maxEvents;
+    int _w, _h, _maxEvents, _strips = 1;
     double _tm, _depth, _minChildW, _minRayW, _reflPool;
     double _baseChildW, _baseRayW;   // Cull thresholds for full sunlight (SetCullScale)
     byte[] _opaque = Array.Empty<byte>(), _dispersive = Array.Empty<byte>(), _hasBulk = Array.Empty<byte>();
@@ -200,7 +180,14 @@ public partial class LightEngine : RefCounted
     // --- Results of the current pass -----------------------------------------------------------
     float[] _tilePower = Array.Empty<float>();
     float[] _bandPower = Array.Empty<float>();
-    float[] _faceLight = Array.Empty<float>();   // Watts arriving per tile face (FaceLight)
+    // Light per surface strip (D18): strip index (tile * 4 + face) * strips + strip -> slot.
+    // Dense by strip index, like _tilePower: [2k] watts arriving, [2k + 1] absorbed; the touched
+    // strips listed for publishing.
+    float[] _strip = Array.Empty<float>();
+    readonly List<int> _stripIds = new();
+    // What the beam task being logged added per strip (one task runs at a time: shared scratch).
+    static float[] s_task = Array.Empty<float>();
+    static readonly List<int> s_taskIds = new();
     readonly List<int> _lit = new();
     readonly Dictionary<int, double> _objAbsorbed = new();
     readonly Dictionary<int, double[]> _objIncident = new();
@@ -264,8 +251,9 @@ public partial class LightEngine : RefCounted
     /// <summary>Grid size, constants and per-material optical tables (BIN_COUNT values per material).</summary>
     public void Setup(int width, int height, double tileM, double depthM, int maxRayEvents, double minChildW,
         double minRayW, double reflPoolM, byte[] opaque, byte[] dispersive, byte[] hasBulk, float[] index,
-        float[] bulk, float[] surfAbs)
+        float[] bulk, float[] surfAbs, int skinStrips)
     {
+        _strips = skinStrips;
         _w = width;
         _h = height;
         _tm = tileM;
@@ -281,7 +269,9 @@ public partial class LightEngine : RefCounted
         _bulk = ToDouble(bulk);
         _surfAbs = ToDouble(surfAbs);
         _tilePower = new float[width * height];
-        _faceLight = new float[width * height * 4];
+        _strip = new float[width * height * 4 * skinStrips * 2];
+        if (s_task.Length < _strip.Length)
+            s_task = new float[_strip.Length];
         _bandPower = new float[width * height * Bands];
     }
 
@@ -463,7 +453,9 @@ public partial class LightEngine : RefCounted
     {
         Array.Clear(_tilePower);
         Array.Clear(_bandPower);
-        Array.Clear(_faceLight);
+        foreach (int k in _stripIds)
+            _strip[2 * k] = _strip[2 * k + 1] = 0f;
+        _stripIds.Clear();
         _lit.Clear();
         _objAbsorbed.Clear();
         _objIncident.Clear();
@@ -485,8 +477,15 @@ public partial class LightEngine : RefCounted
 
     public float[] TilePower() => (float[])_tilePower.Clone();
     public float[] BandPower() => (float[])_bandPower.Clone();
-    /// <summary>Watts arriving on each tile face (tile * 4 + face: 0 top, 1 bottom, 2 left, 3 right).</summary>
-    public float[] FaceLight() => (float[])_faceLight.Clone();
+    /// <summary>
+    /// Surface strips light reached (D18): index (tile * 4 + face) * strips + strip, faces 0 top,
+    /// 1 bottom, 2 left, 3 right, strips along the face (+x for top/bottom, +y for left/right).
+    /// </summary>
+    public int[] StripIds() => _stripIds.ToArray();
+    /// <summary>Watts arriving on each strip in StripIds.</summary>
+    public float[] StripArriving() => Gather(0);
+    /// <summary>Watts absorbed by each strip in StripIds (also counted in TilePower).</summary>
+    public float[] StripAbsorbed() => Gather(1);
     public int[] LitTiles() => _lit.ToArray();
     public Vector2[] SegFrom() => _segFrom.ToArray();
     public Vector2[] SegTo() => _segTo.ToArray();
@@ -554,26 +553,52 @@ public partial class LightEngine : RefCounted
         }
     }
 
-    /// Light of `watts` arriving on face `side` of opaque tile i (-1: no face, e.g. a ray that
-    /// starts inside rock): recorded for display (D19), absorbed by the surface, the rest scattered.
-    void AbsorbOpaqueBin(int i, int side, int bin, double watts)
+    /// Light of `watts` arriving on strip `strip` of face `side` of opaque tile i (side -1: no
+    /// face, e.g. a ray that starts inside rock): recorded per strip (D18), absorbed by the
+    /// surface, the rest scattered.
+    void AbsorbOpaqueBin(int i, int side, int strip, int bin, double watts)
     {
-        LightFace(i, side, watts);
         double a = watts * _surfAbs[_mat[i] * Bins + bin];
+        LightStrip(i, side, strip, watts, a);
         ApplyBin(i, bin, a);
         AddScattered(watts - a);
     }
 
-    void LightFace(int i, int side, double watts)
+    void LightStrip(int i, int side, int strip, double arriving, double absorbed)
     {
-        if (side < 0 || watts <= 0)
+        if (side < 0)
             return;
-        _faceLight[i * 4 + side] += (float)watts;
+        AddStrip((i * 4 + side) * _strips + strip, (float)arriving, (float)absorbed);
+    }
+
+    /// A strip is listed when its arriving light first becomes nonzero; light too small for a
+    /// float is dropped, so a strip is never listed twice.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    void AddStrip(int index, float arriving, float absorbed)
+    {
+        if (arriving <= 0f)
+            return;
+        int j = 2 * index;
+        if (_strip[j] == 0f)
+            _stripIds.Add(index);
+        _strip[j] += arriving;
+        _strip[j + 1] += absorbed;
         if (_log != null)
         {
-            _log.Faces.Add(i * 4 + side);
-            _log.Faces.Add(watts);
+            if (s_task[j] == 0f)
+                s_taskIds.Add(index);
+            s_task[j] += arriving;
+            s_task[j + 1] += absorbed;
         }
+    }
+
+    /// Which strip of face `side` of tile i the point p lies on.
+    int StripAt(int i, int side, D2 p)
+    {
+        if (side < 0)
+            return 0;
+        double along = side <= 1 ? p.X / _tm - i % _w : p.Y / _tm - i / _w;
+        return Math.Clamp((int)Math.Floor(along * _strips), 0, _strips - 1);
     }
 
     /// <summary>Adds a probe reading.</summary>
@@ -619,36 +644,95 @@ public partial class LightEngine : RefCounted
     /// <summary>
     /// Stage 1 (direct light): every lane emits; lanes ending on an opaque face (kind == opaqueKind,
     /// refs = tile) deposit there, lanes that hit nothing (noneKind) escape. Consecutive lanes on
-    /// the same tile are settled together.
+    /// the same surface strip are settled together.
     /// </summary>
-    public void DirectDeposit(byte[] kind, int[] refs, byte[] sides, float[] spectrum, double laneArea,
-        int opaqueKind, int noneKind)
+    /// Lanes are at u = u0 + (k + 0.5) laneW across `perp`; lane k's first hit is `depth[k]`
+    /// along `dir`. A lane covers laneW / |perp · t| of a face with tangent t, spread over the
+    /// strips it overlaps (lanes and strips differ in width; whole lanes per strip would alias),
+    /// including those of the neighbouring tile's face where the surface continues there.
+    public void DirectDeposit(byte[] kind, int[] refs, byte[] sides, float[] depth, double u0, double laneW,
+        Vector2 perp, Vector2 dir, float[] spectrum, double laneArea, int opaqueKind, int noneKind)
     {
         double total = 0;
         for (int b = 0; b < Bins; b++)
             total += spectrum[b];
         _emitted += total * laneArea * kind.Length;
-        int runFace = -1, runLanes = 0, none = 0;   // Face index: tile * 4 + side
+        D2 pv = D2.From(perp), dv = D2.From(dir);
+        var lanes = new Dictionary<int, double>();   // Strip index (see StripIds) -> lanes landing
+        var order = new List<int>();
+        int none = 0;
         for (int k = 0; k < kind.Length; k++)
         {
-            int f = kind[k] == opaqueKind ? refs[k] * 4 + sides[k] : -1;
-            if (f != runFace)
-            {
-                if (runFace >= 0)
-                    AbsorbOpaqueSpectrum(runFace / 4, runFace % 4, spectrum, runLanes * laneArea);
-                runFace = f;
-                runLanes = 0;
-            }
-            runLanes++;
             if (kind[k] == noneKind)
                 none++;
+            if (kind[k] != opaqueKind)
+                continue;
+            int t = refs[k], side = sides[k];
+            D2 hit = pv * (u0 + (k + 0.5) * laneW) + dv * depth[k];
+            bool horizontal = side <= 1;
+            double along = horizontal ? hit.X / _tm - t % _w : hit.Y / _tm - t / _w;   // In tiles
+            double half = 0.5 * laneW / Math.Max(Math.Abs(horizontal ? pv.X : pv.Y), 1e-6) / _tm;
+            if (half <= 1e-12)
+            {
+                AddLanes(lanes, order, (t * 4 + side) * _strips + StripAt(t, side, hit), 1.0);
+                continue;
+            }
+            // The footprint over this tile's face and, where it spills over, the next tile's
+            // along the same line (if that face is exposed too); weights over the kept parts.
+            int step = horizontal ? 1 : _w;
+            double kept = 0.0;
+            for (int o = -1; o <= 1; o++)
+            {
+                int tile = t + o * step;
+                double lo = Math.Max(along - half - o, 0.0), hi = Math.Min(along + half - o, 1.0);
+                if (hi > lo && (o == 0 || ExposedFace(tile, side, t, o)))
+                    kept += hi - lo;
+            }
+            for (int o = -1; o <= 1; o++)
+            {
+                int tile = t + o * step;
+                double lo = Math.Max(along - half - o, 0.0), hi = Math.Min(along + half - o, 1.0);
+                if (hi <= lo || (o != 0 && !ExposedFace(tile, side, t, o)))
+                    continue;
+                int baseIndex = (tile * 4 + side) * _strips;
+                int s0 = Math.Max((int)Math.Floor(lo * _strips), 0), s1 = Math.Min((int)Math.Ceiling(hi * _strips), _strips);
+                for (int st = s0; st < s1; st++)
+                {
+                    double overlap = Math.Min(hi, (st + 1.0) / _strips) - Math.Max(lo, (double)st / _strips);
+                    if (overlap > 0.0)
+                        AddLanes(lanes, order, baseIndex + st, overlap / kept);
+                }
+            }
         }
-        if (runFace >= 0)
-            AbsorbOpaqueSpectrum(runFace / 4, runFace % 4, spectrum, runLanes * laneArea);
+        int perFace = _strips, perTile = 4 * _strips;
+        foreach (int f in order)
+            AbsorbOpaqueSpectrum(f / perTile, f / perFace % 4, f % perFace, spectrum, lanes[f] * laneArea);
         _escaped += total * laneArea * none;
     }
 
-    void AbsorbOpaqueSpectrum(int i, int side, float[] spectrum, double scale)
+    /// Whether `tile`, `o` tiles from `from` along the line of face `side`, continues that face:
+    /// in the same row (or column), opaque, with a transparent neighbour on that side.
+    bool ExposedFace(int tile, int side, int from, int o)
+    {
+        bool horizontal = side <= 1;
+        if (tile < 0 || tile >= _mat.Length || (horizontal && tile / _w != from / _w))
+            return false;
+        int nb = side == 0 ? tile - _w : (side == 1 ? tile + _w : (side == 2 ? tile - 1 : tile + 1));
+        return _opaque[_mat[tile]] == 1 && nb >= 0 && nb < _mat.Length && _opaque[_mat[nb]] == 0;
+    }
+
+    static void AddLanes(Dictionary<int, double> lanes, List<int> order, int strip, double count)
+    {
+        if (lanes.TryGetValue(strip, out double v))
+            lanes[strip] = v + count;
+        else
+        {
+            lanes[strip] = count;
+            order.Add(strip);
+        }
+    }
+
+    void AbsorbOpaqueSpectrum(int i, int side, int strip, float[] spectrum, double scale)
     {
         int m = _mat[i];
         double total = 0, absorbed = 0;
@@ -667,7 +751,7 @@ public partial class LightEngine : RefCounted
             _tilePower[i] += (float)absorbed;
             _absorbed += absorbed;
         }
-        LightFace(i, side, total);
+        LightStrip(i, side, strip, total, absorbed);
         AddScattered(total - absorbed);
     }
 
@@ -718,12 +802,15 @@ public partial class LightEngine : RefCounted
                 AddEscaped(Sum(p));
                 break;
             case Ev.StartOpaque:
-                AbsorbOpaque(_evTile, -1, p);
+                AbsorbOpaque(_evTile, -1, 0, p);
                 break;
             case Ev.Opaque:
+            {
                 Emit(start, hit, p0);
-                AbsorbOpaque(_evTile, FaceCode(_evFace), p);
+                int side = FaceCode(_evFace);
+                AbsorbOpaque(_evTile, side, StripAt(_evTile, side, hit), p);
                 break;
+            }
             case Ev.Media:
                 Emit(start, hit, p0);
                 Interface(hit, d, _evFace, _evPrevMat, _evMat, p, -1, -1, events);
@@ -735,11 +822,11 @@ public partial class LightEngine : RefCounted
         }
     }
 
-    void AbsorbOpaque(int i, int side, double[] p)
+    void AbsorbOpaque(int i, int side, int strip, double[] p)
     {
         for (int b = 0; b < Bins; b++)
             if (p[b] > 0)
-                AbsorbOpaqueBin(i, side, b, p[b]);
+                AbsorbOpaqueBin(i, side, strip, b, p[b]);
     }
 
     void SurfaceHit(int s, double u, D2 hit, D2 d, double[] p, int medium, int body, int events)
@@ -893,7 +980,7 @@ public partial class LightEngine : RefCounted
                     rec.Frac.Add(p[bin]);
                     rec.Term = Term.Opaque;
                     rec.TermTile = _evTile;
-                    rec.TermSide = FaceCode(_evFace);
+                    rec.TermSide = _evKind == Ev.StartOpaque ? -1 : FaceCode(_evFace);
                     stop = true;
                     break;
                 case Ev.Media:
@@ -1341,9 +1428,9 @@ public partial class LightEngine : RefCounted
         var probes = t.Probes;
         for (int k = 0; k < probes.Count; k += 3)
             AddProbe((int)probes[k], (int)probes[k + 1], probes[k + 2]);
-        var faces = t.Faces;
-        for (int k = 0; k < faces.Count; k += 2)
-            _faceLight[(int)faces[k]] += (float)faces[k + 1];
+        var strips = t.Strips;
+        for (int k = 0; k < strips.Count; k += 3)
+            AddStrip((int)strips[k], (float)strips[k + 1], (float)strips[k + 2]);
         _escaped += t.Escaped;
         _scattered += t.Scattered;
         _culled += t.Culled;
@@ -1448,6 +1535,14 @@ public partial class LightEngine : RefCounted
         _intervals.Clear();
         _log = null;
         log.Compact();
+        foreach (int k in s_taskIds)
+        {
+            log.Strips.Add(k);
+            log.Strips.Add(s_task[2 * k]);
+            log.Strips.Add(s_task[2 * k + 1]);
+            s_task[2 * k] = s_task[2 * k + 1] = 0f;
+        }
+        s_taskIds.Clear();
         log.Paths = _rayCount - paths0;
         log.Render = _render.GetRange(render0, _render.Count - render0).ToArray();
         log.SegFrom = _segFrom.GetRange(seg0, _segFrom.Count - seg0).ToArray();
@@ -1608,10 +1703,10 @@ public partial class LightEngine : RefCounted
 
     void Refine(double ua, PathRec ra, double ub, PathRec rb, double s0, int bin)
     {
-        Span kind = Classify(ra, rb, out var spread);
+        Span kind = Classify(ra, rb);
         if (kind != Span.Split)
         {
-            _intervals.Add(new Interval { Ua = ua, Ra = ra, Ub = ub, Rb = rb, Kind = kind, Spread = spread });
+            _intervals.Add(new Interval { Ua = ua, Ra = ra, Ub = ub, Rb = rb, Kind = kind });
             return;
         }
         if (ub - ua <= MinSpacing)
@@ -1627,17 +1722,15 @@ public partial class LightEngine : RefCounted
 
     /// EXACT: same optical path, landing on one straight stretch of surface (or both escape);
     /// NEAR: same path, landing within LandingTol on uneven ground; SPLIT: different paths.
-    Span Classify(PathRec ra, PathRec rb, out List<(int, double)> spread)
+    Span Classify(PathRec ra, PathRec rb)
     {
-        spread = null;
         if (ra.Term != rb.Term || ra.Term == Term.Culled)
             return Span.Split;
         if (ra.Pts.Count != rb.Pts.Count || !SameSig(ra, rb))
             return Span.Split;
         if (ra.Term != Term.Opaque)
             return Span.Exact;
-        spread = Spread(ra, rb);
-        if (spread != null)
+        if (OneSurface(ra, rb))
             return Span.Exact;
         D2 ea = ra.Pts[^1], eb = rb.Pts[^1];
         return ea.DistanceTo(eb) <= LandingTol ? Span.Near : Span.Split;
@@ -1653,39 +1746,66 @@ public partial class LightEngine : RefCounted
         return true;
     }
 
-    /// Tiles (and weights) a coherent beam lands on between the two rays' end points: the same
-    /// tile, or a straight run of exposed faces of the same orientation; null otherwise.
-    List<(int, double)> Spread(PathRec ra, PathRec rb)
+    /// Whether the two rays land on one straight run of exposed faces of the same orientation
+    /// (one face, or consecutive tiles in a row or column), so the beam between them lands
+    /// evenly along that line.
+    bool OneSurface(PathRec ra, PathRec rb)
     {
-        int ta = ra.TermTile, tb = rb.TermTile;
-        if (ta == tb)
-            return new List<(int, double)> { (ta, 1.0) };
         int code = ra.TermSide;
         if (code != rb.TermSide || code < 0)
-            return null;
-        int w = _w;
-        D2 pa = ra.Pts[^1], pb = rb.Pts[^1];
+            return false;
+        int ta = ra.TermTile, tb = rb.TermTile;
         bool horizontal = code <= 1;
-        int line = horizontal ? ta / w : ta % w;
-        if (line != (horizontal ? tb / w : tb % w))
-            return null;
-        int c0 = horizontal ? Math.Min(ta % w, tb % w) : Math.Min(ta / w, tb / w);
-        int c1 = horizontal ? Math.Max(ta % w, tb % w) : Math.Max(ta / w, tb / w);
+        if ((horizontal ? ta / _w : ta % _w) != (horizontal ? tb / _w : tb % _w))
+            return false;
+        int step = horizontal ? 1 : _w;
+        for (int t = Math.Min(ta, tb); t <= Math.Max(ta, tb); t += step)
+        {
+            // The face must be exposed: an opaque tile with a transparent neighbour on that side.
+            int nb = code == 0 ? t - _w : (code == 1 ? t + _w : (code == 2 ? t - 1 : t + 1));
+            if (_opaque[_mat[t]] == 0 || (nb >= 0 && nb < _mat.Length && _opaque[_mat[nb]] == 1))
+                return false;
+        }
+        return true;
+    }
+
+    /// A coherent beam of `watts` landing on one surface (OneSurface) between the rays' end
+    /// points: spread evenly along the landing, each strip's light recorded, each tile's
+    /// absorption deposited once.
+    void AbsorbLanding(PathRec ra, PathRec rb, int bin, double watts)
+    {
+        int code = ra.TermSide;
+        bool horizontal = code <= 1;
+        D2 pa = ra.Pts[^1], pb = rb.Pts[^1];
         double lo = horizontal ? Math.Min(pa.X, pb.X) : Math.Min(pa.Y, pb.Y);
         double hi = horizontal ? Math.Max(pa.X, pb.X) : Math.Max(pa.Y, pb.Y);
-        double length = hi - lo;
-        var outList = new List<(int, double)>();
-        for (int c = c0; c <= c1; c++)
+        if (hi - lo <= 1e-9)
         {
-            int t = horizontal ? line * w + c : c * w + line;
-            // The face must be exposed: an opaque tile with a transparent neighbour on that side.
-            int nb = code == 0 ? t - w : (code == 1 ? t + w : (code == 2 ? t - 1 : t + 1));
-            if (_opaque[_mat[t]] == 0 || (nb >= 0 && nb < _mat.Length && _opaque[_mat[nb]] == 1))
-                return null;
-            double overlap = Math.Min(hi, (c + 1) * _tm) - Math.Max(lo, c * _tm);
-            outList.Add((t, length > 1e-9 ? overlap / length : 1.0 / (c1 - c0 + 1)));
+            AbsorbOpaqueBin(ra.TermTile, code, StripAt(ra.TermTile, code, pa), bin, watts);
+            return;
         }
-        return outList;
+        int ta = ra.TermTile, tb = rb.TermTile;
+        int step = horizontal ? 1 : _w;
+        double sw = _tm / _strips;
+        for (int t = Math.Min(ta, tb); t <= Math.Max(ta, tb); t += step)
+        {
+            double t0 = (horizontal ? t % _w : t / _w) * _tm;   // Where this tile's face starts
+            double absorb = _surfAbs[_mat[t] * Bins + bin];
+            double tileIn = 0, perMeter = watts / (hi - lo);
+            int k0 = Math.Max((int)Math.Floor((lo - t0) / sw), 0), k1 = Math.Min((int)Math.Ceiling((hi - t0) / sw), _strips);
+            int first = (t * 4 + code) * _strips;
+            for (int k = k0; k < k1; k++)
+            {
+                double overlap = Math.Min(hi, t0 + (k + 1) * sw) - Math.Max(lo, t0 + k * sw);
+                if (overlap <= 0.0)
+                    continue;
+                double arriving = perMeter * overlap;
+                AddStrip(first + k, (float)arriving, (float)(arriving * absorb));
+                tileIn += arriving;
+            }
+            ApplyBin(t, bin, tileIn * absorb);
+            AddScattered(tileIn * (1.0 - absorb));
+        }
     }
 
     void Settle(Interval iv, double irr, int bin)
@@ -1706,8 +1826,7 @@ public partial class LightEngine : RefCounted
                 if (ra.Term == Term.Escape)
                     AddEscaped(arriving);
                 else
-                    foreach (var (tile, wgt) in iv.Spread)
-                        AbsorbOpaqueBin(tile, ra.TermSide, bin, arriving * wgt);
+                    AbsorbLanding(ra, rb, bin, arriving);
                 RenderStrip(ra, rb, half * 2.0, bin);
                 break;
             }
@@ -1828,7 +1947,7 @@ public partial class LightEngine : RefCounted
                 AddEscaped(arriving);
                 break;
             case Term.Opaque:
-                AbsorbOpaqueBin(r.TermTile, r.TermSide, bin, arriving);
+                AbsorbOpaqueBin(r.TermTile, r.TermSide, StripAt(r.TermTile, r.TermSide, r.Pts[^1]), bin, arriving);
                 break;
             default:
                 AddCulled(arriving);
@@ -2004,6 +2123,15 @@ public partial class LightEngine : RefCounted
             if (v > 0)
                 c++;
         return c;
+    }
+
+    /// Arriving (0) or absorbed (1) watts at the touched strips, in StripIds order.
+    float[] Gather(int which)
+    {
+        var f = new float[_stripIds.Count];
+        for (int k = 0; k < f.Length; k++)
+            f[k] = _strip[2 * _stripIds[k] + which];
+        return f;
     }
 
     static double[] ToDouble(float[] a)

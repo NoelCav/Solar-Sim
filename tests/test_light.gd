@@ -38,6 +38,16 @@ func _lens_over_probe(world: SimWorld) -> SimObject:
 	return probe
 
 
+## Watts arriving on face `side` of tile i: the sum of its surface strips (D18).
+func _face_arriving(light: LightSystem, i: int, side: int) -> float:
+	var total := 0.0
+	var face := i * 4 + side
+	for k in light.strip_ids.size():
+		if light.strip_ids[k] / SimConst.SKIN_STRIPS == face:
+			total += light.strip_arriving[k]
+	return total
+
+
 ## Every emitted watt is absorbed, escapes, scatters or is culled, and culling stays small.
 func _check_energy_balance(s: Dictionary) -> void:
 	var out: float = s.absorbed + s.escaped + s.scattered + s.culled
@@ -271,8 +281,8 @@ func test_direct_sun_on_flat_ground() -> void:
 	expected *= SimConst.TILE_M * world.sun_direction.y * SimConst.DEPTH_M
 	check_near(light.tile_power[i], expected, expected * 0.1, "surface tile power")
 	var arriving := world.sun_dni * world.sun_direction.y * SimConst.TILE_M * SimConst.DEPTH_M
-	check_near(light.face_light[i * 4], arriving, arriving * 0.1, "light arriving on the top face")
-	check_eq(light.face_light[i * 4 + 1] + light.face_light[i * 4 + 2] + light.face_light[i * 4 + 3], 0.0,
+	check_near(_face_arriving(light, i, 0), arriving, arriving * 0.1, "light arriving on the top face")
+	check_eq(_face_arriving(light, i, 1) + _face_arriving(light, i, 2) + _face_arriving(light, i, 3), 0.0,
 		"no light on the other faces")
 	check_eq(light.tile_power[g.idx(20, 16)], 0.0, "tile below the surface is dark")
 	check_eq(light.stats.rays, 0, "no rays needed without optics")
@@ -313,11 +323,10 @@ func test_light_lands_on_the_faces_it_hits() -> void:
 	world.flush_commands()
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
-	var faces := light.face_light
-	check(faces[g.idx(19, 5) * 4] > 0.0, "top face lit")
-	check(faces[g.idx(18, 6) * 4 + 2] > 0.0, "sun-side (left) face lit")
-	check_eq(faces[g.idx(21, 6) * 4 + 3], 0.0, "far (right) face dark")
-	check_eq(faces[g.idx(19, 6) * 4 + 1], 0.0, "bottom face dark")
+	check(_face_arriving(light, g.idx(19, 5), 0) > 0.0, "top face lit")
+	check(_face_arriving(light, g.idx(18, 6), 2) > 0.0, "sun-side (left) face lit")
+	check_eq(_face_arriving(light, g.idx(21, 6), 3), 0.0, "far (right) face dark")
+	check_eq(_face_arriving(light, g.idx(19, 6), 1), 0.0, "bottom face dark")
 
 
 ## Beams and plain rays agree on how much light a lens puts into its focal tiles.

@@ -13,7 +13,8 @@ const COMMANDS := {
 		+ "(W/m² per bin, UV..IR)",
 	"defs": "object definitions that can be placed (keys)",
 	"object": "{id}: one object with its bounds",
-	"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light",
+	"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light, and per skinned face "
+		+ "(top/bottom/left/right) its surface strips' temperature (°C) and arriving light (W/m²)",
 	"region": "{x0, y0, x1, y1, layer: light|heat|material, cols?: 60}: ASCII map plus summary",
 	"peaks": "{layer: light|heat, n: 10}: hottest or brightest tiles",
 	"trace": "{x, y, angle (deg, 90 = straight down) or dx, dy, bin: 0-5 (UV..IR, default 2 green)}: "
@@ -143,20 +144,33 @@ func _tile_info(i: int) -> Dictionary:
 	var g := w.grid
 	var light: LightSystem = w.get_system(&"light")
 	var def := w.materials.get_def(g.material[i])
-	var area := SimConst.TILE_M * SimConst.DEPTH_M
-	var scale := light.power_scale(w)
+	var scale := light.irradiance_scale(w)
 	var d := {"tx": i % g.width, "ty": i / g.width,
 		"x": snappedf((i % g.width + 0.5) * SimConst.TILE_M, 0.001),
 		"y": snappedf((i / g.width + 0.5) * SimConst.TILE_M, 0.001),
 		"material": def.display_name if def else "?", "temp_c": snappedf(SimConst.k_to_c(g.temperature[i]), 0.01)}
 	if light.tile_power.size() == g.size():
-		var watts := light.tile_power[i] * scale
-		d["absorbed_w"] = snappedf(watts, 0.001)
-		d["absorbed_w_m2"] = snappedf(watts / area, 0.1)
+		d["absorbed_w"] = snappedf(light.tile_power[i] * light.power_scale(w), 0.001)
+		d["absorbed_w_m2"] = snappedf(light.tile_power[i] * scale, 0.1)
 		var o := i * Spectrum.BAND_COUNT
-		d["bands_w_m2"] = {"uv": snappedf(light.band_power[o] * scale / area, 0.1),
-			"visible": snappedf(light.band_power[o + 1] * scale / area, 0.1),
-			"infrared": snappedf(light.band_power[o + 2] * scale / area, 0.1)}
+		d["bands_w_m2"] = {"uv": snappedf(light.band_power[o] * scale, 0.1),
+			"visible": snappedf(light.band_power[o + 1] * scale, 0.1),
+			"infrared": snappedf(light.band_power[o + 2] * scale, 0.1)}
+	# Surface skin (D18): strips along each skinned face.
+	var skin := w.skin
+	var faces := {}
+	for side in 4:
+		var f := skin.face_of[i * 4 + side] if i * 4 + side < skin.face_of.size() else -1
+		if f < 0:
+			continue
+		var temps := []
+		var lit := []
+		for s in skin.strips:
+			temps.append(snappedf(SimConst.k_to_c(skin.temperature[f * skin.strips + s]), 0.1))
+			lit.append(snappedf(light.strip_irradiance((i * 4 + side) * skin.strips + s, w), 0.1))
+		faces[["top", "bottom", "left", "right"][side]] = {"strip_temp_c": temps, "strip_w_m2": lit}
+	if not faces.is_empty():
+		d["skin"] = faces
 	return d
 
 

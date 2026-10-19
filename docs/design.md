@@ -239,6 +239,7 @@ Real-ish lens materials:
 - **`energy_in`** (light, electrical losses, fire) is folded in first: `ΔT = E / (m·c)`.
 - **Air convection (cheap):** air tiles bias heat transfer upward and relax toward ambient temperature (rate scales with wind and openness).
 - **Sky radiation:** sky-exposed surfaces radiate `ε·σ·(T⁴ − T_sky⁴)`. Strong at night; in orbit it is the only cooling.
+- **Surface skin (D18, `SurfaceSkin`, `SkinKernel`):** every face where a solid meets air or liquid is split into `SKIN_STRIPS` (10) strips of 2.5 cm. The skin *is* the surface: light absorbed by a solid lands in its strips (the light engine records light per strip), and the solid exchanges heat with the outside only through them. Per strip: half a tile of the solid to its tile, a convective film (or half a tile of liquid) to the tile across, a near-surface layer (k · depth) to its neighbours along the surface, radiation to the sky (tops) or the tile across. In series, body and film equal the old tile-to-air conductance, so evenly lit ground behaves as before; a focus heats a spot (a 23× focus on dirt: ~350 °C strip over an 18 °C block). The skin's heat capacity is negligible next to its tile, so it is solved steady each tick (a tridiagonal system per run of faces), exactly conserving energy. Diffuse light enters per face; liquids keep their own surface exchange.
 - **Objects** have internal thermal nodes coupled to their footprint tiles via contact conductance. Thin objects (cells) have small heat capacity — they spike fast.
 - **Tuning dial:** a global heat-capacity scale per material class so things heat on gameplay timescales while formulas stay real.
 
@@ -391,7 +392,7 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
 | M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
 | **Moonlight & moon cycle** ✅ | Done (§6.2, §18.6). Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
-| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
+| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
 | M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
 | M3 — Cells & power | Cell model, power network, batteries, grid market; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power |
@@ -495,6 +496,13 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Probe spectrum:** hovering a probe shows its spectrum (`SpectrumChart`): W/m² per µm across each bin's wavelength range (`Spectrum.BIN_EDGES_UM`, log axis), with the source's plain spectrum outlined at the same total. Moonlight is now redder than sunlight (lunar reflectance). SimProbe `objects` reports each probe's spectrum.
 - **Probe readability:** probe readings are tags drawn by `MapMarkers` (dark box, never dimmed at night), and clicking a tag picks the probe; the probe line is thicker with a dark underlay.
 - **Tooling:** `tools/check.py` flags tabs inside a line (a joined `\` continuation).
+
+### 18.9 Surface skin (2026-10-19, run 01 group 1)
+
+- **D18 built:** see §7. Light per strip replaces light per face (LightEngine.StripIds; strip arrays are dense with a touched list; beam landings write their strips inline; task logs collect a task's strips once at its end). Direct sunlight spreads each lane over its footprint on a face, across tile borders where the surface continues (whole lanes per strip aliased 1.6×/0.8×).
+- **Display:** lit faces and the heat view read strips (shared `surface_strips.gdshaderinc`); the heat view draws skin temperatures over solids' faces and the hottest marker counts them; the inspector shows "surface up to N °C"; SimProbe `tile` lists each face's strip temperatures and light.
+- **Tooling:** `tools/test.py` re-registers classes then runs the tests (`--bench` adds the benchmark): an open editor rewrites the class cache.
+- **Cost (debug build):** skin solve ~0.26 ms/tick (350 faces); demo-rig ticks ~1.5 → ~2.2 ms; a full pass of the 30-lens field at 09:00 ~34 → ~51 ms (low sun spreads landings over ~29 strips each). Next step if needed: record landings as strip ranges and fill strips once at publish.
 
 ## 19. Open questions
 

@@ -4,7 +4,9 @@ extends Sprite2D
 ## - Normal view: lit surfaces glow (additively) with absorbed light, log scale, so it is
 ##   obvious where light lands and how concentrated it is.
 ## - Light / UV / Infrared views: absorbed irradiance in that band, log scale.
-## - Heat view: every tile colored by its temperature (absolute °C): solids fully, air fainter.
+## - Heat view: every tile colored by its temperature (absolute °C): solids fully, air fainter;
+##   the surface skin (D18) drawn over solids' faces in its own temperature, so a focal spot
+##   shows on a cool block (heat_overlay.gdshader, strips as in surface_strips.gdshaderinc).
 ## Also tracks the peak value for the on-map marker and describes its legend.
 
 const REFRESH_S := 0.2
@@ -21,7 +23,7 @@ var view := ViewMode.NORMAL:
 	set(value):
 		view = value
 		_timer = 0.0
-		material = _add_mat if view == ViewMode.NORMAL else null
+		material = _add_mat if view == ViewMode.NORMAL else (_heat_mat if view == ViewMode.HEAT else null)
 var wavelength := -1:   ## Single bin to show, or -1 for all; tiles show that bin's band
 	set(value):
 		wavelength = value
@@ -39,6 +41,10 @@ var _texture: ImageTexture
 var _bytes := PackedByteArray()
 var _timer := 0.0
 var _add_mat := CanvasItemMaterial.new()
+var _heat_mat := ShaderMaterial.new()
+var _skin_image: Image
+var _skin_texture: ImageTexture
+var _skin_bytes := PackedByteArray()
 var _heat_lut := PackedByteArray()
 var _light_lut := PackedByteArray()
 var _solid_lut := PackedByteArray()   ## 1 per material id that is not a gas
@@ -58,6 +64,13 @@ func setup(p_world: SimWorld) -> void:
 	_image = Image.create_empty(g.width, g.height, false, Image.FORMAT_RGBA8)
 	_texture = ImageTexture.create_from_image(_image)
 	texture = _texture
+	var n := SimConst.SKIN_STRIPS
+	_skin_bytes.resize(g.size() * 4 * n * 4)
+	_skin_image = Image.create_empty(g.width * n, g.height * 4, false, Image.FORMAT_RGBA8)
+	_skin_texture = ImageTexture.create_from_image(_skin_image)
+	_heat_mat.shader = preload("res://render/heat_overlay.gdshader")
+	_heat_mat.set_shader_parameter(&"skin_tex", _skin_texture)
+	_heat_mat.set_shader_parameter(&"strips", n)
 	heat_gradient.offsets = PackedFloat32Array([0.0, 0.17, 0.33, 0.5, 0.62, 0.78, 1.0])
 	heat_gradient.colors = PackedColorArray([Color(0.15, 0.1, 0.6, 0.9), Color(0.1, 0.45, 0.95, 0.9),
 		Color(0.1, 0.75, 0.6, 0.9), Color(0.95, 0.85, 0.2, 0.9), Color(1.0, 0.45, 0.05, 0.92),
@@ -122,6 +135,29 @@ func _fill_heat() -> void:
 		if _solid_lut[mat[i]] == 0:
 			_bytes[o + 3] = int(_bytes[o + 3] * air_a)
 	peak_value = temp[peak_tile] if peak_tile >= 0 else 0.0
+	_fill_skin()
+
+
+## Skin strip colors for the heat view (one texel per strip, as in surface_strips.gdshaderinc);
+## the hottest strip counts for the peak marker.
+func _fill_skin() -> void:
+	var skin := world.skin
+	var g := world.grid
+	var n := skin.strips
+	var row := g.width * n
+	_skin_bytes.fill(0)
+	for f in skin.faces:
+		var tile := skin.face_tile[f]
+		var base := ((tile / g.width) * 4 + skin.face_side[f]) * row + (tile % g.width) * n
+		for s in n:
+			var t := skin.temperature[f * n + s]
+			if t > peak_value:
+				peak_value = t
+				peak_tile = tile
+			var at := (base + s) * 4
+			_put_at(_skin_bytes, _heat_lut, at, heat_x(SimConst.k_to_c(t)))
+	_skin_image.set_data(row, g.height * 4, false, Image.FORMAT_RGBA8, _skin_bytes)
+	_skin_texture.update(_skin_image)
 
 
 ## The value at position x (0–1) along the current legend, as display text.
@@ -182,11 +218,16 @@ func _fill_light(band: int, glow: bool) -> void:
 
 
 func _put(lut: PackedByteArray, o: int, x: float) -> void:
+	_put_at(_bytes, lut, o, x)
+
+
+## Writes the color at position x (0-1) of `lut` into `bytes` at byte offset o.
+static func _put_at(bytes: PackedByteArray, lut: PackedByteArray, o: int, x: float) -> void:
 	var k := clampi(int(x * 255.0), 0, 255) * 4
-	_bytes[o] = lut[k]
-	_bytes[o + 1] = lut[k + 1]
-	_bytes[o + 2] = lut[k + 2]
-	_bytes[o + 3] = lut[k + 3]
+	bytes[o] = lut[k]
+	bytes[o + 1] = lut[k + 1]
+	bytes[o + 2] = lut[k + 2]
+	bytes[o + 3] = lut[k + 3]
 
 
 static func _lut(gradient: Gradient) -> PackedByteArray:

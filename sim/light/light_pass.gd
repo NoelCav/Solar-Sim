@@ -73,7 +73,7 @@ func _init(p_grid: TileGrid, materials: MaterialDB) -> void:
 				has_bulk[id] = 1
 	engine.Setup(grid.width, grid.height, SimConst.TILE_M, SimConst.DEPTH_M, SimConst.MAX_RAY_EVENTS,
 		SimConst.MIN_CHILD_W, SimConst.MIN_RAY_W, SimConst.REFL_POOL_M, opaque, dispersive, has_bulk,
-		index, bulk, surf)
+		index, bulk, surf, SimConst.SKIN_STRIPS)
 
 
 ## Begins a pass over the world as it is now. With `prev` (the last completed pass), tasks
@@ -297,7 +297,8 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 ## Probes read the lanes that cross them before their first hit.
 func _direct() -> void:
 	var lane_area := map.lane_w * SimConst.DEPTH_M
-	engine.DirectDeposit(map.kind, map.ref, map.side, spectrum, lane_area, SunMap.Hit.OPAQUE, SunMap.Hit.NONE)
+	engine.DirectDeposit(map.kind, map.ref, map.side, map.depth, map.u0, map.lane_w, map.perp, map.dir, spectrum,
+		lane_area, SunMap.Hit.OPAQUE, SunMap.Hit.NONE)
 	for s in surfaces.count():
 		if surfaces.coating[s] == SurfaceSet.Coating.PROBE:
 			var n := map.lanes_reaching(surfaces.a[s], surfaces.b[s]).size()

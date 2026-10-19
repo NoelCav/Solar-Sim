@@ -3,6 +3,17 @@ extends TestSuite
 ## sky heat and cool surfaces, banded updates match full ones, objects own their heat (D13).
 
 
+## Air above stone, the ground's top at row 10.
+func _ground_world() -> SimWorld:
+	var world := SimWorld.new(load_materials(), 16, 16, 1)
+	var g := world.grid
+	var stone := world.materials.id_of(&"stone")
+	for i in g.size():
+		g.material[i] = stone if i / g.width >= 10 else MaterialDB.AIR_ID
+	g.mark_structure_changed()
+	return world
+
+
 func _stone_world() -> SimWorld:
 	var world := SimWorld.new(load_materials(), 16, 16, 1)
 	var g := world.grid
@@ -94,6 +105,52 @@ func test_night_sky_cools_surface() -> void:
 	for k in SimConst.TICK_RATE * 60:
 		world.tick()
 	check(g.temperature[surface] < t0 - 0.2, "surface cooled %.2f K" % (t0 - g.temperature[surface]))
+
+
+## Light put into the surface skin (D18) leaves it as heat in the tiles around it, exactly
+## (radiation off, so nothing leaves the world).
+func test_skin_passes_light_into_tiles() -> void:
+	var world := _ground_world()
+	var heat: ThermalSystem = world.get_system(&"heat")
+	heat.radiation_enabled = false
+	heat.ambient_enabled = false
+	var skin := world.skin
+	skin.sync(world)
+	check(skin.faces >= world.grid.width, "the ground's top faces have skin (%d faces)" % skin.faces)
+	var e0 := heat.total_energy(world)
+	var face := skin.face_of[world.grid.idx(8, 10) * 4]
+	skin.light_w[face * skin.strips + 4] = 4000.0   # 400 J over the step, on one strip
+	skin.light_scale = 1.0
+	skin.face_energy_in[face] = 100.0             # 100 J spread over the face (diffuse)
+	heat.step(world, 0.1)
+	check_near(heat.total_energy(world) - e0, 500.0, 0.5, "all 500 J reach the tiles")
+	check_eq(skin.face_energy_in[face], 0.0, "diffuse energy consumed")
+
+
+## A lens focused on the ground heats a spot on the surface (D18): the focal strip runs far
+## hotter than the block under it and than plain sunlit ground nearby.
+func test_focus_heats_a_spot_on_the_surface() -> void:
+	var world := _ground_world()
+	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var top := 10 * SimConst.TILE_M
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(2.0, top - 1.1)))
+	world.flush_commands()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	for k in SimConst.TICK_RATE * 10:
+		world.tick()
+	# The sun moves while it runs, so find the focus among the tiles under the lens (x 1.5-2.5 m).
+	var g := world.grid
+	var spot := g.idx(6, 10)
+	for x in range(6, 10):
+		if world.skin.max_temperature(g.idx(x, 10)) > world.skin.max_temperature(spot):
+			spot = g.idx(x, 10)
+	var t_spot := world.skin.max_temperature(spot)
+	var t_plain := world.skin.max_temperature(g.idx(13, 10))
+	check(t_spot > g.temperature[spot] + 50.0, "focal strip %.0f K above its block" % (t_spot - g.temperature[spot]))
+	check(t_spot > t_plain + 40.0, "and %.0f K above plain sunlit ground" % (t_spot - t_plain))
 
 
 ## Skipping quiet rows (uniform rows next to an equal row) leaves the simulation unchanged.

@@ -18,7 +18,11 @@ var last_trace_ms := 0.0        ## CPU time of the last complete pass, summed ov
 var last_stage_ms := {}         ## Same, per stage (map, direct, beams)
 var tile_power := PackedFloat32Array()     ## W absorbed per tile, at the traced DNI
 var band_power := PackedFloat32Array()     ## Same, per Spectrum band (BAND_COUNT per tile)
-var face_light := PackedFloat32Array()     ## W arriving per tile face (tile * 4 + face: top, bottom, left, right)
+## Surface strips light reached (D18; index layout in LightEngine.StripIds): W arriving and
+## W absorbed (also counted in tile_power), at the traced DNI.
+var strip_ids := PackedInt32Array()
+var strip_arriving := PackedFloat32Array()
+var strip_absorbed := PackedFloat32Array()
 var shown_lit := PackedInt32Array()        ## Tiles with tile_power > 0
 var sheet_from := PackedVector2Array()     ## Direct-light sheet (see LightPass)
 var sheet_to := PackedVector2Array()
@@ -38,7 +42,13 @@ var _traced_objects := -1
 var _traced_dir := Vector2.ZERO
 var _traced_dni := 0.0          ## DNI behind the deposits in use (sim state)
 var _lit_tiles := PackedInt32Array()
-var _lit_power := PackedFloat32Array()
+var _lit_power := PackedFloat32Array()     ## Absorbed inside the tile (bulk), not at its surface
+var _skin_ids := PackedInt32Array()        ## Strips absorbing light at a surface (sim state)
+var _skin_power := PackedFloat32Array()
+var _skin_mapped := -1                     ## Skin version _skin_power was written into (-1: redo)
+var _unskinned_tiles := PackedInt32Array() ## Tiles taking surface light their face has no skin for
+var _unskinned_power := PackedFloat32Array()
+var _strip_slot := {}                      ## Engine strip index -> slot in strip_ids
 var _obj_power := {}            ## Object id -> W absorbed in its body, at _traced_dni (sim state)
 
 var _pass_active := false
@@ -110,8 +120,8 @@ func power_scale(world: SimWorld) -> float:
 	return world.light_dni / shown_dni if shown_dni > 0.0 else 0.0
 
 
-## Factor from published `tile_power`, `band_power` (W per tile) and `face_light` (W per face)
-## to current W/m².
+## Factor from published `tile_power`, `band_power` (W per tile) to current W/m² of a tile face;
+## for a surface strip (a SKIN_STRIPS-th of a face) multiply by SKIN_STRIPS.
 func irradiance_scale(world: SimWorld) -> float:
 	return power_scale(world) / (SimConst.TILE_M * SimConst.DEPTH_M)
 
@@ -137,7 +147,12 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	var e := p.engine
 	tile_power = e.TilePower()
 	band_power = e.BandPower()
-	face_light = e.FaceLight()
+	strip_ids = e.StripIds()
+	strip_arriving = e.StripArriving()
+	strip_absorbed = e.StripAbsorbed()
+	_strip_slot.clear()
+	for k in strip_ids.size():
+		_strip_slot[strip_ids[k]] = k
 	shown_lit = e.LitTiles()
 	sheet_from = p.sheet_from.duplicate()
 	sheet_to = p.sheet_to.duplicate()
@@ -159,10 +174,20 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	_pass_active = false
 	_shown = p
 	_obj_power = e.ObjectAbsorbed()
-	_lit_tiles = shown_lit.duplicate()
-	_lit_power.resize(_lit_tiles.size())
-	for k in _lit_tiles.size():
-		_lit_power[k] = tile_power[_lit_tiles[k]]
+	# Light absorbed at a surface heats the skin (D18); the tile keeps what it absorbed inside.
+	var bulk := tile_power.duplicate()
+	var per_tile := 4 * SimConst.SKIN_STRIPS
+	for k in strip_ids.size():
+		bulk[strip_ids[k] / per_tile] -= strip_absorbed[k]
+	_lit_tiles.clear()
+	_lit_power.clear()
+	for i in shown_lit:
+		if bulk[i] > 1e-9:
+			_lit_tiles.append(i)
+			_lit_power.append(bulk[i])
+	_skin_ids = strip_ids.duplicate()
+	_skin_power = strip_absorbed.duplicate()
+	_skin_mapped = -1
 	_traced_structure = p.structure_version
 	_traced_objects = p.objects_version
 	_traced_dir = p.dir
@@ -178,16 +203,66 @@ func _deposit(world: SimWorld, dt: float) -> void:
 		var scale := world.light_dni / _traced_dni * dt
 		for k in _lit_tiles.size():
 			energy[_lit_tiles[k]] += _lit_power[k] * scale
+		_map_surface_light(world)
+		world.skin.light_scale = world.light_dni / _traced_dni
+		for k in _unskinned_tiles.size():
+			energy[_unskinned_tiles[k]] += _unskinned_power[k] * scale
 		for id in _obj_power:
 			var obj: SimObject = world.objects.get(id)
 			if obj != null:
 				obj.heat_in += _obj_power[id] * scale
+	else:
+		world.skin.light_scale = 0.0
 	if world.diffuse_irradiance > 0.0:
+		# Diffuse sky light on each column's top surface: into its skin (spread evenly over the
+		# face), or the tile itself when it has none (a liquid surface).
 		var per_tile := world.diffuse_irradiance * SimConst.TILE_M * SimConst.DEPTH_M * dt
 		var mat := g.material
 		var absorptivity := world.materials.sun_absorptivity
+		var skin := world.skin
+		skin.sync(world)
 		for i in g.sky_tiles(world.materials.is_gas):
-			energy[i] += per_tile * absorptivity[mat[i]]
+			var f := skin.face_of[i * 4]
+			if f >= 0:
+				skin.face_energy_in[f] += per_tile * absorptivity[mat[i]]
+			else:
+				energy[i] += per_tile * absorptivity[mat[i]]
+
+
+## Writes the traced surface light into the skin's per-strip rate (when a pass published or the
+## skin was rebuilt); a strip whose face has no skin heats its tile instead.
+func _map_surface_light(world: SimWorld) -> void:
+	var skin := world.skin
+	skin.sync(world)
+	if _skin_mapped == skin.version:
+		return
+	skin.light_w.fill(0.0)
+	_unskinned_tiles.clear()
+	_unskinned_power.clear()
+	var per_tile := 4 * SimConst.SKIN_STRIPS
+	for k in _skin_ids.size():
+		var local := skin.local_strip(_skin_ids[k])
+		if local >= 0:
+			skin.light_w[local] += _skin_power[k]
+		else:
+			_unskinned_tiles.append(_skin_ids[k] / per_tile)
+			_unskinned_power.append(_skin_power[k])
+	_skin_mapped = skin.version
+
+
+## Light arriving now on surface strip `index` (LightEngine.StripIds layout), W/m².
+func strip_irradiance(index: int, world: SimWorld) -> float:
+	var slot: int = _strip_slot.get(index, -1)
+	return strip_arriving[slot] * irradiance_scale(world) * SimConst.SKIN_STRIPS if slot >= 0 else 0.0
+
+
+## Light arriving now on the brightest surface strip of tile i, W/m² (0 if none).
+func strip_irradiance_max(i: int, world: SimWorld) -> float:
+	var best := 0.0
+	var base := i * 4 * SimConst.SKIN_STRIPS
+	for k in 4 * SimConst.SKIN_STRIPS:
+		best = maxf(best, strip_irradiance(base + k, world))
+	return best
 
 
 func _setup(world: SimWorld) -> void:

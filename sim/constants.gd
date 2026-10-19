@@ -44,6 +44,7 @@ const RESTART_ANGLE_DEG := 3.0      ## Abandon a pass in progress if the sun jum
 
 # --- Heat (§7) ---
 const HEAT_BANDS := 6               ## Heat updates one of N row bands per tick, with dt × N
+const SKIN_STRIPS := 10             ## Surface skin strips per tile face (D18): 2.5 cm each
 ## Gameplay heat-capacity dial per phase (formulas stay real, things heat on game timescales).
 const HEAT_CAPACITY_SCALE_SOLID := DAY_LENGTH_S / 86400.0
 const HEAT_CAPACITY_SCALE_LIQUID := DAY_LENGTH_S / 86400.0

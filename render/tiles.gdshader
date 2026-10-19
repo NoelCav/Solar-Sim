@@ -3,10 +3,12 @@ shader_type canvas_item;
 // per-tile color jitter, fine grain inside each tile, a lit rim where a face meets open
 // space, a dark rim underneath, and gradual darkening with depth below the surface.
 // Lighting (DisplayLight): `ambient` is the light everything gets (1 by day, near 0 at
-// night); light_tex holds, per tile, how lit each face is by light arriving on it (RGBA:
-// top, bottom, left, right; TileRenderer). Light lands on a solid block's surface, so each
-// face brightens only a thin skin along itself; see-through media (water, glass) are lit
-// through. At night only moonlit (and focused) faces show (D19).
+// night); light_tex holds how lit each surface strip is by light arriving on it (D18; one
+// texel per strip: x = tile x * strips + strip, y = tile y * 4 + face; TileRenderer). Light
+// lands on a solid block's surface, so each face brightens only a thin skin along itself,
+// strip by strip (a focus lights a spot). At night only moonlit (and focused) strips show (D19).
+
+#include "res://render/surface_strips.gdshaderinc"
 
 uniform float grain = 0.07;        // Strength of the speckle inside a tile
 uniform float jitter = 0.05;       // Per-tile brightness variation
@@ -16,6 +18,7 @@ uniform float depth_dark = 0.45;   // Darkening at full depth
 uniform float ambient = 1.0;
 uniform sampler2D light_tex : filter_nearest;
 uniform float face_skin = 0.15;    // Depth of the lit skin on exposed faces, in tiles
+uniform int strips = 10;           // Surface strips per face (SimConst.SKIN_STRIPS)
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -66,12 +69,13 @@ void fragment() {
 		}
 		col *= 1.0 - depth_dark * (float(d) + f.y) / float(depth_tiles + 1);
 	}
-	vec4 faces = texelFetch(light_tex, cell, 0);
+	// Light on the strip of each face (top, bottom, left, right) that this pixel lines up with.
+	vec4 faces = vec4(strip_texel(light_tex, cell, f, strips, 0).r, strip_texel(light_tex, cell, f, strips, 1).r,
+		strip_texel(light_tex, cell, f, strips, 2).r, strip_texel(light_tex, cell, f, strips, 3).r);
 	float lit = max(max(faces.r, faces.g), max(faces.b, faces.a));
 	if (base.a > 0.9) {
 		// Each face lights only the skin along itself.
-		vec4 dist = vec4(f.y, 1.0 - f.y, f.x, 1.0 - f.x);
-		vec4 skin = faces * (vec4(1.0) - smoothstep(vec4(0.6 * face_skin), vec4(face_skin), dist));
+		vec4 skin = faces * skin_weights(f, face_skin);
 		lit = max(max(skin.r, skin.g), max(skin.b, skin.a));
 	}
 	col *= ambient + (1.0 - ambient) * lit;

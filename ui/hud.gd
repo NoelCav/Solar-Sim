@@ -460,6 +460,9 @@ func _tile_text(i: int, cell: Vector2i) -> String:
 	var dt := t - world.ambient_k
 	var s := "[b]%s[/b]  [color=#8a93a0](%d, %d)[/color]\n" % [def.display_name if def else "?", cell.x, cell.y]
 	s += "%.1f °C  [color=#8a93a0](%+.1f vs air)[/color]" % [SimConst.k_to_c(t), dt]
+	var surface := world.skin.max_temperature(i)
+	if surface > t + 1.0:
+		s += "\nsurface up to %.0f °C" % SimConst.k_to_c(surface)
 	if def == null or not def.is_solid() and def.phase != MaterialDef.Phase.LIQUID:
 		return s
 	var light := _light_text(i)
@@ -474,11 +477,7 @@ func _light_text(i: int) -> String:
 	var irr := tp[i] * scale
 	if irr <= 0.0:
 		return "[color=#8a93a0]in shadow[/color]" if world.light_is_up else ""
-	var faces := _light.face_light
-	var arriving := 0.0   # On the brightest face
-	for f in 4:
-		arriving = maxf(arriving, faces[i * 4 + f] * scale)
-	var suns := Readout.times_light(world, arriving)
+	var suns := Readout.times_light(world, _light.strip_irradiance_max(i, world))
 	var o := i * Spectrum.BAND_COUNT
 	var bp := _light.band_power
 	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, Readout.light_name(world)] if suns >= 1.5 \

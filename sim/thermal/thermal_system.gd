@@ -10,9 +10,11 @@ extends SimSystem
 ##
 ## Pair conductances G (W/K) between 4-neighbours:
 ## - solid/liquid ↔ solid/liquid: harmonic-mean conductivity × face area / spacing
-## - surface ↔ gas: convective film h in series with half a tile of the solid
+## - liquid ↔ gas: convective film h in series with half a tile of the liquid
 ## - gas ↔ gas: eddy mixing, boosted when the lower tile is hotter (buoyancy)
-## Open gas tiles also relax toward ambient; sky-facing surfaces radiate to the sky.
+## - solid ↔ gas/liquid: through the surface skin (D18, SurfaceSkin), solved steady each tick
+##   before the band step; it carries the light that lands on solids and their sky radiation.
+## Open gas tiles also relax toward ambient; sky-facing liquid surfaces radiate to the sky.
 ##
 ## Quiet rows: a row whose tiles all share one temperature, next to a row below at that same
 ## temperature, exchanges nothing (to within 1e-4 K), so its pairs are skipped. Deep rock
@@ -41,6 +43,7 @@ var _g_down := PackedFloat32Array()      ## Per tile, to the neighbour below (0 
 var _vert_gas := PackedByteArray()       ## Per tile: this tile and the one below are both gas
 var _is_gas := PackedByteArray()         ## Per tile
 var _kernel := HeatKernel.new()
+var _skin_kernel := SkinKernel.new()
 var _objects := ObjectThermal.new()
 
 
@@ -51,14 +54,34 @@ func system_name() -> StringName:
 func tick(world: SimWorld, dt: float) -> void:
 	var h := world.grid.height
 	var bands := SimConst.HEAT_BANDS
+	step_skin(world, dt)
 	step_rows(world, dt * bands, _band * h / bands, (_band + 1) * h / bands)
 	_band = (_band + 1) % bands
 	_objects.step(world, dt)
 
 
-## One heat step of `h` seconds over the whole grid.
+## One heat step of `h` seconds over the whole grid and the skin.
 func step(world: SimWorld, h: float) -> void:
+	step_skin(world, h)
 	step_rows(world, h, 0, world.grid.height)
+
+
+## Solves the surface skin for `h` seconds: its light becomes heat in the tiles around it.
+func step_skin(world: SimWorld, h: float) -> void:
+	var skin := world.skin
+	skin.sync(world)
+	if _capacity.is_empty():
+		_setup(world.materials)
+	if _built_version != world.grid.structure_version:
+		_build(world)
+	if skin.faces == 0:
+		return
+	var g := world.grid
+	var out: Array = _skin_kernel.Solve(g.temperature, g.energy_in, skin.light_w, skin.light_scale,
+		skin.face_energy_in, skin.temperature, h, world.ambient_k - SimConst.SKY_DEPRESSION_K, radiation_enabled)
+	skin.temperature = out[0]
+	g.energy_in = out[1]
+	skin.face_energy_in = out[2]
 
 
 ## One heat step of `h` seconds for the pairs owned by rows [row0, row1).
@@ -103,6 +126,7 @@ func _setup(mats: MaterialDB) -> void:
 		elif def.phase == MaterialDef.Phase.GAS:
 			scale = SimConst.HEAT_CAPACITY_SCALE_GAS
 		_capacity[def.id] = maxf(def.tile_heat_capacity() * scale, 1e-3)
+	var solid := mats.is_solid
 	var depth := SimConst.DEPTH_M
 	var film := SimConst.CONVECTION_H * SimConst.TILE_M * depth
 	_pair_g.resize(_mat_count * _mat_count)
@@ -113,7 +137,9 @@ func _setup(mats: MaterialDB) -> void:
 			var ka := mats.conductivity[a]
 			var kb := mats.conductivity[b]
 			var c := 0.0
-			if ga and gb:
+			if solid[a] != solid[b]:
+				c = 0.0   # Through the surface skin (step_skin)
+			elif ga and gb:
 				c = SimConst.AIR_EDDY_K * depth
 			elif ga or gb:
 				var k_surface := kb if ga else ka
@@ -164,12 +190,67 @@ func _build(world: SimWorld) -> void:
 	for i in n:
 		_max_rate = maxf(_max_rate, row_sum[i] * _inv_c[i])
 	_built_version = g.structure_version
-	var sky := g.sky_tiles(world.materials.is_gas)
+	# Solid tops radiate through their skin; only liquid surfaces radiate here.
+	var sky := PackedInt32Array()
 	var sky_emissivity := PackedFloat32Array()
-	for i in sky:
-		sky_emissivity.append(world.materials.emissivity[mat[i]])
+	for i in g.sky_tiles(world.materials.is_gas):
+		if not world.materials.is_solid[mat[i]]:
+			sky.append(i)
+			sky_emissivity.append(world.materials.emissivity[mat[i]])
 	_kernel.Build(w, g.height, _inv_c, _g_right, _g_down, _vert_gas, _is_gas, sky,
 		sky_emissivity, SimConst.TILE_M * SimConst.DEPTH_M)
+	_build_skin(world)
+
+
+## Per-strip conductances of the surface skin (see SurfaceSkin for the model).
+func _build_skin(world: SimWorld) -> void:
+	var skin := world.skin
+	skin.sync(world)
+	var g := world.grid
+	var mats := world.materials
+	var mat := g.material
+	var n := skin.faces * skin.strips
+	var strip_w := SimConst.TILE_M / skin.strips
+	var area := strip_w * SimConst.DEPTH_M
+	var half_tile := area / (SimConst.TILE_M * 0.5)   # × k: half a tile of conduction for one strip
+	var sky := {}
+	for i in g.sky_tiles(mats.is_gas):
+		sky[i] = true
+	var g_body := PackedFloat32Array()
+	var g_next := PackedFloat32Array()
+	var g_lat := PackedFloat32Array()
+	var emissivity := PackedFloat32Array()
+	for arr in [g_body, g_next, g_lat, emissivity]:
+		arr.resize(n)
+	var face_sky := PackedByteArray()
+	face_sky.resize(skin.faces)
+	var run_end := {}   # Faces that end a run: no lateral conduction past them
+	for r in range(1, skin.run_start.size()):
+		run_end[skin.run_start[r] - 1] = true
+	for f in skin.faces:
+		var m := mat[skin.face_tile[f]]
+		var m_next := mat[skin.face_next[f]]
+		var k := mats.conductivity[m]
+		var next := mats.conductivity[m_next] * half_tile   # Liquid: half a tile of it
+		if mats.is_gas[m_next]:
+			next = SimConst.CONVECTION_H * area
+		face_sky[f] = 1 if skin.face_side[f] == 0 and sky.has(skin.face_tile[f]) else 0
+		for s in skin.strips:
+			var i := f * skin.strips + s
+			g_body[i] = k * half_tile
+			g_next[i] = next
+			emissivity[i] = mats.emissivity[m]
+			# To the next strip: a near-surface layer as deep as a strip is wide (k · depth).
+			g_lat[i] = k * SimConst.DEPTH_M
+		# Across the border to the next face in the run: harmonic mean of the two solids.
+		var last := f * skin.strips + skin.strips - 1
+		if not run_end.has(f):
+			var k2 := mats.conductivity[mat[skin.face_tile[f + 1]]]
+			g_lat[last] = 2.0 * k * k2 / (k + k2) * SimConst.DEPTH_M if k + k2 > 0.0 else 0.0
+		else:
+			g_lat[last] = 0.0
+	_skin_kernel.Build(skin.strips, skin.face_tile, skin.face_next, face_sky, skin.run_start, g_body, g_next,
+		g_lat, emissivity, area)
 
 
 static func _add_pair(sums: PackedFloat32Array, i: int, w: int, c: float) -> void:

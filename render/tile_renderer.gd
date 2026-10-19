@@ -44,8 +44,8 @@ func setup(p_world: SimWorld) -> void:
 	texture = _texture
 	_rebuild()
 	_light = world.get_system(&"light")
-	_light_bytes.resize(g.size() * 4)
-	_light_image = Image.create_empty(g.width, g.height, false, Image.FORMAT_RGBA8)
+	_light_bytes.resize(g.size() * 4 * SimConst.SKIN_STRIPS)
+	_light_image = Image.create_empty(g.width * SimConst.SKIN_STRIPS, g.height * 4, false, Image.FORMAT_R8)
 	_light_texture = ImageTexture.create_from_image(_light_image)
 	lit_materials.append(mat)
 
@@ -62,25 +62,31 @@ func _process(delta: float) -> void:
 	for m in lit_materials:
 		m.set_shader_parameter(&"ambient", ambient)
 		m.set_shader_parameter(&"light_tex", _light_texture)
+		m.set_shader_parameter(&"strips", SimConst.SKIN_STRIPS)
 	for item: CanvasItem in dimmed:
 		var v := maxf(ambient, dimmed[item])
 		item.modulate = Color(v, v, v, item.modulate.a)
 
 
-## Per tile face (RGBA: top, bottom, left, right), how lit it is by the light arriving on
-## it: irradiance at the view's exposure, relative to plain sunlight, 0..1.
+## Per surface strip (D18), how lit it is by the light arriving on it: irradiance at the
+## view's exposure, relative to plain sunlight, 0..1. One texel per strip: x = tile x ·
+## strips + strip, y = tile y · 4 + face.
 func _rebuild_light() -> void:
 	_light_seen = _light.trace_version
 	_light_timer = LIGHT_REFRESH_S
 	_light_bytes.fill(0)
-	var faces := _light.face_light
 	var g := world.grid
-	if faces.size() == g.size() * 4:
-		var scale := _light.irradiance_scale(world) * DisplayLight.exposure(world) / SimConst.REFERENCE_DNI
-		for i in _light.shown_lit:
-			for f in 4:
-				_light_bytes[i * 4 + f] = int(clampf(faces[i * 4 + f] * scale, 0.0, 1.0) * 255.0)
-	_light_image.set_data(g.width, g.height, false, Image.FORMAT_RGBA8, _light_bytes)
+	var n := SimConst.SKIN_STRIPS
+	var row := g.width * n
+	var scale := _light.irradiance_scale(world) * n * DisplayLight.exposure(world) / SimConst.REFERENCE_DNI
+	var ids := _light.strip_ids
+	var arriving := _light.strip_arriving
+	for k in ids.size():
+		var face := ids[k] / n            # tile * 4 + side
+		var tile := face / 4
+		var at := ((tile / g.width) * 4 + face % 4) * row + (tile % g.width) * n + ids[k] % n
+		_light_bytes[at] = int(clampf(arriving[k] * scale, 0.0, 1.0) * 255.0)
+	_light_image.set_data(row, g.height * 4, false, Image.FORMAT_R8, _light_bytes)
 	_light_texture.update(_light_image)
 
 
