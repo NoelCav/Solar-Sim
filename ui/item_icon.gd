@@ -31,7 +31,7 @@ func _draw() -> void:
 	var s := minf((size.x - 6.0) / span.x, (size.y - 6.0) / span.y)
 	var off := size * 0.5 - (lo + hi) * 0.5 * s
 	var line := Color(0.9, 0.97, 1.0, 0.95)
-	if def.is_body():
+	if def.is_closed():
 		var pts := PackedVector2Array()
 		for p in OpticsGen.outline(pieces):
 			pts.append(p * s + off)

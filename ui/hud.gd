@@ -25,6 +25,7 @@ var overlay: OverlayRenderer
 
 var _light: LightSystem
 var _heat: ThermalSystem
+var _power: PowerSystem
 var _status: Label
 var _perf: Label
 var _pause_button: Button
@@ -60,6 +61,7 @@ func setup(p_world: SimWorld, p_runner: Main, p_brush: CreativeBrush, p_tool: Ob
 	overlay = p_overlay
 	_light = world.get_system(&"light")
 	_heat = world.get_system(&"heat")
+	_power = world.get_system(&"power")
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_status()
@@ -165,7 +167,8 @@ func _update_status() -> void:
 			world.moon_illuminated * 100.0, Readout.irradiance(world.moon_dni)]
 	else:
 		sky = "Night   moon set (%.0f%% lit)" % (world.moon_illuminated * 100.0)
-	_status.text = clock + "\n" + sky + "   " + air
+	var money := "%s   grid pays %.1f ¢/kWh" % [Readout.money(world.money), Market.price_per_kwh(world) * 100.0]
+	_status.text = clock + "   " + money + "\n" + sky + "   " + air
 	_pause_button.text = "Play" if runner.paused else "Pause"
 	for k in _speed_buttons.size():
 		_speed_buttons[k].set_pressed_no_signal(not runner.paused and Main.SPEEDS[k] == runner.speed)
@@ -509,15 +512,30 @@ func _object_text(obj: SimObject) -> String:
 		s += "\n[color=#8a93a0]%s[/color]" % Readout.bands(bands[0], bands[1], bands[2])
 	else:
 		if obj.def.kind == ObjectDef.Kind.CELL:
-			var irr := obj.incident_irradiance() * _light.power_scale(world)
-			var watts := SolarCell.object_power(obj, _light.power_scale(world))
-			var eta := watts / (irr * obj.def.size_m * SimConst.DEPTH_M) if irr > 0.0 else 0.0
-			s += "\ncould make %.1f W  [color=#8a93a0](%.0f%% of %s)[/color]" % [watts, eta * 100.0,
-				Readout.irradiance(irr)]
+			s += _cell_text(obj)
+		elif obj.def.kind == ObjectDef.Kind.GRID_TIE:
+			var n := _power.network_of(world, obj)
+			if n < 0:
+				return s + "\n[color=#8a93a0]not wired: run wire to its foot[/color]\n"
+			return s + "\nselling %s at %.1f ¢/kWh\n" % [Readout.power(_power.network_power_w[n]),
+				Market.price_per_kwh(world) * 100.0]
 		s += "\nabsorbing %.1f W" % obj.absorbed_w
 		if obj.temperature_k > 0.0:
 			s += " · %.1f °C" % SimConst.k_to_c(obj.temperature_k)
 	return s + "\n"
+
+
+## What a cell makes (wired to a grid connection) or could make, and why not.
+func _cell_text(obj: SimObject) -> String:
+	var irr := obj.incident_irradiance() * _light.power_scale(world)
+	var area := obj.def.size_m * SimConst.DEPTH_M
+	if obj.power_w > 0.0:
+		return "\nmaking %s  [color=#8a93a0](%.0f%% of %s)[/color]" % [Readout.power(obj.power_w),
+			obj.power_w / (irr * area) * 100.0, Readout.irradiance(irr)]
+	var n := _power.network_of(world, obj)
+	var why := "not wired to a grid connection" if n < 0 or _power.network_grid[n] == 0 else "no light"
+	return "\ncould make %s  [color=#8a93a0](%s)[/color]" % [
+		Readout.power(SolarCell.object_power(obj, _light.power_scale(world))), why]
 
 
 # --- Helpers --------------------------------------------------------------------------------

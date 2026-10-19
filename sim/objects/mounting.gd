@@ -2,8 +2,10 @@ class_name Mounting
 extends RefCounted
 ## How objects stand in the world (ObjectDef.mount). Optics and cell panels stand on stands:
 ## a pole from the ground in the middle of a tile column, extended in tile steps. Surface cells
-## lie flat on a ground tile. Probes float. Stands are background props (D19): no optics, no
-## heat, no occupancy; the object on top is the thing in the world. The placement commands
+## and machines rest on a ground tile. Probes float. An object's port (where wire connects it,
+## D14) is at its foot: the tile just above the ground in its column, or the ground tile below.
+## Stands are background props (D19): no optics, no heat, no occupancy; the object on top is
+## the thing in the world. The placement commands
 ## snap through here, so the rule is enforced by the sim; the build ghost previews it.
 ## Objects placed with `mounted` false float freely (creative mode only).
 
@@ -25,7 +27,7 @@ static func snap_position(world: SimWorld, def: ObjectDef, wanted: Vector2) -> V
 		return Vector2.INF
 	var x := (col + 0.5) * SimConst.TILE_M
 	if def.mount == ObjectDef.Mount.GROUND:
-		return Vector2(x, ground - GROUND_LIFT_M)
+		return Vector2(x, ground - GROUND_LIFT_M - _bottom(def))
 	var height := clampf(snappedf(ground - wanted.y, HEIGHT_STEP_M), MIN_HEIGHT_M, MAX_HEIGHT_M)
 	return Vector2(x, ground - height)
 
@@ -49,6 +51,34 @@ static func ground_y(world: SimWorld, col: int, y: float) -> float:
 		if solid[g.material[g.idx(col, r)]]:
 			return r * SimConst.TILE_M
 	return INF
+
+
+## The tiles where wire connects object `obj` (D14): for a mounted object the tile at its foot
+## and the ground tile under it; for a floating one the tile it is in.
+static func port_tiles(world: SimWorld, obj: SimObject) -> PackedInt32Array:
+	var g := world.grid
+	var col := floori(obj.position.x / SimConst.TILE_M)
+	var out := PackedInt32Array()
+	if not obj.mounted:
+		var row := floori(obj.position.y / SimConst.TILE_M)
+		if g.in_bounds(col, row):
+			out.append(g.idx(col, row))
+		return out
+	var base := stand_base(world, obj.position)
+	if is_finite(base):
+		var ground_row := roundi(base / SimConst.TILE_M)
+		for row in [ground_row - 1, ground_row]:
+			if g.in_bounds(col, row):
+				out.append(g.idx(col, row))
+	return out
+
+
+## Lowest point of `def`'s shape below its center at angle 0, m (what rests on the ground).
+static func _bottom(def: ObjectDef) -> float:
+	var low := 0.0
+	for p: Vector2 in OpticsGen.outline(def.build_pieces()):
+		low = maxf(low, p.y)
+	return low
 
 
 ## Base of the stand under an object at `at` (m): the ground below it, or INF if there is none.

@@ -50,6 +50,7 @@ var objects: Dictionary[int, SimObject] = {}
 var objects_version: int = 0            ## Bumped whenever objects are added, removed or moved
 ## Creative mode: objects may float off their stands (Mounting). On while the game is tested.
 var creative := true
+var money := 0.0                        ## $, earned by selling power (PowerSystem, Market)
 var next_object_id: int = 1
 
 ## Systems in tick order (§5.3). Later milestones insert objects, power, pipes,
@@ -66,7 +67,7 @@ func _init(p_materials: MaterialDB, width: int, height: int, p_seed: int = 1) ->
 	rng.seed = p_seed
 	grid = TileGrid.new(width, height, site_mean_ambient_k)
 	time_s = SimConst.START_TIME_OF_DAY * SimConst.DAY_LENGTH_S
-	systems = [EnvironmentSystem.new(), LightSystem.new(), ThermalSystem.new()]
+	systems = [EnvironmentSystem.new(), LightSystem.new(), PowerSystem.new(), ThermalSystem.new()]
 	refresh_environment()
 
 

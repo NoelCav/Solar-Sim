@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ObjectDef" format=3]
+
+[ext_resource type="Script" path="res://sim/objects/object_def.gd" id="1_objdef"]
+
+[resource]
+script = ExtResource("1_objdef")
+key = &"grid_tie"
+display_name = "Grid Connection"
+kind = 5
+mount = 1
+material = &"steel"
+color = Color(0.36, 0.42, 0.38, 1)
+size_m = 0.5
+thickness_m = 0.75

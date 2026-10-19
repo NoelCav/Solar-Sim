@@ -1,9 +1,10 @@
 class_name ObjectDef
 extends Resource
-## Data definition of a placeable object (design doc §9). M1 covers optical objects;
-## ports, thermal nodes and construction costs arrive with their systems.
+## Data definition of a placeable object (design doc §9): optical objects (lens, mirror, prism,
+## probe, cell) and machines (grid connection; later batteries and consumers). Machines are
+## boxes behind the play plane (D19): no optics, and they only collide with other machines.
 
-enum Kind { LENS, MIRROR, PRISM, PROBE, CELL }
+enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE }
 ## How it stands in the world (Mounting): on a stand, flat on the ground, or floating.
 enum Mount { STAND, GROUND, FREE }
 
@@ -16,9 +17,9 @@ enum Mount { STAND, GROUND, FREE }
 @export var color: Color = Color(0.8, 0.9, 1.0, 0.35)
 
 @export_group("Shape")
-## Lens diameter, prism base, or mirror/probe/cell length, m.
+## Lens diameter, prism base, mirror/probe/cell length, or machine width, m.
 @export var size_m: float = 1.0
-## Lens center thickness, m (grows automatically if the faces would cross).
+## Lens center thickness or machine height, m (a lens grows it if its faces would cross).
 @export var thickness_m: float = 0.1
 ## Lens face radii, m; 0 = flat.
 @export var radius_front_m: float = 1.0
@@ -56,10 +57,22 @@ func build_pieces() -> Array:
 			return OpticsGen.convex_lens(size_m, radius_front_m, radius_back_m, thickness_m, arc_segments)
 		Kind.PRISM:
 			return OpticsGen.prism(size_m, apex_angle_deg)
+		Kind.GRID_TIE:
+			return OpticsGen.box(size_m, thickness_m)
 		_:
 			return OpticsGen.flat_strip(size_m)
 
 
-## True for objects whose pieces enclose a body of `material`.
+## True for objects whose pieces enclose an optical body of `material`.
 func is_body() -> bool:
 	return kind == Kind.LENS or kind == Kind.PRISM
+
+
+## True for machines: boxes behind the play plane, outside the optics (D19).
+func is_machine() -> bool:
+	return kind == Kind.GRID_TIE
+
+
+## True when the shape is a closed outline (bodies and machines), not an open surface.
+func is_closed() -> bool:
+	return is_body() or is_machine()

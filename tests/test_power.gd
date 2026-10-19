@@ -1,5 +1,7 @@
 extends TestSuite
-## Solar cell model checks (design doc §9.1, SolarCell).
+## Solar cell model checks (design doc §9.1, SolarCell), wires and selling power (§10).
+
+const CELL_SI := preload("res://data/objects/cell_si.tres")
 
 
 func _efficiency(def: ObjectDef, suns: float, temp_k: float = SolarCell.T_REF_K) -> float:
@@ -34,7 +36,7 @@ func test_concentration_helps_then_hurts() -> void:
 ## absorbs what its coating doesn't reflect, and makes about a fifth of it as power. Turned
 ## over, its back takes the light and nothing is recorded.
 func test_cell_reads_the_sun_on_its_front() -> void:
-	var cell: ObjectDef = load("res://data/objects/cell_si.tres")
+	var cell := CELL_SI
 	for flipped in [false, true]:
 		var world := SimWorld.new(load_materials(), 16, 16, 1)
 		world.time_s = 0.5 * SimConst.DAY_LENGTH_S
@@ -88,3 +90,65 @@ func test_wires_form_networks() -> void:
 	world.flush_commands()
 	nets.sync(g, g.wire)
 	check_eq(nets.count, 3, "undo splits them")
+
+
+## A ground of stone (rows 10+) at noon with a cell panel on a 1 m stand (column 8) and a grid
+## connection (column 12); `wired` lays wire along the ground between their feet.
+func _array_world(wired: bool) -> SimWorld:
+	var world := SimWorld.new(load_materials(), 16, 16, 1)
+	var g := world.grid
+	var stone := world.materials.id_of(&"stone")
+	for i in g.size():
+		g.material[i] = stone if i / g.width >= 10 else MaterialDB.AIR_ID
+	g.mark_structure_changed()
+	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.tick()
+	world.enqueue(PlaceObjectCommand.new(CELL_SI, Vector2(2.1, 1.5), 0.0, true))
+	world.enqueue(PlaceObjectCommand.new(load("res://data/objects/grid_tie.tres"), Vector2(3.1, 2.0), 0.0, true))
+	if wired:
+		var cells := PackedInt32Array()
+		for x in range(8, 13):
+			cells.append(g.idx(x, 9))
+		world.enqueue(PaintWiresCommand.new(cells))
+	world.flush_commands()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	return world
+
+
+## A cell wired to a grid connection sells what it makes (§10); unwired, it sells nothing.
+## Delivered energy leaves the cell's heat, so a working cell runs cooler than an idle one.
+func test_wired_cell_sells_power() -> void:
+	var temps := []
+	for wired in [true, false]:
+		var world := _array_world(wired)
+		check_eq(world.objects.size(), 2, "cell and grid connection placed")
+		var cell: SimObject = world.objects[1]
+		var tie: SimObject = world.objects[2]
+		check_near(tie.position.y + tie.def.thickness_m * 0.5, 2.5 - Mounting.GROUND_LIFT_M, 1e-4,
+			"grid connection rests on the ground")
+		var light: LightSystem = world.get_system(&"light")
+		var could := SolarCell.object_power(cell, light.power_scale(world))   # Power runs before heat
+		world.tick()
+		if wired:
+			check(cell.power_w > 30.0, "wired cell delivers %.1f W" % cell.power_w)
+			check_near(cell.power_w, could, 1e-3, "all it can make")
+			check(world.money > 0.0, "money earned %.6f" % world.money)
+		else:
+			check_eq(cell.power_w, 0.0, "unwired: open circuit")
+			check_eq(world.money, 0.0, "nothing sold")
+		for k in SimConst.TICK_RATE * 30:
+			world.tick()
+		temps.append(cell.temperature_k)
+	check(temps[0] < temps[1] - 0.5, "working cell cooler: %.2f vs %.2f K" % [temps[0], temps[1]])
+
+
+## The duck curve (§10): power is cheap at noon, dear in the evening, continuous over midnight.
+func test_duck_curve() -> void:
+	var world := SimWorld.new(load_materials(), 4, 4, 1)
+	var at := func(hour: float) -> float:
+		world.time_s = hour / 24.0 * SimConst.DAY_LENGTH_S
+		return Market.price_per_kwh(world)
+	check(at.call(12.0) < at.call(8.0) and at.call(12.0) < at.call(19.0), "midday dip")
+	check(at.call(19.0) > at.call(17.0) and at.call(19.0) > at.call(21.0), "evening peak")
+	check_near(at.call(23.999), at.call(0.0), 1e-3, "continuous at midnight")

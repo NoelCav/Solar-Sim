@@ -126,7 +126,7 @@ func hovered_object() -> int:
 	var best_d := PICK_PX / (SimConst.TILE_PX / SimConst.TILE_M * _zoom())
 	for obj: SimObject in world.objects.values():
 		var pieces := obj.world_pieces()
-		if obj.def.is_body() and Geometry2D.is_point_in_polygon(m, OpticsGen.outline(pieces)):
+		if obj.def.is_closed() and Geometry2D.is_point_in_polygon(m, OpticsGen.outline(pieces)):
 			return obj.id
 		for piece in pieces:
 			var pts: PackedVector2Array = piece[0]

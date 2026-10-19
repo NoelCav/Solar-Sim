@@ -100,7 +100,8 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	spectrum = Spectrum.make_zero()
 	var objects_now := {}
 	for obj: SimObject in world.objects.values():
-		objects_now[obj.id] = [obj.position, obj.angle, obj.def]
+		if not obj.def.is_machine():
+			objects_now[obj.id] = [obj.position, obj.angle, obj.def]
 	if world.light_is_up and world.light_dni > 0.0 and world.light_direction.y > 1e-3:
 		var max_drift := SimConst.RESTART_ANGLE_DEG if edit_only else SimConst.RETRACE_ANGLE_DEG
 		var reuse := prev != null and prev.dir != Vector2.ZERO \
@@ -160,7 +161,8 @@ func step(max_paths: int) -> bool:
 func _update_accel(world: SimWorld) -> void:
 	var now := {}
 	for obj: SimObject in world.objects.values():
-		now[obj.id] = [obj.position, obj.angle, obj.def]
+		if not obj.def.is_machine():
+			now[obj.id] = [obj.position, obj.angle, obj.def]
 	var tile_areas := []
 	var objs := PackedInt32Array()
 	var full := _accel_key.x < 0
@@ -228,6 +230,8 @@ func _sync_surfaces(world: SimWorld) -> void:
 	var mats := world.materials
 	for obj: SimObject in world.objects.values():
 		var def := obj.def
+		if def.is_machine():
+			continue   # Behind the play plane (D19)
 		var coating := SurfaceSet.Coating.NONE
 		var back := MaterialDB.AIR_ID
 		match def.kind:

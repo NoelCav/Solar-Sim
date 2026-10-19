@@ -4,9 +4,10 @@ extends RefCounted
 ## (solids and powders; air and liquids are free, so a lens can sit in water). Commands
 ## that place or move objects ask here and refuse otherwise; the build ghost shows it.
 ##
-## A shape is its outline (OpticsGen.outline): closed for bodies (lens, prism), open for
-## surfaces (mirror, probe). Two shapes overlap when their edges cross or one lies inside
-## the other's closed outline.
+## A shape is its outline (OpticsGen.outline): closed for bodies (lens, prism) and machines,
+## open for surfaces (mirror, probe, cell). Two shapes overlap when their edges cross or one
+## lies inside the other's closed outline. Machines are behind the play plane (D19): they
+## collide with other machines and the ground, not with optics.
 
 
 ## True when `def` at `position`, `angle` overlaps nothing; `ignore_id` is the object being
@@ -14,13 +15,13 @@ extends RefCounted
 static func is_clear(world: SimWorld, def: ObjectDef, position: Vector2, angle: float,
 		ignore_id := -1) -> bool:
 	var shape := OpticsGen.outline(OpticsGen.transformed(def.build_pieces(), Transform2D(angle, position)))
-	var closed := def.is_body()
+	var closed := def.is_closed()
 	var box := _bounds(shape)
 	for obj: SimObject in world.objects.values():
-		if obj.id == ignore_id:
+		if obj.id == ignore_id or obj.def.is_machine() != def.is_machine():
 			continue
 		var other := OpticsGen.outline(obj.world_pieces())
-		if box.intersects(_bounds(other), true) and overlaps(shape, closed, other, obj.def.is_body()):
+		if box.intersects(_bounds(other), true) and overlaps(shape, closed, other, obj.def.is_closed()):
 			return false
 	return not _touches_solid(world, shape, closed, box)
 

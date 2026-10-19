@@ -19,6 +19,8 @@ var incident := Spectrum.make_zero()
 ## around it) and energy received this tick (light), J.
 var temperature_k := 0.0
 var heat_in := 0.0
+## Electrical power it delivers this tick, W (PowerSystem; cells on a network that sells).
+var power_w := 0.0
 
 
 func _init(p_id: int, p_def: ObjectDef, p_position: Vector2, p_angle: float) -> void:

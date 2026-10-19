@@ -101,6 +101,15 @@ static func _arc_face(half: float, radius: float, vertex_y: float, side: float, 
 	return [pts, nrm]
 
 
+## Axis-aligned box centered on the origin (machine bodies), in outline order.
+static func box(width: float, height: float) -> Array:
+	var a := Vector2(-width, -height) * 0.5
+	var b := Vector2(width, -height) * 0.5
+	var c := Vector2(width, height) * 0.5
+	var d := Vector2(-width, height) * 0.5
+	return [_flat(a, b, Vector2.UP), _flat(b, c, Vector2.RIGHT), _flat(c, d, Vector2.DOWN), _flat(d, a, Vector2.LEFT)]
+
+
 static func _flat(p0: Vector2, p1: Vector2, n: Vector2) -> Array:
 	return [PackedVector2Array([p0, p1]), PackedVector2Array([n, n])]
 

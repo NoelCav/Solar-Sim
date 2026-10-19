@@ -19,6 +19,20 @@ static func irradiance(w_m2: float) -> String:
 	return "%.1f µW/m²" % (w_m2 * 1e6)
 
 
+## Money, e.g. "$12.34" (cents shown to a hundredth while amounts are small).
+static func money(dollars: float) -> String:
+	return "$%.2f" % dollars if absf(dollars) >= 10.0 else "$%.4f" % dollars
+
+
+## Electrical power with a unit that fits its size.
+static func power(watts: float) -> String:
+	if absf(watts) >= 1e6:
+		return "%.2f MW" % (watts / 1e6)
+	if absf(watts) >= 1e3:
+		return "%.2f kW" % (watts / 1e3)
+	return "%.1f W" % watts
+
+
 ## Irradiance split by Spectrum band, e.g. "UV 4 W/m² · visible 410 W/m² · IR 520 W/m²".
 static func bands(uv: float, visible: float, infrared: float) -> String:
 	return "UV %s · visible %s · IR %s" % [irradiance(uv), irradiance(visible), irradiance(infrared)]

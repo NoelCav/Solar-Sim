@@ -23,6 +23,7 @@ const COMMANDS := {
 	"move": "{id, x, y}",
 	"rotate": "{id, angle} absolute or {id, by}",
 	"remove": "{id}",
+	"power": "money, grid price, and each wire network: tiles, grid connection, W sold, cells on it",
 	"wire": "{x0, y0, x1, y1, remove: false}: lay (or remove) wire along an L from (x0, y0) across, then "
 		+ "down/up to (x1, y1)",
 	"time": "{hour}: jump to that hour of the current day (24+ = next day)",
@@ -103,7 +104,8 @@ func _object_info(obj: SimObject) -> Dictionary:
 	if obj.def.kind == ObjectDef.Kind.CELL:
 		var light: LightSystem = _main.world.get_system(&"light")
 		d["front_w_m2"] = snappedf(obj.incident_irradiance() * light.power_scale(_main.world), 0.01)
-		d["power_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(_main.world)), 0.001)
+		d["could_make_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(_main.world)), 0.001)
+		d["delivering_w"] = snappedf(obj.power_w, 0.001)
 	return d
 
 
@@ -332,6 +334,23 @@ func _cmd_wire(a: Dictionary) -> Dictionary:
 			cells.append(g.idx(c1.x, y))
 	_main.world.enqueue(PaintWiresCommand.new(cells, 0 if bool(a.get("remove", false)) else 1))
 	return {"ok": true, "tiles": cells.size()}
+
+
+func _cmd_power(_a: Dictionary) -> Dictionary:
+	var w := _main.world
+	var power: PowerSystem = w.get_system(&"power")
+	power.networks.sync(w.grid, w.grid.wire)
+	var nets := []
+	for n in power.networks.count:
+		nets.append({"network": n, "tiles": power.networks.network.count(n), "grid": power.network_grid[n] == 1
+			if n < power.network_grid.size() else false,
+			"sold_w": snappedf(power.network_power_w[n], 0.001) if n < power.network_power_w.size() else 0.0,
+			"objects": []})
+	for obj: SimObject in w.objects.values():
+		var n := power.network_of(w, obj)
+		if n >= 0:
+			nets[n]["objects"].append(obj.id)
+	return {"money": w.money, "price_per_kwh": snappedf(Market.price_per_kwh(w), 0.0001), "networks": nets}
 
 
 func _cmd_remove(a: Dictionary) -> Dictionary:
