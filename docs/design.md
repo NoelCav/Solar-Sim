@@ -460,5 +460,5 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - Tuning: ray count/spacing, heat-capacity scale, dn/dT exaggeration.
 - Wind and weather depth.
 - ~~GDScript vs. C#/GDExtension port~~ — done in C# (§18.4).
-- Thermal tuning: heat-capacity dial vs. 25 cm tiles averaging away focal spots (the 1.5 m acrylic demo lens raises its focal tile only ~0.3 K/s).
+- ~~Thermal tuning~~ — solid/liquid heat capacity now scales with the day compression (DAY_LENGTH_S / 86400 ≈ 1/120), so ground warms and cools on a realistic daily cycle (dirt surface ~16 → 49 °C, subsurface lags by hours) and focal spots heat ~6× faster than before.
 - Lens absorption heats host air tiles until M7 thermal slices; acceptable stopgap?

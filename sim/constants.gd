@@ -47,8 +47,8 @@ const RESTART_ANGLE_DEG := 3.0      ## Abandon a pass in progress if the sun jum
 # --- Heat (§7) ---
 const HEAT_BANDS := 6               ## Heat updates one of N row bands per tick, with dt × N
 ## Gameplay heat-capacity dial per phase (formulas stay real, things heat on game timescales).
-const HEAT_CAPACITY_SCALE_SOLID := 0.05
-const HEAT_CAPACITY_SCALE_LIQUID := 0.05
+const HEAT_CAPACITY_SCALE_SOLID := DAY_LENGTH_S / 86400.0
+const HEAT_CAPACITY_SCALE_LIQUID := DAY_LENGTH_S / 86400.0
 const HEAT_CAPACITY_SCALE_GAS := 1.0
 const CONVECTION_H := 10.0          ## W/(m²·K), solid/liquid surface ↔ air
 const AIR_EDDY_K := 1.0             ## W/(m·K), effective air↔air conductivity (mixing)

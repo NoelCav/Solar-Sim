@@ -11,7 +11,6 @@ extends MeshInstance2D
 const REFERENCE_DNI := 1000.0       ## Irradiance that tones to BeamGeometry.SUN_LEVEL
 const SHEET_LEVEL := 0.07           ## Brightness of the direct-light sheet
 const VERTEX_SCALE := 4.0           ## Vertex colors are stored /4 and scaled back by self_modulate
-const RAY_WIDTH_PX := 1.5
 const FADE_S := 0.25                ## Crossfade from the previous light to a newly published one
 
 var world: SimWorld
@@ -165,8 +164,11 @@ func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -
 	var from := _light.ray_from
 	var to := _light.ray_to
 	var power := _light.ray_power
-	# A pooled reflection ray stands for REFL_POOL_M of wavefront.
+	# A pooled reflection ray stands for REFL_POOL_M of wavefront, so it is drawn as a soft
+	# strip that wide (bright on its center line, fading to nothing at its edges, same total)
+	# rather than a hairline: weak secondary light reads as haze, not as stray lines.
 	var width_m := SimConst.REFL_POOL_M
+	var half := width_m * 0.5 * px
 	for k in from.size():
 		var rgb := Vector3.ZERO
 		for b in Spectrum.BIN_COUNT:
@@ -177,8 +179,10 @@ func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -
 			continue
 		var a := from[k] * px
 		var b2 := to[k] * px
-		var side := (b2 - a).normalized().orthogonal() * (RAY_WIDTH_PX * 0.5)
-		var c := Color(rgb.x / VERTEX_SCALE, rgb.y / VERTEX_SCALE, rgb.z / VERTEX_SCALE, 1.0)
-		verts.append_array([a - side, b2 - side, b2 + side, a - side, b2 + side, a + side])
-		for j in 6:
-			cols.append(c)
+		var side := (b2 - a).normalized().orthogonal() * half
+		var c := Color(rgb.x * 2.0 / VERTEX_SCALE, rgb.y * 2.0 / VERTEX_SCALE, rgb.z * 2.0 / VERTEX_SCALE, 1.0)
+		var edge := Color(0, 0, 0, 1)
+		# Two quads: edge → center line → other edge (a triangle-shaped profile).
+		verts.append_array([a - side, b2 - side, b2, a - side, b2, a,
+			a, b2, b2 + side, a, b2 + side, a + side])
+		cols.append_array([edge, edge, c, edge, c, c, c, c, edge, c, edge, edge])

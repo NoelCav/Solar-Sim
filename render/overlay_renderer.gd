@@ -4,14 +4,14 @@ extends Sprite2D
 ## - Normal view: lit surfaces glow (additively) with absorbed light, log scale, so it is
 ##   obvious where light lands and how concentrated it is.
 ## - Light / UV / Infrared views: absorbed irradiance in that band, log scale.
-## - Heat view: temperature relative to the site's mean ambient (deep ground stays neutral).
+## - Heat view: every tile colored by its temperature (absolute °C): solids fully, air fainter.
 ## Also tracks the peak value for the on-map marker and describes its legend.
 
 const REFRESH_S := 0.2
-const HOT_SPAN_K := 600.0     ## ΔT above the site mean that maps to white
-const COLD_SPAN_K := 25.0     ## ΔT below the site mean that maps to full blue
-## ΔT hidden as unremarkable: the daily ambient swing plus a margin.
-const HEAT_DEADZONE_K := SimConst.AMBIENT_SWING_K + 2.0
+const HEAT_COLD_C := -10.0    ## Bottom of the heat scale
+const HEAT_WARM_C := 50.0     ## Linear up to here (everyday temperatures get half the scale)
+const HEAT_HOT_C := 1500.0    ## Log above, up to here (melting glass)
+const AIR_ALPHA := 0.45       ## Air shows fainter than solids in the heat view
 const IRR_MIN := 10.0         ## W/m² at the bottom of the light scale
 const IRR_MAX := 1e6          ## W/m² at the top
 const GLOW_MIN := 300.0       ## Normal view: absorbed W/m² where the surface glow starts
@@ -41,6 +41,7 @@ var heat_gradient := Gradient.new()
 var light_gradient := Gradient.new()
 var _heat_lut := PackedByteArray()
 var _light_lut := PackedByteArray()
+var _solid_lut := PackedByteArray()   ## 1 per material id that is not a gas
 
 
 func setup(p_world: SimWorld) -> void:
@@ -57,9 +58,10 @@ func setup(p_world: SimWorld) -> void:
 	_image = Image.create_empty(g.width, g.height, false, Image.FORMAT_RGBA8)
 	_texture = ImageTexture.create_from_image(_image)
 	texture = _texture
-	heat_gradient.offsets = PackedFloat32Array([0.0, 0.25, 0.55, 0.8, 1.0])
-	heat_gradient.colors = PackedColorArray([Color(0.1, 0.0, 0.2, 0.0), Color(0.6, 0.0, 0.4, 0.75),
-		Color(1.0, 0.3, 0.0, 0.85), Color(1.0, 0.85, 0.1, 0.9), Color(1.0, 1.0, 1.0, 0.95)])
+	heat_gradient.offsets = PackedFloat32Array([0.0, 0.17, 0.33, 0.5, 0.62, 0.78, 1.0])
+	heat_gradient.colors = PackedColorArray([Color(0.15, 0.1, 0.6, 0.9), Color(0.1, 0.45, 0.95, 0.9),
+		Color(0.1, 0.75, 0.6, 0.9), Color(0.95, 0.85, 0.2, 0.9), Color(1.0, 0.45, 0.05, 0.92),
+		Color(0.85, 0.05, 0.1, 0.95), Color(1.0, 1.0, 1.0, 0.97)])
 	light_gradient.offsets = PackedFloat32Array([0.0, 0.3, 0.55, 0.8, 1.0])
 	light_gradient.colors = PackedColorArray([Color(0.05, 0.1, 0.4, 0.55), Color(0.1, 0.55, 0.9, 0.75),
 		Color(0.2, 0.9, 0.4, 0.85), Color(1.0, 0.85, 0.1, 0.9), Color(1.0, 1.0, 1.0, 0.95)])
@@ -71,10 +73,8 @@ func setup(p_world: SimWorld) -> void:
 func legend() -> Dictionary:
 	match ViewMode.overlay(view):
 		ViewMode.Overlay.TEMPERATURE:
-			var mean := SimConst.k_to_c(world.site_mean_ambient_k)
-			return {"title": "Temperature (hidden within ±%.0f K of %.0f °C)" % [HEAT_DEADZONE_K, mean],
-				"gradient": heat_gradient, "lo": "%.0f °C" % (mean + HEAT_DEADZONE_K),
-				"hi": "%.0f °C" % (mean + HOT_SPAN_K)}
+			return {"title": "Temperature (linear to %.0f °C, then log)" % HEAT_WARM_C,
+				"gradient": heat_gradient, "lo": "%.0f °C" % HEAT_COLD_C, "hi": "%.0f °C" % HEAT_HOT_C}
 		ViewMode.Overlay.ABSORBED:
 			var band := ViewMode.overlay_band(view, wavelength)
 			return {"title": "Absorbed %s" % ("light" if band < 0 else Spectrum.BAND_NAMES[band]),
@@ -105,26 +105,31 @@ func _process(delta: float) -> void:
 func _fill_heat() -> void:
 	var g := world.grid
 	var temp := g.temperature
-	var mean := world.site_mean_ambient_k
-	var dz := HEAT_DEADZONE_K
-	var log_span := log(1.0 + HOT_SPAN_K - dz)
+	var mat := g.material
+	if _solid_lut.size() != world.materials.count():
+		_solid_lut.resize(world.materials.count())
+		for def in world.materials.placeable():
+			_solid_lut[def.id] = 1 if def.phase != MaterialDef.Phase.GAS else 0
+	var air_a := AIR_ALPHA
 	var hottest := -INF
 	for i in g.size():
-		var d := temp[i] - mean
-		var o := i * 4
-		if d > hottest:
-			hottest = d
+		var t := temp[i]
+		if t > hottest:
+			hottest = t
 			peak_tile = i
-		if d < -dz:
-			_bytes[o] = 40
-			_bytes[o + 1] = 120
-			_bytes[o + 2] = 255
-			_bytes[o + 3] = int(clampf((-d - dz) / COLD_SPAN_K, 0.0, 1.0) * 200.0)
-		elif d <= dz:
-			_bytes[o + 3] = 0
-		else:
-			_put(_heat_lut, o, log(1.0 + d - dz) / log_span)
+		var o := i * 4
+		_put(_heat_lut, o, heat_x(SimConst.k_to_c(t)))
+		if _solid_lut[mat[i]] == 0:
+			_bytes[o + 3] = int(_bytes[o + 3] * air_a)
 	peak_value = temp[peak_tile] if peak_tile >= 0 else 0.0
+
+
+## Position on the heat scale (0–1) of a temperature in °C: linear through everyday
+## temperatures, logarithmic above so a 1000 °C focus still reads.
+static func heat_x(c: float) -> float:
+	if c <= HEAT_WARM_C:
+		return clampf((c - HEAT_COLD_C) / (HEAT_WARM_C - HEAT_COLD_C), 0.0, 1.0) * 0.5
+	return 0.5 + 0.5 * clampf(log(1.0 + c - HEAT_WARM_C) / log(1.0 + HEAT_HOT_C - HEAT_WARM_C), 0.0, 1.0)
 
 
 ## Absorbed light from the published lit tiles only; `band` -1 = all light.

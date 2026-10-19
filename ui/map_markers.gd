@@ -29,7 +29,7 @@ func _draw() -> void:
 	var text := ""
 	match ViewMode.overlay(view):
 		ViewMode.Overlay.TEMPERATURE:
-			if overlay.peak_value - world.site_mean_ambient_k < OverlayRenderer.HEAT_DEADZONE_K:
+			if overlay.peak_value - world.ambient_k < 15.0:   # Nothing notably hot
 				return
 			text = "hottest %.0f °C" % SimConst.k_to_c(overlay.peak_value)
 		ViewMode.Overlay.ABSORBED:

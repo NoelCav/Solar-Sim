@@ -12,7 +12,7 @@ const HINTS: Array[String] = [
 	"All wavelengths in false color; tiles show absorbed light",
 	"Ultraviolet only; tiles show absorbed UV",
 	"Near and far infrared only; tiles show absorbed IR",
-	"Temperature relative to the site's mean",
+	"Temperature of every tile, ground and air",
 ]
 
 ## Wavelength filter stops: -1 (all), then one per spectral bin.
