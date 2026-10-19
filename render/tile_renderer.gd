@@ -1,7 +1,7 @@
 class_name TileRenderer
 extends Sprite2D
-## Debug tile view: one texel per tile, scaled up with nearest filtering.
-## Reads sim state only; rebuilds when the grid's structure_version changes.
+## Tile view: one texel per tile, scaled up and shaded per pixel by tiles.gdshader (grain,
+## bevels, depth). Reads sim state only; rebuilds when the grid's structure_version changes.
 
 var world: SimWorld
 
@@ -17,6 +17,9 @@ func setup(p_world: SimWorld) -> void:
 	centered = false
 	scale = Vector2.ONE * SimConst.TILE_PX
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://render/tiles.gdshader")
+	material = mat
 	_build_palette()
 	var g := world.grid
 	_bytes.resize(g.size() * 4)

@@ -5,6 +5,7 @@ extends Node2D
 
 var world: SimWorld
 var highlighted_id := -1
+var selected_id := -1
 
 var _font: Font
 
@@ -26,7 +27,7 @@ func _draw() -> void:
 	for obj: SimObject in world.objects.values():
 		var def := obj.def
 		var pieces := obj.world_pieces()
-		var hl := obj.id == highlighted_id
+		var hl := obj.id == highlighted_id or obj.id == selected_id
 		match def.kind:
 			ObjectDef.Kind.LENS, ObjectDef.Kind.PRISM:
 				var outline := OpticsGen.outline(pieces)
@@ -37,6 +38,8 @@ func _draw() -> void:
 					draw_colored_polygon(pts, def.color)
 					pts.append(pts[0])
 					var edge := Color(0.9, 0.97, 1.0, 0.9 if hl else 0.6)
+					if obj.id == selected_id:
+						edge = Color(1.0, 0.85, 0.45)
 					draw_polyline(pts, edge, 2.0 if hl else 1.0, true)
 			ObjectDef.Kind.MIRROR:
 				var a: Vector2 = pieces[0][0][0] * px

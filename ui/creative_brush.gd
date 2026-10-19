@@ -1,50 +1,54 @@
 class_name CreativeBrush
 extends Node2D
-## Minimal creative-mode painting (full creative tools are M2).
-## LMB paints the selected material, RMB erases to air, Q/E cycle material,
-## [ and ] change brush size, Ctrl+Z undoes. All edits go through commands (D6).
+## Tile painting (the Paint tool; ObjectTool switches it on). LMB paints the selected
+## material, RMB erases to air, Q/E cycle material, [ and ] change brush size.
+## Ctrl+Z undoes in any tool. All edits go through commands (D6).
 
 var world: SimWorld
 var selected_index := 0
 var brush_radius := 0
-var enabled := true      ## False while the object tool owns the mouse
+var enabled := false     ## True while the Paint tool is active
+var pointer := Vector2(-1e6, -1e6)   ## Last pointer position, viewport pixels (set by ObjectTool)
 
-var _palette: Array[MaterialDef] = []
+var palette: Array[MaterialDef] = []
 var _painting_button := MOUSE_BUTTON_NONE
 var _last_cell := Vector2i(-1, -1)
 
 
 func setup(p_world: SimWorld) -> void:
 	world = p_world
-	_palette.assign(world.materials.placeable().filter(
+	palette.assign(world.materials.placeable().filter(
 		func(d: MaterialDef) -> bool: return d.id != MaterialDB.AIR_ID))
-	selected_index = maxi(0, _palette.find(world.materials.get_by_key(&"stone")))
+	selected_index = maxi(0, palette.find(world.materials.get_by_key(&"stone")))
 	z_index = 10
 
 
 func selected() -> MaterialDef:
-	return _palette[selected_index] if not _palette.is_empty() else null
+	return palette[selected_index] if not palette.is_empty() else null
 
 
 func hovered_cell() -> Vector2i:
-	var p := get_global_mouse_position() / SimConst.TILE_PX
+	var p := get_viewport().get_canvas_transform().affine_inverse() * pointer / SimConst.TILE_PX
 	return Vector2i(floori(p.x), floori(p.y))
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"brush_next"):
-		selected_index = (selected_index + 1) % _palette.size()
+	if event.is_action_pressed(&"undo"):
+		world.enqueue(UndoCommand.new())
+	elif not enabled:
+		return
+	elif event.is_action_pressed(&"brush_next"):
+		selected_index = (selected_index + 1) % palette.size()
 	elif event.is_action_pressed(&"brush_prev"):
-		selected_index = (selected_index - 1 + _palette.size()) % _palette.size()
+		selected_index = (selected_index - 1 + palette.size()) % palette.size()
 	elif event.is_action_pressed(&"brush_bigger"):
 		brush_radius = mini(brush_radius + 1, 8)
 	elif event.is_action_pressed(&"brush_smaller"):
 		brush_radius = maxi(brush_radius - 1, 0)
-	elif event.is_action_pressed(&"undo"):
-		world.enqueue(UndoCommand.new())
-	elif event is InputEventMouseButton and enabled:
+	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+			get_viewport().set_input_as_handled()
 			if mb.pressed:
 				_painting_button = mb.button_index
 				_last_cell = Vector2i(-1, -1)

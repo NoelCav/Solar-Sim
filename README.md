@@ -13,19 +13,21 @@ godot --path .
 
 The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens. Hover anything for the inspector (material, temperature, absorbed light by band, object readings).
 
-Controls:
+Controls (the window opens maximized and the interface scales with it; every key below also has a button):
 
 | Keys | Action |
 |---|---|
+| Select tool (Esc, 0) — default | Click an object to select it, drag to move, drag its ring handle to tilt (Ctrl snaps 15°); drag empty space to pan |
+| Build tool (B, 1–5) | Pick an item from the bar, LMB place (R/F tilt the ghost first), RMB back to Select |
+| Paint tool (T) | LMB paint, RMB erase, Q/E or the swatches for material, `[` `]` size |
 | WASD / middle-drag, wheel | Pan, zoom |
+| R / F (Shift = fine), Shift+wheel | Tilt the selected or hovered object |
+| X / Delete | Delete the selected or hovered object |
 | Space, Tab | Pause, cycle speed (1× 2× 4×) |
 | `,` `.` | Time −/+ 1 hour |
 | H, or the view bar (top right) | Views: Normal · Light (all wavelengths, false color) · UV · Infrared · Heat |
-| F1 | Hide/show the help bar |
-| 0 | Tile brush: LMB paint, RMB erase, Q/E material, `[` `]` size |
-| 1–5 | Object tool: LMB place or drag, RMB remove |
-| R / F (Shift = fine) | Rotate hovered object |
-| X / Delete | Delete hovered object |
+| G / J, or the wavelength slider | Show one spectral band (UV, blue, green, red, near IR, IR) or all |
+| F1 | Hide/show the help lines |
 | Ctrl+Z | Undo |
 
 ## Tests

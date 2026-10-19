@@ -18,6 +18,10 @@ var view := ViewMode.NORMAL:
 	set(value):
 		view = value
 		_seen_version = -1
+var wavelength := -1:               ## Single bin to show, or -1 for all (ViewMode)
+	set(value):
+		wavelength = value
+		_seen_version = -1
 
 var _light: LightSystem
 var _seen_version := -1
@@ -46,7 +50,7 @@ static func tone(c: float) -> float:
 
 ## Per-bin colors for the view, scaled so AM1.5 sunlight across the shown bins is white.
 func _balance() -> void:
-	var colors := ViewMode.bin_colors(view)
+	var colors := ViewMode.bin_colors(view, wavelength)
 	var white := Vector3.ZERO
 	for b in Spectrum.BIN_COUNT:
 		if colors[b].a > 0.0:

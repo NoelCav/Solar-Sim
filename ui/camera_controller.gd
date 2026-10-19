@@ -23,6 +23,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_MIDDLE:
 			_dragging = mb.pressed
+		elif mb.shift_pressed:
+			return   # Shift + wheel tilts objects (ObjectTool)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_zoom_at(zoom_step)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:

@@ -15,6 +15,7 @@ var speed := 1
 
 var sim_ms := 0.0         ## Smoothed CPU time spent stepping the sim per frame
 var view := ViewMode.NORMAL
+var wavelength := -1      ## Wavelength filter: one spectral bin, or -1 for all
 
 var _accumulator := 0.0
 var _light: LightSystem
@@ -90,16 +91,19 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"sim_pause"):
-		paused = not paused
-		_previewed = Vector3(-1, -1, -1)
+		toggle_pause()
 	elif event.is_action_pressed(&"sim_speed"):
-		speed = SPEEDS[(SPEEDS.find(speed) + 1) % SPEEDS.size()]
+		cycle_speed()
 	elif event.is_action_pressed(&"overlay_cycle"):
 		set_view((view + 1) % ViewMode.COUNT)
-	elif event.is_action_pressed(&"time_forward") or event.is_action_pressed(&"time_back"):
-		var hour := SimConst.DAY_LENGTH_S / 24.0
-		var direction := 1.0 if event.is_action_pressed(&"time_forward") else -1.0
-		world.enqueue(SetTimeCommand.new(world.time_s + direction * hour))
+	elif event.is_action_pressed(&"wavelength_next"):
+		set_wavelength(wavelength + 1 if wavelength < Spectrum.BIN_COUNT - 1 else -1)
+	elif event.is_action_pressed(&"wavelength_prev"):
+		set_wavelength(wavelength - 1 if wavelength >= 0 else Spectrum.BIN_COUNT - 1)
+	elif event.is_action_pressed(&"time_forward"):
+		skip_hours(1.0)
+	elif event.is_action_pressed(&"time_back"):
+		skip_hours(-1.0)
 
 
 ## Switches what the beams, tile overlay and markers show (ViewMode).
@@ -109,3 +113,25 @@ func set_view(v: int) -> void:
 	_overlay.view = v
 	_markers.view = v
 	_hud.refresh_view()
+
+
+## Narrows the beams and tile overlay to one spectral bin (-1 = all).
+func set_wavelength(bin: int) -> void:
+	wavelength = bin
+	_beams.wavelength = bin
+	_overlay.wavelength = bin
+	_hud.refresh_view()
+
+
+func toggle_pause() -> void:
+	paused = not paused
+	_previewed = Vector3(-1, -1, -1)
+
+
+func cycle_speed() -> void:
+	speed = SPEEDS[(SPEEDS.find(speed) + 1) % SPEEDS.size()]
+
+
+## Moves the clock by whole hours (the sun follows even while paused).
+func skip_hours(hours: float) -> void:
+	world.enqueue(SetTimeCommand.new(world.time_s + hours * SimConst.DAY_LENGTH_S / 24.0))

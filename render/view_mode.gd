@@ -1,7 +1,8 @@
 class_name ViewMode
 extends RefCounted
 ## The views the player can switch between (design doc §16): which spectral bins beams show,
-## in what colors, and what the tile overlay displays.
+## in what colors, and what the tile overlay displays. A wavelength filter (one bin, or -1
+## for all) narrows any view to a single bin, shown in its false color.
 
 enum { NORMAL, LIGHT, UV, INFRARED, HEAT }
 const COUNT := 5
@@ -13,6 +14,9 @@ const HINTS: Array[String] = [
 	"Near and far infrared only; tiles show absorbed IR",
 	"Temperature relative to the site's mean",
 ]
+
+## Wavelength filter stops: -1 (all), then one per spectral bin.
+const WAVELENGTH_NAMES: Array[String] = ["UV", "Blue", "Green", "Red", "Near IR", "Infrared"]
 
 enum Overlay { NONE, ABSORBED, TEMPERATURE }
 
@@ -27,11 +31,14 @@ const _FALSE_COLORS: Array[Color] = [
 ]
 
 
-## Beam color per bin for a view; alpha 0 hides the bin.
-static func bin_colors(view: int) -> Array[Color]:
+## Beam color per bin for a view and wavelength filter; alpha 0 hides the bin.
+static func bin_colors(view: int, wavelength := -1) -> Array[Color]:
 	var c: Array[Color] = []
 	for b in Spectrum.BIN_COUNT:
 		var col := _HIDDEN
+		if wavelength >= 0:
+			c.append(_FALSE_COLORS[b] if b == wavelength else _HIDDEN)
+			continue
 		match view:
 			NORMAL, HEAT:
 				if b >= Spectrum.Bin.BLUE and b <= Spectrum.Bin.RED:
@@ -62,8 +69,19 @@ static func overlay(view: int) -> Overlay:
 	return Overlay.NONE
 
 
+## Display name of a wavelength filter stop.
+static func wavelength_name(wavelength: int) -> String:
+	if wavelength < 0:
+		return "All wavelengths"
+	var um: float = Spectrum.WAVELENGTH_UM[wavelength]
+	var at := "%.0f nm" % (um * 1000.0) if um < 1.0 else "%.1f µm" % um
+	return "%s · %s" % [WAVELENGTH_NAMES[wavelength], at]
+
+
 ## Spectrum band the absorbed overlay shows, or -1 for all light.
-static func overlay_band(view: int) -> int:
+static func overlay_band(view: int, wavelength := -1) -> int:
+	if wavelength >= 0:
+		return Spectrum.BAND_OF[wavelength]
 	match view:
 		UV:
 			return Spectrum.Band.UV

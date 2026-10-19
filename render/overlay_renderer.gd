@@ -22,6 +22,10 @@ var view := ViewMode.NORMAL:
 		view = value
 		_timer = 0.0
 		material = _add_mat if view == ViewMode.NORMAL else null
+var wavelength := -1:   ## Single bin to show, or -1 for all; tiles show that bin's band
+	set(value):
+		wavelength = value
+		_timer = 0.0
 
 ## Peak of the current layer: tile index (-1 if none) and value (W/m² or K).
 var peak_tile := -1
@@ -72,7 +76,7 @@ func legend() -> Dictionary:
 				"gradient": heat_gradient, "lo": "%.0f °C" % (mean + HEAT_DEADZONE_K),
 				"hi": "%.0f °C" % (mean + HOT_SPAN_K)}
 		ViewMode.Overlay.ABSORBED:
-			var band := ViewMode.overlay_band(view)
+			var band := ViewMode.overlay_band(view, wavelength)
 			return {"title": "Absorbed %s" % ("light" if band < 0 else Spectrum.BAND_NAMES[band]),
 				"gradient": light_gradient, "lo": "%.0f W/m²" % IRR_MIN, "hi": "1 MW/m²"}
 	return {}
@@ -91,9 +95,9 @@ func _process(delta: float) -> void:
 		ViewMode.Overlay.TEMPERATURE:
 			_fill_heat()
 		ViewMode.Overlay.ABSORBED:
-			_fill_light(ViewMode.overlay_band(view), false)
+			_fill_light(ViewMode.overlay_band(view, wavelength), false)
 		_:
-			_fill_light(-1, true)
+			_fill_light(ViewMode.overlay_band(view, wavelength), true)
 	_image.set_data(world.grid.width, world.grid.height, false, Image.FORMAT_RGBA8, _bytes)
 	_texture.update(_image)
 

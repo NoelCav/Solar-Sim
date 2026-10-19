@@ -1,12 +1,20 @@
 class_name Hud
 extends Control
-## Screen-space interface (design doc §16): status (top left), view bar and legend
-## (top right), an inspector that follows the cursor, and a help bar (bottom, F1).
-## Reads sim state only; view changes go back to Main.
+## Screen-space interface (design doc §16): status and time controls (top left), views,
+## wavelength filter and legend (top right), the tool bar with its item list (bottom), and
+## an inspector that follows the cursor. Reads sim state; actions go back to Main, the
+## ObjectTool and the CreativeBrush.
 
-const PANEL_BG := Color(0.05, 0.07, 0.10, 0.80)
+const PANEL_BG := Color(0.05, 0.07, 0.10, 0.92)
 const DIM := Color(0.70, 0.75, 0.82)
 const ACCENT := Color(1.0, 0.85, 0.45)
+const TOOL_NAMES: Array[String] = ["Select", "Build", "Paint"]
+const TOOL_KEYS: Array[String] = ["Esc", "B", "T"]
+const TOOL_HINTS: Array[String] = [
+	"Move and tilt objects; drag empty space to pan",
+	"Place lenses, prisms, mirrors and probes",
+	"Paint tiles: LMB paint, RMB erase",
+]
 
 var world: SimWorld
 var runner: Main
@@ -18,18 +26,25 @@ var _light: LightSystem
 var _heat: ThermalSystem
 var _status: Label
 var _perf: Label
+var _pause_button: Button
+var _speed_button: Button
 var _view_buttons: Array[Button] = []
-var _view_panel: PanelContainer
-var _legend_panel: PanelContainer
+var _wave_slider: HSlider
+var _wave_label: Label
+var _legend_sep: HSeparator
 var _legend_title: Label
 var _legend_bar: TextureRect
+var _legend_ends: HBoxContainer
 var _legend_lo: Label
 var _legend_hi: Label
 var _view_hint: Label
+var _tool_buttons: Array[Button] = []
+var _context: HBoxContainer        ## Tool-specific row: item list, materials or selection
+var _context_key := []
+var _selection_label: Label
+var _help_label: Label
 var _inspector: PanelContainer
 var _inspect_label: RichTextLabel
-var _help: PanelContainer
-var _help_label: Label
 
 
 func setup(p_world: SimWorld, p_runner: Main, p_brush: CreativeBrush, p_tool: ObjectTool,
@@ -44,27 +59,30 @@ func setup(p_world: SimWorld, p_runner: Main, p_brush: CreativeBrush, p_tool: Ob
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_status()
-	_build_view_bar()
+	_build_view_panel()
+	_build_toolbar()
 	_build_inspector()
-	_build_help()
 	refresh_view()
 
 
-## Updates the view bar and legend after the view changed.
+## Updates the view buttons, wavelength filter and legend after the view changed.
 func refresh_view() -> void:
 	for v in _view_buttons.size():
 		_view_buttons[v].set_pressed_no_signal(v == runner.view)
 	_view_hint.text = ViewMode.HINTS[runner.view]
+	_wave_slider.set_value_no_signal(runner.wavelength)
+	_wave_label.text = ViewMode.wavelength_name(runner.wavelength)
 	var lg := overlay.legend()
 	_legend_bar.visible = not lg.is_empty()
-	_legend_lo.get_parent().visible = not lg.is_empty()
+	_legend_ends.visible = not lg.is_empty()
 	_legend_title.visible = not lg.is_empty()
+	_legend_sep.visible = not lg.is_empty()
 	if not lg.is_empty():
 		_legend_title.text = lg.title
 		var tex := GradientTexture2D.new()
 		tex.gradient = lg.gradient
-		tex.width = 220
-		tex.height = 10
+		tex.width = 256
+		tex.height = 12
 		_legend_bar.texture = tex
 		_legend_lo.text = lg.lo
 		_legend_hi.text = lg.hi
@@ -72,28 +90,40 @@ func refresh_view() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"toggle_help"):
-		_help.visible = not _help.visible
+		_help_label.visible = not _help_label.visible
 
 
 func _process(_delta: float) -> void:
 	if world == null:
 		return
 	_update_status()
-	_update_help()
+	_update_toolbar()
 	_update_inspector()
 
 
-# --- Status -------------------------------------------------------------------------------
+# --- Status and time ------------------------------------------------------------------------
 
 func _build_status() -> void:
 	var panel := _panel()
 	panel.position = Vector2(10, 10)
 	add_child(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 2)
+	box.add_theme_constant_override(&"separation", 4)
 	panel.add_child(box)
 	_status = Label.new()
+	_status.add_theme_font_size_override(&"font_size", 15)
 	box.add_child(_status)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 4)
+	box.add_child(row)
+	_pause_button = _button("Pause", "Pause or resume the simulation (Space)", runner.toggle_pause)
+	_pause_button.custom_minimum_size.x = 64
+	row.add_child(_pause_button)
+	_speed_button = _button("1×", "Simulation speed (Tab)", runner.cycle_speed)
+	_speed_button.custom_minimum_size.x = 40
+	row.add_child(_speed_button)
+	row.add_child(_button("−1 h", "Move the clock back an hour (,)", runner.skip_hours.bind(-1.0)))
+	row.add_child(_button("+1 h", "Move the clock forward an hour (.)", runner.skip_hours.bind(1.0)))
 	_perf = Label.new()
 	_perf.add_theme_font_size_override(&"font_size", 11)
 	_perf.add_theme_color_override(&"font_color", DIM)
@@ -102,22 +132,22 @@ func _build_status() -> void:
 
 func _update_status() -> void:
 	var tod := world.time_of_day() * 24.0
-	var clock := "Day %d   %02d:%02d   %s" % [world.day_number() + 1, int(tod), int(fmod(tod, 1.0) * 60.0),
-		"⏸ paused" if runner.paused else "▶ %d×" % runner.speed]
+	var clock := "Day %d   %02d:%02d" % [world.day_number() + 1, int(tod), int(fmod(tod, 1.0) * 60.0)]
 	var sun := "Sun %.0f°   %.0f W/m²   air %.1f °C" % [rad_to_deg(world.sun_elevation), world.sun_dni,
 		SimConst.k_to_c(world.ambient_k)] if world.sun_is_up \
 		else "Night   air %.1f °C" % SimConst.k_to_c(world.ambient_k)
 	_status.text = clock + "\n" + sun
-	_perf.text = "%d fps · sim %.1f ms/frame · light pass %.0f ms (%d rays) · heat %.1f ms" % [
+	_pause_button.text = "Play" if runner.paused else "Pause"
+	_speed_button.text = "%d×" % runner.speed
+	_perf.text = "%d fps · sim %.1f ms/frame · light %.0f ms (%d rays) · heat %.1f ms" % [
 		Engine.get_frames_per_second(), runner.sim_ms, _light.last_trace_ms,
 		_light.stats.get("rays", 0), _heat.last_step_ms]
 
 
-# --- View bar and legend --------------------------------------------------------------------
+# --- Views, wavelength and legend ---------------------------------------------------------
 
-func _build_view_bar() -> void:
+func _build_view_panel() -> void:
 	var panel := _panel()
-	_view_panel = panel
 	add_child(panel)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 10)
@@ -129,35 +159,197 @@ func _build_view_bar() -> void:
 	box.add_child(bar)
 	var group := ButtonGroup.new()
 	for v in ViewMode.COUNT:
-		var b := Button.new()
-		b.text = ViewMode.NAMES[v]
+		var b := _button(ViewMode.NAMES[v], ViewMode.HINTS[v] + "  (H cycles)", runner.set_view.bind(v))
 		b.toggle_mode = true
 		b.button_group = group
-		b.focus_mode = Control.FOCUS_NONE
-		b.tooltip_text = ViewMode.HINTS[v] + "  (H cycles)"
-		b.pressed.connect(runner.set_view.bind(v))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		bar.add_child(b)
 		_view_buttons.append(b)
-	_view_hint = Label.new()
-	_view_hint.add_theme_font_size_override(&"font_size", 11)
-	_view_hint.add_theme_color_override(&"font_color", DIM)
+	_view_hint = _small_label()
 	box.add_child(_view_hint)
+	box.add_child(HSeparator.new())
+	var wave_head := HBoxContainer.new()
+	box.add_child(wave_head)
+	var wave_title := Label.new()
+	wave_title.text = "Wavelength"
+	wave_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wave_head.add_child(wave_title)
+	_wave_label = Label.new()
+	_wave_label.add_theme_color_override(&"font_color", ACCENT)
+	wave_head.add_child(_wave_label)
+	_wave_slider = HSlider.new()
+	_wave_slider.min_value = -1
+	_wave_slider.max_value = Spectrum.BIN_COUNT - 1
+	_wave_slider.step = 1
+	_wave_slider.tick_count = Spectrum.BIN_COUNT + 1
+	_wave_slider.ticks_on_borders = true
+	_wave_slider.focus_mode = Control.FOCUS_NONE
+	_wave_slider.tooltip_text = "Show one band of the spectrum, or all of it at the far left (G / J)"
+	_wave_slider.value_changed.connect(func(v: float) -> void: runner.set_wavelength(int(v)))
+	box.add_child(_wave_slider)
+	var stops := HBoxContainer.new()
+	box.add_child(stops)
+	for stop: String in ["All", "UV", "Blue", "Green", "Red", "NIR", "IR"]:
+		var l := _small_label()
+		l.text = stop
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l.size_flags_stretch_ratio = 1.0
+		stops.add_child(l)
+	_legend_sep = HSeparator.new()
+	box.add_child(_legend_sep)
 	_legend_title = Label.new()
 	_legend_title.add_theme_font_size_override(&"font_size", 12)
 	box.add_child(_legend_title)
 	_legend_bar = TextureRect.new()
-	_legend_bar.custom_minimum_size = Vector2(220, 10)
+	_legend_bar.custom_minimum_size = Vector2(256, 12)
 	_legend_bar.stretch_mode = TextureRect.STRETCH_SCALE
 	box.add_child(_legend_bar)
-	var ends := HBoxContainer.new()
-	box.add_child(ends)
-	_legend_lo = Label.new()
-	_legend_lo.add_theme_font_size_override(&"font_size", 11)
+	_legend_ends = HBoxContainer.new()
+	box.add_child(_legend_ends)
+	_legend_lo = _small_label()
 	_legend_lo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ends.add_child(_legend_lo)
-	_legend_hi = Label.new()
-	_legend_hi.add_theme_font_size_override(&"font_size", 11)
-	ends.add_child(_legend_hi)
+	_legend_ends.add_child(_legend_lo)
+	_legend_hi = _small_label()
+	_legend_ends.add_child(_legend_hi)
+
+
+# --- Tool bar -------------------------------------------------------------------------------
+
+func _build_toolbar() -> void:
+	# A full-width strip that centers the bar whatever width its contents take.
+	var strip := CenterContainer.new()
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(strip)
+	strip.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	strip.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE, Control.PRESET_MODE_MINSIZE, 10)
+	var panel := _panel()
+	strip.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 6)
+	panel.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 6)
+	box.add_child(row)
+	var group := ButtonGroup.new()
+	for m in TOOL_NAMES.size():
+		var b := _button("%s  (%s)" % [TOOL_NAMES[m], TOOL_KEYS[m]], TOOL_HINTS[m], tool.set_mode.bind(m))
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size.x = 96
+		row.add_child(b)
+		_tool_buttons.append(b)
+	row.add_child(VSeparator.new())
+	_context = HBoxContainer.new()
+	_context.add_theme_constant_override(&"separation", 4)
+	_context.custom_minimum_size.y = 36
+	row.add_child(_context)
+	_help_label = _small_label()
+	_help_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_help_label)
+
+
+func _update_toolbar() -> void:
+	for m in _tool_buttons.size():
+		_tool_buttons[m].set_pressed_no_signal(m == tool.mode)
+	var obj := tool.selected_object()
+	var key := [tool.mode, tool.selected, obj.id if obj else -1, brush.selected_index, brush.brush_radius]
+	if key != _context_key:
+		_context_key = key
+		_rebuild_context()
+	if _selection_label != null and obj != null:
+		_selection_label.text = "%s  %.1f°" % [obj.def.display_name, wrapf(rad_to_deg(obj.angle), -180.0, 180.0)]
+	_help_label.text = _help_text()
+
+
+func _rebuild_context() -> void:
+	for c in _context.get_children():
+		_context.remove_child(c)
+		c.queue_free()
+	_selection_label = null
+	match tool.mode:
+		ObjectTool.Mode.SELECT:
+			var obj := tool.selected_object()
+			if obj == null:
+				var l := Label.new()
+				l.text = "Click an object to select it"
+				l.add_theme_color_override(&"font_color", DIM)
+				_context.add_child(l)
+				return
+			_selection_label = Label.new()
+			_selection_label.add_theme_color_override(&"font_color", ACCENT)
+			_selection_label.custom_minimum_size.x = 170
+			_context.add_child(_selection_label)
+			_context.add_child(_button("Tilt −5°", "Rotate counterclockwise (R, Shift for 1°)", tool.rotate_by.bind(-5.0)))
+			_context.add_child(_button("Tilt +5°", "Rotate clockwise (F, Shift for 1°)", tool.rotate_by.bind(5.0)))
+			_context.add_child(_button("Level", "Reset the tilt to 0°",
+				func() -> void:
+					var o := tool.selected_object()
+					if o != null:
+						world.enqueue(TransformObjectCommand.new(o.id, o.position, 0.0))))
+			_context.add_child(_button("Delete", "Remove the object (X / Delete)", tool.delete_target))
+		ObjectTool.Mode.BUILD:
+			var group := ButtonGroup.new()
+			for k in tool.defs.size():
+				var def := tool.defs[k]
+				var b := _button("", "%s  (%d)" % [def.display_name, k + 1], tool.pick_item.bind(k))
+				b.toggle_mode = true
+				b.button_group = group
+				b.set_pressed_no_signal(k == tool.selected)
+				var inner := HBoxContainer.new()
+				inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				inner.add_child(ItemIcon.new(def))
+				var l := Label.new()
+				l.text = def.display_name
+				l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				inner.add_child(l)
+				b.add_child(inner)
+				inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 4)
+				b.custom_minimum_size = inner.get_combined_minimum_size() + Vector2(8, 4)
+				_context.add_child(b)
+		ObjectTool.Mode.PAINT:
+			var group := ButtonGroup.new()
+			for k in brush.palette.size():
+				var def := brush.palette[k]
+				var b := _button("", def.display_name, func() -> void: brush.selected_index = k)
+				b.toggle_mode = true
+				b.button_group = group
+				b.set_pressed_no_signal(k == brush.selected_index)
+				var icon := ItemIcon.new(null, def.color, Vector2(24, 24))
+				b.add_child(icon)
+				icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 3)
+				b.custom_minimum_size = Vector2(32, 32)
+				_context.add_child(b)
+			var picked := Label.new()
+			picked.text = brush.selected().display_name if brush.selected() else ""
+			picked.add_theme_color_override(&"font_color", ACCENT)
+			picked.custom_minimum_size.x = 100
+			_context.add_child(picked)
+			_context.add_child(VSeparator.new())
+			_context.add_child(_button("−", "Smaller brush ([)",
+				func() -> void: brush.brush_radius = maxi(brush.brush_radius - 1, 0)))
+			var size_label := Label.new()
+			size_label.text = "%d" % (brush.brush_radius * 2 + 1)
+			size_label.custom_minimum_size.x = 24
+			size_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			_context.add_child(size_label)
+			_context.add_child(_button("+", "Bigger brush (])",
+				func() -> void: brush.brush_radius = mini(brush.brush_radius + 1, 8)))
+
+
+func _help_text() -> String:
+	var line := ""
+	match tool.mode:
+		ObjectTool.Mode.SELECT:
+			line = "Drag an object to move it · drag its ring handle to tilt (Ctrl snaps 15°) · " + \
+				"Shift+wheel or R/F tilts · drag empty space to pan"
+		ObjectTool.Mode.BUILD:
+			line = "LMB place (R/F tilt first) · drag existing objects · RMB or Esc back to Select · 1–%d pick" \
+				% tool.defs.size()
+		ObjectTool.Mode.PAINT:
+			line = "LMB paint · RMB erase · Q/E material · [ ] size"
+	return line + "\nWheel zoom · WASD / middle drag pan · H view · G/J wavelength · , . time · " + \
+		"Space pause · Tab speed · Ctrl+Z undo · F1 hide help"
 
 
 # --- Inspector ------------------------------------------------------------------------------
@@ -180,8 +372,7 @@ func _update_inspector() -> void:
 	var cell := brush.hovered_cell()
 	var g := world.grid
 	var mouse := get_viewport().get_mouse_position()
-	var over_ui := _view_panel.get_global_rect().has_point(mouse) or (_help.visible \
-		and _help.get_global_rect().has_point(mouse))
+	var over_ui := get_viewport().gui_get_hovered_control() != null
 	if not g.in_bounds(cell.x, cell.y) or over_ui:
 		_inspector.visible = false
 		return
@@ -236,8 +427,8 @@ func _light_text(i: int, def: MaterialDef) -> String:
 
 
 func _object_text(obj: SimObject) -> String:
-	var s := "[b][color=#ffd873]%s[/color][/b]  [color=#8a93a0]%.0f°[/color]" % [obj.def.display_name,
-		rad_to_deg(obj.angle)]
+	var s := "[b][color=#ffd873]%s[/color][/b]  [color=#8a93a0]%.1f°[/color]" % [obj.def.display_name,
+		wrapf(rad_to_deg(obj.angle), -180.0, 180.0)]
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		var irr := obj.probe_irradiance()
 		s += "\nreads %s  (%.1f× sun)" % [_irr(irr), irr / maxf(world.sun_dni, 1.0)]
@@ -261,26 +452,7 @@ static func _irr(w_m2: float) -> String:
 	return "%.0f W/m²" % w_m2
 
 
-# --- Help -----------------------------------------------------------------------------------
-
-func _build_help() -> void:
-	_help = _panel()
-	add_child(_help)
-	_help.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 10)
-	_help_label = Label.new()
-	_help_label.add_theme_font_size_override(&"font_size", 12)
-	_help.add_child(_help_label)
-
-
-func _update_help() -> void:
-	var tool_line := "Tile brush: %s (size %d) — LMB paint · RMB erase · Q/E material · [ ] size" % [
-		brush.selected().display_name, brush.brush_radius * 2 + 1] if tool.selected < 0 \
-		else "Placing %s — LMB place or drag · RMB remove" % tool.selected_def().display_name
-	_help_label.text = tool_line + "\n" + \
-		"1–%d objects · 0 brush · R/F rotate (Shift fine) · X delete · H view · , . time ±1 h · " % tool.defs.size() + \
-		"Space pause · Tab speed · Ctrl+Z undo · F1 hide"
-
+# --- Helpers --------------------------------------------------------------------------------
 
 func _panel() -> PanelContainer:
 	var p := PanelContainer.new()
@@ -289,5 +461,21 @@ func _panel() -> PanelContainer:
 	sb.set_corner_radius_all(6)
 	sb.set_content_margin_all(8)
 	p.add_theme_stylebox_override(&"panel", sb)
-	p.mouse_filter = Control.MOUSE_FILTER_PASS
+	p.mouse_filter = Control.MOUSE_FILTER_STOP   # Clicks on a panel never reach the world
 	return p
+
+
+func _button(text: String, tip: String, action: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.tooltip_text = tip
+	b.focus_mode = Control.FOCUS_NONE
+	b.pressed.connect(action)
+	return b
+
+
+func _small_label() -> Label:
+	var l := Label.new()
+	l.add_theme_font_size_override(&"font_size", 11)
+	l.add_theme_color_override(&"font_color", DIM)
+	return l
