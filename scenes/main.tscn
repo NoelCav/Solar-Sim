@@ -1,16 +1,16 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://ce0gxb15hbgbe"]
 
-[ext_resource type="Script" path="res://scenes/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://render/sky_renderer.gd" id="2_sky"]
-[ext_resource type="Script" path="res://render/tile_renderer.gd" id="3_tiles"]
-[ext_resource type="Script" path="res://ui/creative_brush.gd" id="4_brush"]
-[ext_resource type="Script" path="res://ui/camera_controller.gd" id="5_camera"]
-[ext_resource type="Script" path="res://ui/hud.gd" id="6_hud"]
-[ext_resource type="Script" path="res://ui/map_markers.gd" id="11_markers"]
-[ext_resource type="Script" path="res://render/beam_renderer.gd" id="7_beams"]
-[ext_resource type="Script" path="res://render/object_renderer.gd" id="8_objects"]
-[ext_resource type="Script" path="res://render/overlay_renderer.gd" id="9_overlay"]
-[ext_resource type="Script" path="res://ui/object_tool.gd" id="10_tool"]
+[ext_resource type="Script" uid="uid://dynhi20ywt6ne" path="res://scenes/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://bmldtxj2mj2ec" path="res://render/sky_renderer.gd" id="2_sky"]
+[ext_resource type="Script" uid="uid://bjvyrceymgnc5" path="res://render/tile_renderer.gd" id="3_tiles"]
+[ext_resource type="Script" uid="uid://dyqdab3x6en4g" path="res://ui/creative_brush.gd" id="4_brush"]
+[ext_resource type="Script" uid="uid://cpleblx8jmo1r" path="res://ui/camera_controller.gd" id="5_camera"]
+[ext_resource type="Script" uid="uid://biwse7770rxfp" path="res://ui/hud.gd" id="6_hud"]
+[ext_resource type="Script" uid="uid://hyl7u6r20kqy" path="res://render/beam_renderer.gd" id="7_beams"]
+[ext_resource type="Script" uid="uid://dyumxjochgq17" path="res://render/object_renderer.gd" id="8_objects"]
+[ext_resource type="Script" uid="uid://b11ojc4xhv0ak" path="res://render/overlay_renderer.gd" id="9_overlay"]
+[ext_resource type="Script" uid="uid://8plocn7rum8i" path="res://ui/object_tool.gd" id="10_tool"]
+[ext_resource type="Script" uid="uid://blhg8hpfftlb4" path="res://ui/map_markers.gd" id="11_markers"]
 
 [sub_resource type="Environment" id="Environment_glow"]
 background_mode = 3
@@ -21,46 +21,46 @@ glow_levels/3 = 1.0
 glow_levels/5 = 0.6
 glow_intensity = 0.9
 glow_strength = 1.1
-glow_blend_mode = 1
-glow_hdr_threshold = 1.0
 glow_hdr_scale = 1.5
 
-[node name="Main" type="Node2D"]
+[node name="Main" type="Node2D" unique_id=722673016]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1614480745]
 environment = SubResource("Environment_glow")
 
-[node name="Sky" type="ColorRect" parent="."]
+[node name="Sky" type="ColorRect" parent="." unique_id=2002732115]
 mouse_filter = 2
 script = ExtResource("2_sky")
 
-[node name="Tiles" type="Sprite2D" parent="."]
+[node name="Tiles" type="Sprite2D" parent="." unique_id=1708002404]
 script = ExtResource("3_tiles")
 
-[node name="Objects" type="Node2D" parent="."]
+[node name="Objects" type="Node2D" parent="." unique_id=1685869490]
 script = ExtResource("8_objects")
 
-[node name="Beams" type="MeshInstance2D" parent="."]
+[node name="Beams" type="MeshInstance2D" parent="." unique_id=959698939]
 script = ExtResource("7_beams")
 
-[node name="Overlay" type="Sprite2D" parent="."]
+[node name="Overlay" type="Sprite2D" parent="." unique_id=1890070241]
 script = ExtResource("9_overlay")
 
-[node name="Markers" type="Node2D" parent="."]
+[node name="Markers" type="Node2D" parent="." unique_id=2031465396]
 script = ExtResource("11_markers")
 
-[node name="Brush" type="Node2D" parent="."]
+[node name="Brush" type="Node2D" parent="." unique_id=433181076]
 script = ExtResource("4_brush")
 
-[node name="ObjectTool" type="Node2D" parent="."]
+[node name="ObjectTool" type="Node2D" parent="." unique_id=1835973402]
 script = ExtResource("10_tool")
 
-[node name="Camera" type="Camera2D" parent="."]
+[node name="Camera" type="Camera2D" parent="." unique_id=1687882144]
 script = ExtResource("5_camera")
 
-[node name="HudLayer" type="CanvasLayer" parent="."]
+[node name="HudLayer" type="CanvasLayer" parent="." unique_id=53846904]
 
-[node name="Hud" type="Control" parent="HudLayer"]
+[node name="Hud" type="Control" parent="HudLayer" unique_id=1396504365]
+layout_mode = 3
+anchors_preset = 0
 mouse_filter = 2
 script = ExtResource("6_hud")
