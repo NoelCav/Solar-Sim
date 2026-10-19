@@ -79,10 +79,11 @@ var _stack: Array = []
 ## While tracing a primary path, deposits and probe crossings are recorded here.
 var _rec: PathRec = null
 
-## Coarse 8×8-tile blocks that are plain air with no surfaces; rays skip them whole.
-const BLOCK_SHIFT := 3
-var _block_empty := PackedByteArray()
-var _blocks_w := 0
+## Per tile, Chebyshev distance (in tiles, capped) to the nearest tile that is not plain
+## air or holds a surface; the site border counts as occupied. A ray in a tile with
+## distance d can cross the whole (2d-1)² square of empty tiles around it in one jump.
+const AIR_DIST_CAP := 16
+var _air_dist := PackedByteArray()
 var _body_bounds: Dictionary[int, Rect2] = {}   ## Per object id, grown slightly
 
 # Output of _march.
@@ -144,11 +145,11 @@ func begin() -> void:
 	scattered_w = 0.0
 	culled_w = 0.0
 	ray_count = 0
-	if _block_empty.is_empty():
+	if _air_dist.is_empty():
 		build_blocks()
 
 
-## Rebuilds the empty-block table and body bounds; call after tiles or surfaces change.
+## Rebuilds the air distance field and body bounds; call after tiles or surfaces change.
 func build_blocks() -> void:
 	_body_bounds.clear()
 	for s in surfaces.count():
@@ -157,19 +158,41 @@ func build_blocks() -> void:
 		_body_bounds[id] = r.expand(surfaces.a[s]).expand(surfaces.b[s])
 	for id in _body_bounds:
 		_body_bounds[id] = _body_bounds[id].grow(1e-3)
-	var bs := 1 << BLOCK_SHIFT
-	_blocks_w = (grid.width + bs - 1) >> BLOCK_SHIFT
-	var blocks_h := (grid.height + bs - 1) >> BLOCK_SHIFT
-	_block_empty.resize(_blocks_w * blocks_h)
-	_block_empty.fill(0 if _has_bulk[MaterialDB.AIR_ID] else 1)
+	var w := grid.width
+	var h := grid.height
+	var n := w * h
+	var df := _air_dist
+	df.resize(n)
 	var mat := grid.material
 	var cs := surfaces.cell_start
-	var has_buckets := cs.size() == grid.size() + 1
-	for i in grid.size():
-		if mat[i] != MaterialDB.AIR_ID or (has_buckets and cs[i + 1] > cs[i]):
-			var x := i % grid.width
-			var y := i / grid.width
-			_block_empty[(y >> BLOCK_SHIFT) * _blocks_w + (x >> BLOCK_SHIFT)] = 0
+	var has_buckets := cs.size() == n + 1
+	var air_clear := not _has_bulk[MaterialDB.AIR_ID]
+	for i in n:
+		var empty := air_clear and mat[i] == MaterialDB.AIR_ID and not (has_buckets and cs[i + 1] > cs[i])
+		df[i] = AIR_DIST_CAP if empty else 0
+	# Two-pass chamfer transform with 8-neighbours gives the chessboard distance.
+	for y in h:
+		for x in w:
+			var i := y * w + x
+			var v := df[i]
+			if v == 0:
+				continue
+			if x == 0 or y == 0 or x == w - 1:
+				v = 1
+			else:
+				v = mini(v, mini(mini(df[i - 1], df[i - w - 1]), mini(df[i - w], df[i - w + 1])) + 1)
+			df[i] = v
+	for y in range(h - 1, -1, -1):
+		for x in range(w - 1, -1, -1):
+			var i := y * w + x
+			var v := df[i]
+			if v <= 1:
+				continue
+			if y == h - 1:
+				v = 1
+			else:
+				v = mini(v, mini(mini(df[i + 1], df[i + w + 1]), mini(df[i + w], df[i + w - 1])) + 1)
+			df[i] = v
 
 
 # --- Deposits ---------------------------------------------------------------------------
@@ -539,6 +562,7 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 	var dy := d.y
 	var cell_start := surfaces.cell_start
 	var cell_items := surfaces.cell_items
+	var air_dist := _air_dist
 
 	while true:
 		if cx < 0 or cy < 0 or cx >= w or cy >= h:
@@ -604,23 +628,25 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 			return
 
 		_absorb_leg(p, medium, t1 - t0, i, body)
-		var bx := cx >> BLOCK_SHIFT
-		var by := cy >> BLOCK_SHIFT
-		if body < 0 and _block_empty[by * _blocks_w + bx] == 1:
-			# Whole block is plain air with no surfaces: jump to where the ray leaves it.
-			var ex := (((bx + 1) << BLOCK_SHIFT) * tm - o.x) / d.x if d.x > 0.0 \
-				else (((bx << BLOCK_SHIFT) * tm - o.x) / d.x if d.x < 0.0 else INF)
-			var ey := (((by + 1) << BLOCK_SHIFT) * tm - o.y) / d.y if d.y > 0.0 \
-				else (((by << BLOCK_SHIFT) * tm - o.y) / d.y if d.y < 0.0 else INF)
+		var r := air_dist[i] - 1
+		if body < 0 and r >= 1:
+			# Every tile within r of this one is plain air with no surfaces: jump to where
+			# the ray leaves that square.
+			var ex := ((cx + r + 1) * tm - o.x) / d.x if d.x > 0.0 \
+				else (((cx - r) * tm - o.x) / d.x if d.x < 0.0 else INF)
+			var ey := ((cy + r + 1) * tm - o.y) / d.y if d.y > 0.0 \
+				else (((cy - r) * tm - o.y) / d.y if d.y < 0.0 else INF)
 			if ex < ey:
 				t0 = ex
-				cx = ((bx + 1) << BLOCK_SHIFT) if step_x > 0 else (bx << BLOCK_SHIFT) - 1
-				cy = clampi(floori((o.y + d.y * t0) / tm), by << BLOCK_SHIFT, ((by + 1) << BLOCK_SHIFT) - 1)
+				var ny := clampi(floori((o.y + d.y * t0) / tm), cy - r, cy + r)
+				cx = cx + r + 1 if step_x > 0 else cx - r - 1
+				cy = ny
 				face = Vector2(-step_x, 0)
 			else:
 				t0 = ey
-				cy = ((by + 1) << BLOCK_SHIFT) if step_y > 0 else (by << BLOCK_SHIFT) - 1
-				cx = clampi(floori((o.x + d.x * t0) / tm), bx << BLOCK_SHIFT, ((bx + 1) << BLOCK_SHIFT) - 1)
+				var nx := clampi(floori((o.x + d.x * t0) / tm), cx - r, cx + r)
+				cy = cy + r + 1 if step_y > 0 else cy - r - 1
+				cx = nx
 				face = Vector2(0, -step_y)
 			t_max_x = ((cx + (1 if d.x > 0.0 else 0)) * tm - o.x) / d.x if d.x != 0.0 else INF
 			t_max_y = ((cy + (1 if d.y > 0.0 else 0)) * tm - o.y) / d.y if d.y != 0.0 else INF

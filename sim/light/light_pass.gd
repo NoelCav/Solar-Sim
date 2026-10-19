@@ -35,7 +35,7 @@ func _init(p_grid: TileGrid, materials: MaterialDB, p_surfaces: SurfaceSet) -> v
 	tracer = Tracer.new(grid, materials, surfaces)
 
 
-## Begins a pass. Call tracer.build_blocks() first if tiles or surfaces changed.
+## Begins a pass. Call tracer.build_blocks() (air distance field) first if tiles or surfaces changed.
 func start(world: SimWorld) -> void:
 	var t0 := Time.get_ticks_usec()
 	tracer.begin()
