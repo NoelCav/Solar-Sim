@@ -19,7 +19,7 @@ const COMMANDS := {
 	"peaks": "{layer: light|heat, n: 10}: hottest or brightest tiles",
 	"trace": "{x, y, angle (deg, 90 = straight down) or dx, dy, bin: 0-5 (UV..IR, default 2 green)}: "
 		+ "one test ray through current geometry; returns segments with power",
-	"place": "{key, x, y, angle}",
+	"place": "{key, x, y, angle, free: false}: on its stand / the ground, snapped (free: floating, creative)",
 	"move": "{id, x, y}",
 	"rotate": "{id, angle} absolute or {id, by}",
 	"remove": "{id}",
@@ -92,12 +92,16 @@ func _object_info(obj: SimObject) -> Dictionary:
 	var d := {"id": obj.id, "key": str(obj.def.key), "name": obj.def.display_name,
 		"kind": ObjectDef.Kind.keys()[obj.def.kind], "x": snappedf(obj.position.x, 0.001),
 		"y": snappedf(obj.position.y, 0.001), "angle_deg": snappedf(rad_to_deg(obj.angle), 0.01),
-		"absorbed_w": snappedf(obj.absorbed_w, 0.01),
+		"absorbed_w": snappedf(obj.absorbed_w, 0.01), "mounted": obj.mounted,
 		"temp_c": snappedf(SimConst.k_to_c(obj.temperature_k), 0.01) if obj.temperature_k > 0.0 else null}
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		# Unrounded: moonlight readings are mW/m².
 		d["probe_w_m2"] = obj.incident_irradiance()
 		d["spectrum_w_m2"] = Array(obj.incident_spectrum())
+	if obj.def.kind == ObjectDef.Kind.CELL:
+		var light: LightSystem = _main.world.get_system(&"light")
+		d["front_w_m2"] = snappedf(obj.incident_irradiance() * light.power_scale(_main.world), 0.01)
+		d["power_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(_main.world)), 0.001)
 	return d
 
 
@@ -288,7 +292,7 @@ func _cmd_place(a: Dictionary) -> Dictionary:
 	if def == null:
 		return {"error": "no def '%s'; see defs" % a.get("key")}
 	_main.world.enqueue(PlaceObjectCommand.new(def, Vector2(float(a.get("x", 0)), float(a.get("y", 0))),
-		deg_to_rad(float(a.get("angle", 0)))))
+		deg_to_rad(float(a.get("angle", 0))), not bool(a.get("free", false))))
 	return {"ok": true, "id": _main.world.next_object_id}
 
 

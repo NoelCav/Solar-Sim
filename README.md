@@ -20,7 +20,7 @@ Controls (the window opens maximized and the interface scales with it; every key
 | Keys | Action |
 |---|---|
 | Select tool (Esc, 0) — default | Click an object to select it, drag to move, drag its ring handle to tilt (Ctrl snaps 15°); drag empty space to pan |
-| Build tool (B, 1–5) | Pick an item from the bar, LMB place (R/F tilt the ghost first), RMB back to Select |
+| Build tool (B, 1–7) | Pick an item from the bar, LMB place (R/F tilt the ghost first), RMB back to Select. Objects go on stands that snap to tile columns and 25 cm heights (surface cells lie on the ground); hold Alt to float one (creative) |
 | Paint tool (T) | LMB paint, RMB erase, Q/E or the swatches for material, `[` `]` size |
 | WASD / middle-drag, wheel | Pan, zoom (up to 64×; outlines and labels stay crisp) |
 | R / F (Shift = fine), Shift+wheel | Tilt the selected or hovered object |

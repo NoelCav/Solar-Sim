@@ -48,6 +48,8 @@ var site_mean_ambient_k: float = SimConst.DEFAULT_AMBIENT_K
 ## Placed objects by id, in placement order. Mutate only through commands (D6).
 var objects: Dictionary[int, SimObject] = {}
 var objects_version: int = 0            ## Bumped whenever objects are added, removed or moved
+## Creative mode: objects may float off their stands (Mounting). On while the game is tested.
+var creative := true
 var next_object_id: int = 1
 
 ## Systems in tick order (§5.3). Later milestones insert objects, power, pipes,

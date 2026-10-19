@@ -44,6 +44,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D18 | **Lit faces carry a thin surface skin** split into strips (~2.5 cm) that take the light deposits at the light engine's resolution; the skin couples to its 25 cm tile by conduction. Charring, ignition, melting and cell damage read the skin | Focal spots heat a spot, not a whole tile: a magnifying glass singes wood in seconds while the block stays cool |
 | D19 | **Light is shown where it lands.** Terrain is lit on its exposed faces only, never through a block; things behind the play plane are **background props** (trees, stands, panel frames, machine bodies) that catch light for display but never block, absorb or heat. Daylight lights everything; at night only lit faces and props show (`DisplayLight`) | Keeps optics and heat 2D while the world reads as lit by real light: focused moonlight, later lamps, light up spots in a dark world |
 | D20 | **Objects occupy space.** An object's shape may not overlap another object's shape or a solid tile (air and liquids are free). Placing or moving into occupied space is refused (`Placement`, checked in the commands); a drag stops at the last free spot and still undoes in one step | No stacked lenses or lenses sunk into rock; one rule for every placement path (tools, SimProbe, saves) |
+| D21 | **Objects stand on stands.** Optics and cell panels go on a stand: a pole centered in a tile column, its height above the ground in tile steps (0.5–6 m); surface cells lie flat on a ground tile; probes float. A stand is a background prop (D19) belonging to its object, not an object of its own; `Mounting` holds the rule and the place/move commands snap through it. Floating off a stand needs creative mode (`world.creative`, Alt while placing) | Builds read as things standing on the ground and line up on the grid; one object per thing keeps dragging, deleting and undo simple. Swapping what a stand holds (D16) comes with the crafter |
 
 ## 4. World & scale
 
@@ -392,8 +393,8 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
 | M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
 | **Moonlight & moon cycle** ✅ | Done (§6.2, §18.6). Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
-| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
-| M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
+| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell ✅, stands (D21 ✅), wires (D14), grid sale → money, shop pages with unlocks |
+| M3b — Stands & crafter | Swappable stand contents (D16) and stand qualities (§9), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
 | M3 — Cells & power | Cell model, power network, batteries, grid market; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power |
 | M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule |
@@ -503,6 +504,11 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Display:** lit faces and the heat view read strips (shared `surface_strips.gdshaderinc`); the heat view draws skin temperatures over solids' faces and the hottest marker counts them; the inspector shows "surface up to N °C"; SimProbe `tile` lists each face's strip temperatures and light.
 - **Tooling:** `tools/test.py` re-registers classes then runs the tests (`--bench` adds the benchmark): an open editor rewrites the class cache.
 - **Cost (debug build):** skin solve ~0.26 ms/tick (350 faces); demo-rig ticks ~1.5 → ~2.2 ms; a full pass of the 30-lens field at 09:00 ~34 → ~51 ms (low sun spreads landings over ~29 strips each). Next step if needed: record landings as strip ranges and fill strips once at publish.
+
+### 18.10 Stands and solar cells (2026-10-19, run 01 group 2)
+
+- **Cells (§9.1):** `SolarCell.max_power` per bin (Eg/E, collection, voltage rising with ln C, temperature, series loss), calibrated to 22 % for Si at 1 sun and 25 °C (voltage factor 0.5, r_s 0.002). `Kind.CELL` is a mirror-like panel (coating `CELL`): its coating reflects per bin, the rest heats its body (thin silicon sheet), and its front face records the light arriving per bin (`SimObject.incident`, shared with probes; "probe" readings renamed "incident"). The inspector and SimProbe `objects` show what a cell could make now; until wires exist (group 3) all of its light stays heat.
+- **D21 built:** `Mounting.snap_position/snap_angle/ground_y/stand_base`; `ObjectDef.mount` (STAND, GROUND, FREE); `SimObject.mounted`; Place/Transform commands snap mounted objects; the build ghost shows the snapped spot and its stand; `ObjectRenderer.draw_stand` draws poles behind optics. Tilt stays continuous (aiming needs fine angles). The demo rig stands on stands and includes a cell panel; a 25 cm surface cell lies on the ground.
 
 ## 19. Open questions
 

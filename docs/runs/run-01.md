@@ -63,6 +63,46 @@ per full pass instead of ~34 (passes are spread over ticks). Noon and the demo r
 at their old cost. If it matters later: store each landing as a strip range and fill strips once
 when a pass publishes.
 
+**Review before committing.** Fixed a strip that could be listed twice when a contribution rounded
+to zero (it would have subtracted its light from its tile twice), and removed an unused per-strip
+energy input and a redundant rebuild check.
+
+### Group 2: stands and solar cells (D21, §9.1)
+
+**What it does.** A silicon cell panel (`cell_si`, 1 m) and a 25 cm surface cell
+(`cell_si_surface`) join the build bar. A cell reflects what its anti-reflection coating doesn't
+catch, heats up with the rest, and its front records the light arriving per wavelength band. From
+that, the cell model gives the power it could make: 22 % at plain sunlight and 25 °C, more under
+moderate concentration, nothing by ~500 suns (series loss), less when hot (−0.4 %/K). Wires come
+in group 3, so for now its power is shown, and all of its light stays heat.
+Optics and panels now stand on stands: the pole is centered in a tile column, the height snaps to
+25 cm steps (0.5–6 m) above the ground under the cursor, and tilt stays free. Surface cells lie on
+the ground. Probes float. Alt while placing floats anything (creative mode, on by default).
+
+**Where to look.** `sim/power/solar_cell.gd`, `sim/objects/mounting.gd`, the `CoatCell` cases in
+`LightEngine.SurfaceHit` and the beam path, `PlaceObjectCommand` / `TransformObjectCommand`.
+
+**Try it.** The demo's last object (right) is a cell panel on a 1 m stand; hover it for "could
+make N W (η of irradiance)". Headless at noon it gets 967 W/m² and could make 43.8 W (18 %: it is
+already 49 °C after a few seconds). Pick a lens in Build: the ghost shows its stand and snaps.
+
+**Choices made.**
+- A stand is part of its object (`ObjectDef.mount`, `SimObject.mounted`), not an object of its own:
+  stands are background props with no physics, and one object per thing keeps dragging, deleting
+  and undo as they were. Swapping a stand's contents (D16) can come with the crafter.
+- The sim enforces the rule: the commands snap, so tools, SimProbe and the demo rig all agree.
+- Cells reuse the probe's per-band record ("incident" light) instead of a second mechanism.
+- The model's voltage factor is 0.5, not the design doc's 0.75 (that gives the ~33 % theoretical
+  limit); the doc is updated.
+
+**Not done / limits.** Stands don't change when the ground under them is dug out (the pole just
+reaches the new ground); poles don't occupy space, so two stands may share a column. Probe
+readings are published at the traced light level and not rescaled as the sun moves between passes
+(cells are). I could not check this group in the running game: the open editor needs a project
+reload to see the new classes (see below).
+
 ## Open questions
 
-(None yet.)
+- The editor has to be reloaded (Project → Reload Current Project) whenever a run adds a new
+  `class_name` script; until then the game fails to start from the editor. Headless tests are not
+  affected (`tools/test.py`).

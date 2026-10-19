@@ -6,6 +6,9 @@ var id: int
 var def: ObjectDef
 var position: Vector2
 var angle: float
+## Follows its definition's mount (Mounting): on a stand or the ground. False: floating where it
+## was put (creative mode).
+var mounted := false
 
 ## Written by the light system each trace: power absorbed in the body (W), and for probes and
 ## cells the power arriving on the active face per spectral bin (W).

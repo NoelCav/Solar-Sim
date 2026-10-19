@@ -26,7 +26,8 @@ func _make(db: MaterialDB, objects: ObjectDB, scenario: String) -> SimWorld:
 		var lens := objects.get_by_key(&"lens_crown")
 		for k in 30:
 			var x := 8.0 + k * 2.0
-			world.enqueue(PlaceObjectCommand.new(lens, Vector2(x, DemoRig.ground_y(world, x) - 3.0), 0.0))
+			var ground := Mounting.ground_y(world, floori(x / SimConst.TILE_M), 0.0)
+			world.enqueue(PlaceObjectCommand.new(lens, Vector2(x, ground - 3.0), 0.0))
 		world.flush_commands()
 	return world
 

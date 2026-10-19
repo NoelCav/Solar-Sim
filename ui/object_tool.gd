@@ -4,7 +4,8 @@ extends Node2D
 ## - Select (default, Esc / 0): click an object to select it, drag it to move, drag the ring
 ##   handle to tilt (Ctrl snaps to 15°); dragging empty space pans the view.
 ## - Build (B, 1–9): pick an item from the list, LMB places it (R / F tilt the ghost first);
-##   existing objects can still be dragged. RMB goes back to Select.
+##   existing objects can still be dragged. RMB goes back to Select. Objects go on stands
+##   (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
 ## - Paint (T): the tile brush (CreativeBrush) owns the mouse.
 ## In any mode R / F rotate the selected or hovered object (Shift for fine steps), as does
 ## Shift + wheel, and X / Delete removes it.
@@ -238,7 +239,7 @@ func _press() -> void:
 		_drag_from = obj.position
 		_drag_offset = obj.position - mouse_m()
 	elif mode == Mode.BUILD:
-		world.enqueue(PlaceObjectCommand.new(selected_def(), mouse_m(), ghost_angle))
+		world.enqueue(PlaceObjectCommand.new(selected_def(), mouse_m(), ghost_angle, _mounting()))
 	else:
 		selected_id = -1
 		_panning = true
@@ -269,6 +270,11 @@ func _mouse_motion(mm: InputEventMouseMotion) -> void:
 		var obj: SimObject = world.objects.get(_drag_id)
 		if obj != null:
 			world.enqueue(TransformObjectCommand.new(_drag_id, mouse_m() + _drag_offset, obj.angle, false))
+
+
+## Whether the next placed object goes on its stand (always, unless Alt in creative mode).
+func _mounting() -> bool:
+	return not (world.creative and Input.is_key_pressed(KEY_ALT))
 
 
 ## Object angle that keeps the grabbed handle under the pointer (Ctrl snaps, else 0.5° steps).
@@ -326,11 +332,22 @@ func _draw() -> void:
 	var def := selected_def()
 	if def == null or _drag_id >= 0 or hovered_id >= 0:
 		return
-	# Placement ghost, red where the space is occupied (Placement).
-	var xf := Transform2D(ghost_angle, mouse_m())
-	var clear := Placement.is_clear(world, def, mouse_m(), ghost_angle)
+	# Placement ghost where the object will go (snapped to its stand, Mounting), red where the
+	# space is occupied (Placement) or there is no ground.
+	var at := mouse_m()
+	var angle := ghost_angle
+	if _mounting():
+		at = Mounting.snap_position(world, def, at)
+		angle = Mounting.snap_angle(def, angle)
+	var clear := at.is_finite() and Placement.is_clear(world, def, at, angle)
+	if not at.is_finite():
+		at = mouse_m()
 	var col := Color(1, 1, 1, 0.5) if clear else Color(1.0, 0.3, 0.25, 0.8)
-	for piece in OpticsGen.transformed(def.build_pieces(), xf):
+	if _mounting() and def.mount == ObjectDef.Mount.STAND:
+		var base := Mounting.stand_base(world, at)
+		if is_finite(base):
+			ObjectRenderer.draw_stand(self, at, base, px, Color(col, 0.35))
+	for piece in OpticsGen.transformed(def.build_pieces(), Transform2D(angle, at)):
 		var pts := PackedVector2Array()
 		for p: Vector2 in piece[0]:
 			pts.append(p * px)

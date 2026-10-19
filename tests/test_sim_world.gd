@@ -1,6 +1,8 @@
 extends TestSuite
 ## World checks: grid layers, ticking, sun and moon motion, commands and undo, determinism.
 
+const LENS_CROWN := preload("res://data/objects/lens_crown.tres")
+
 
 func _make_world(seed_value: int = 7) -> SimWorld:
 	var world := SimWorld.new(load_materials(), 64, 32, seed_value)
@@ -91,8 +93,8 @@ func test_moon_is_the_light_at_night() -> void:
 ## undoes in one step.
 func test_objects_cannot_overlap() -> void:
 	var world := _make_world()
-	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
-	var sky := DemoRig.ground_y(world, 4.0) - 2.0
+	var lens := LENS_CROWN
+	var sky := Mounting.ground_y(world, 16, 0.0) - 2.0
 	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.0, sky)))
 	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.0, sky)))          # On top: refused
 	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.6, sky + 0.05)))   # Edges cross: refused
@@ -103,7 +105,7 @@ func test_objects_cannot_overlap() -> void:
 	var a: SimObject = world.objects[ids[0]]
 	var b: SimObject = world.objects[ids[1]]
 	world.enqueue(TransformObjectCommand.new(b.id, a.position + Vector2(0.3, 0.0), b.angle, false))
-	world.enqueue(TransformObjectCommand.new(a.id, Vector2(4.0, DemoRig.ground_y(world, 4.0)), a.angle, false))
+	world.enqueue(TransformObjectCommand.new(a.id, Vector2(4.0, Mounting.ground_y(world, 16, 0.0)), a.angle, false))
 	world.flush_commands()
 	check_eq(b.position, Vector2(6.0, sky), "moving into another lens is refused")
 	check_eq(a.position, Vector2(4.0, sky), "moving into the ground is refused")
@@ -141,3 +143,49 @@ func test_same_seed_and_commands_are_deterministic() -> void:
 			w.tick()
 	check_eq(a.state_hash(), b.state_hash(), "state hash")
 	check(a.state_hash() != _make_world(43).state_hash(), "different seed differs")
+
+
+## Mounted objects stand on stands (Mounting): centered in their tile column, at a height above
+## the ground in tile steps (clamped to the stand's range), and stay snapped when dragged.
+## Surface cells lie flat on the ground.
+func test_stands_snap_to_columns_and_heights() -> void:
+	var world := _make_world()
+	var lens := LENS_CROWN
+	var ground := Mounting.ground_y(world, 16, 0.0)   # Column 16: x 4.0-4.25 m
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.07, ground - 2.13), 0.0, true))
+	world.flush_commands()
+	var a: SimObject = world.objects[world.next_object_id - 1]
+	check(a.mounted, "mounted")
+	check_eq(a.position, Vector2(4.125, ground - 2.25), "column center, 2.25 m up")
+	var far := Mounting.ground_y(world, 40, 0.0)
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(10.1, far - 20.0), 0.0, true))
+	world.flush_commands()
+	check_eq(world.objects[world.next_object_id - 1].position.y, far - Mounting.MAX_HEIGHT_M, "tallest stand")
+	world.enqueue(TransformObjectCommand.new(a.id, Vector2(5.01, Mounting.ground_y(world, 20, 0.0) - 1.4), 0.3))
+	world.flush_commands()
+	check_eq(a.position, Vector2(5.125, Mounting.ground_y(world, 20, 0.0) - 1.5), "dragged: snapped again")
+	check_near(a.angle, 0.3, 1e-6, "tilt stays free")
+	var cell: ObjectDef = load("res://data/objects/cell_si_surface.tres")
+	var g30 := Mounting.ground_y(world, 30, 0.0)
+	world.enqueue(PlaceObjectCommand.new(cell, Vector2(7.6, g30 - 3.0), 0.5, true))
+	world.flush_commands()
+	var c: SimObject = world.objects[world.next_object_id - 1]
+	check_eq(c.position, Vector2(7.625, g30 - Mounting.GROUND_LIFT_M), "surface cell on the ground")
+	check_eq(c.angle, 0.0, "lying flat")
+
+
+## Outside creative mode everything but probes must be mounted.
+func test_floating_needs_creative() -> void:
+	var world := _make_world()
+	world.creative = false
+	var lens := LENS_CROWN
+	var probe: ObjectDef = load("res://data/objects/probe.tres")
+	var sky := Mounting.ground_y(world, 16, 0.0) - 2.0
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.0, sky)))
+	world.enqueue(PlaceObjectCommand.new(probe, Vector2(8.0, sky)))
+	world.enqueue(PlaceObjectCommand.new(lens, Vector2(12.0, sky), 0.0, true))
+	world.flush_commands()
+	var keys: Array[StringName] = []
+	for obj: SimObject in world.objects.values():
+		keys.append(obj.def.key)
+	check_eq(keys, [&"probe", &"lens_crown"] as Array[StringName], "floating lens refused")
