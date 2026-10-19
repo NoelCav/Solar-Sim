@@ -35,6 +35,7 @@ func run(cmd: String, a: Dictionary = {}) -> Dictionary:
 		"camera": return _camera(a)
 		"step": return _step(a)
 		"beams": return _beams(a)
+		"strips": return _strips(a)
 		"fan": return _fan(a)
 	return {"error": "unknown cmd '%s'; try help" % cmd}
 
@@ -56,6 +57,7 @@ func _help() -> Dictionary:
 		"step": "{n: 1}: pause, then advance exactly n sim ticks (light passes run within ticks)",
 		"fan": "{x0, y0, x1, y1 start line, n: 400, sun_offset_deg: 0, bin: 2, box: [bx0, by0, bx1, by1], hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the sun (rotated by sun_offset_deg) from the start line; histogram of directions of legs leaving the box, weighted by power",
 		"beams": "{x0, y0, x1, y1}: published beam records and secondary rays overlapping a box: count, watts, and a fingerprint to compare passes",
+		"strips": "{x0, y0, x1, y1, bin: 2, max: 40}: beam render records with a point in the box, leg by leg: start/end widths (m, as BeamMesh measures them) and concentration C (1 = plain sun); sorted by peak C",
 	}}
 
 
@@ -439,6 +441,60 @@ func _beams(a: Dictionary) -> Dictionary:
 				ray_w += light.ray_power[k * Spectrum.BIN_COUNT + b]
 	return {"version": light.trace_version, "records": n, "points": legs, "watts": snappedf(watts, 0.001),
 		"fingerprint": _v(fp), "secondary_rays": rays, "secondary_w": snappedf(ray_w, 0.001)}
+
+
+func _strips(a: Dictionary) -> Dictionary:
+	var light: LightSystem = _main.world.get_system(&"light")
+	var box := Rect2(Vector2(float(a.get("x0", 0)), float(a.get("y0", 0))), Vector2.ZERO)
+	box = box.expand(Vector2(float(a.get("x1", 1e9)), float(a.get("y1", 1e9))))
+	var want := int(a.get("bin", 2))
+	var reference := 1000.0 * Spectrum.AM15_SHARE[want] * SimConst.DEPTH_M
+	var buf := light.beam_render
+	var out := []
+	var o := 0
+	while o < buf.size():
+		var kind := int(buf[o])
+		var bin := int(buf[o + 1])
+		var watts := buf[o + 2]
+		var pts := int(buf[o + 3])
+		var stride := 6 if kind == BeamGeometry.STRIP else 3
+		var start := o + (4 if kind == BeamGeometry.STRIP else 5)
+		o = start + pts * stride
+		if bin != want:
+			continue
+		var hit := false
+		for k in pts:
+			if box.has_point(Vector2(buf[start + k * stride], buf[start + k * stride + 1])):
+				hit = true
+		if not hit:
+			continue
+		var legs := []
+		var peak := 0.0
+		for k in pts - 1:
+			var q := start + k * stride
+			var a0 := Vector2(buf[q], buf[q + 1])
+			var a1 := Vector2(buf[q + stride], buf[q + stride + 1])
+			if kind == BeamGeometry.STRIP:
+				var b0 := Vector2(buf[q + 2], buf[q + 3])
+				var b1 := Vector2(buf[q + stride + 2], buf[q + stride + 3])
+				var d := (a1 - a0).normalized()
+				var w0 := d.cross(b0 - a0)
+				var w1 := d.cross(b1 - a1)
+				var p := watts * 0.5 * (buf[q + 4] + buf[q + 5]) / reference
+				var c0 := p / maxf(absf(w0), BeamGeometry.MIN_WIDTH_M)
+				var c1 := p / maxf(absf(w1), BeamGeometry.MIN_WIDTH_M)
+				peak = maxf(peak, maxf(c0, c1))
+				legs.append({"a": _v(a0), "a_end": _v(a1), "w": [snappedf(w0, 0.0001), snappedf(w1, 0.0001)],
+					"C": [snappedf(c0, 0.01), snappedf(c1, 0.01)]})
+			else:
+				var width := buf[start - 1]
+				var c := watts * buf[q + 2] / (maxf(width, BeamGeometry.MIN_WIDTH_M) * reference)
+				peak = maxf(peak, c)
+				legs.append({"a": _v(a0), "a_end": _v(a1), "w": snappedf(width, 0.0001), "C": snappedf(c, 0.01)})
+		out.append({"kind": "strip" if kind == BeamGeometry.STRIP else "sliver", "watts": snappedf(watts, 0.0001),
+			"peak_C": snappedf(peak, 0.01), "legs": legs})
+	out.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x.peak_C > y.peak_C)
+	return {"count": out.size(), "records": out.slice(0, int(a.get("max", 40)))}
 
 
 static func _v(p: Vector2) -> Array:

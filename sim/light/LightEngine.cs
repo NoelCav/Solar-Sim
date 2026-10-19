@@ -855,13 +855,17 @@ public partial class LightEngine : RefCounted
                     D2 n = _n[s];
                     bool fromFront = d.Dot(n) < 0;
                     int owner = _owner[s];
-                    rec.Sig.Add(_piece[s] * 2 + (fromFront ? 0 : 1));
                     if (_coating[s] == CoatProbe)
                     {
+                        // A probe only reads what crosses it: no event in the path, so rays on
+                        // either side of its ends still make one beam (no split, no seam).
                         rec.Probes.Add(owner);
                         rec.Probes.Add(p[bin]);
+                        o = hit + d * Nudge;
+                        continue;
                     }
-                    else if (_coating[s] == CoatMirror)
+                    rec.Sig.Add(_piece[s] * 2 + (fromFront ? 0 : 1));
+                    if (_coating[s] == CoatMirror)
                     {
                         double keep = p[bin] * _refl[s * Bins + bin];
                         DepositBin(TileAt(hit), bin, p[bin] - keep, owner, hit, hit);
@@ -1659,18 +1663,7 @@ public partial class LightEngine : RefCounted
             default:
                 Terminal(ra, half, bin);
                 Terminal(rb, half, bin);
-                if (SameSig(ra, rb) && ra.Pts.Count == rb.Pts.Count)
-                {
-                    // Same path, landing split by an occluding edge: one beam up to the last leg.
-                    RenderStrip(ra, rb, half * 2.0, bin, ra.Pts.Count - 2);
-                    RenderRay(ra, half, (iv.Ub - iv.Ua) * 0.5, bin, ra.Pts.Count - 2);
-                    RenderRay(rb, half, (iv.Ub - iv.Ua) * 0.5, bin, rb.Pts.Count - 2);
-                }
-                else
-                {
-                    RenderRay(ra, half, (iv.Ub - iv.Ua) * 0.5, bin);
-                    RenderRay(rb, half, (iv.Ub - iv.Ua) * 0.5, bin);
-                }
+                RenderSplit(ra, rb, half, (iv.Ub - iv.Ua) * 0.5, bin);
                 break;
         }
     }
@@ -1845,6 +1838,56 @@ public partial class LightEngine : RefCounted
         }
     }
 
+    /// Two rays of an unresolved split. They stay one beam over the events they share and
+    /// along the next leg up to where the nearer of them stops (a lens edge one ray clips and
+    /// the other passes): drawn as slivers there, each half as wide as the interval and centered
+    /// on its ray, they would overlap the neighbouring beams and leave a gap between them,
+    /// showing as bright and dark lines along the whole path. Slivers start where they part.
+    void RenderSplit(PathRec ra, PathRec rb, double watts, double width, int bin)
+    {
+        int shared = 0;
+        while (shared < ra.Sig.Count && shared < rb.Sig.Count && ra.Sig[shared] == rb.Sig[shared])
+            shared++;
+        if (shared == 0 || shared + 1 >= ra.Pts.Count || shared + 1 >= rb.Pts.Count)
+        {
+            // Parted at the first event (whose incoming sunlight is the sheet's) or one ray
+            // ends there: nothing in common to draw as a beam.
+            RenderStrip(ra, rb, watts * 2.0, bin, shared);
+            RenderRay(ra, watts, width, bin, Math.Max(shared, 1));
+            RenderRay(rb, watts, width, bin, Math.Max(shared, 1));
+            return;
+        }
+        // Points 1..shared follow the same events; cut the next leg at the nearer stop.
+        D2 a0 = ra.Pts[shared], b0 = rb.Pts[shared];
+        double la = a0.DistanceTo(ra.Pts[shared + 1]), lb = b0.DistanceTo(rb.Pts[shared + 1]);
+        double t = Math.Min(la, lb);
+        D2 aCut = la > 1e-12 ? a0.Lerp(ra.Pts[shared + 1], t / la) : a0;
+        D2 bCut = lb > 1e-12 ? b0.Lerp(rb.Pts[shared + 1], t / lb) : b0;
+        double fa = la > 1e-12 ? ra.Frac[shared] + (ra.Frac[shared + 1] - ra.Frac[shared]) * t / la : ra.Frac[shared];
+        double fb = lb > 1e-12 ? rb.Frac[shared] + (rb.Frac[shared + 1] - rb.Frac[shared]) * t / lb : rb.Frac[shared];
+
+        _render.Add(0);   // BeamGeometry.STRIP
+        _render.Add(bin);
+        _render.Add((float)(watts * 2.0));
+        _render.Add(shared + 1);   // points 1..shared, then the cut
+        for (int k = 1; k <= shared; k++)
+            AddStripPoint(ra.Pts[k], rb.Pts[k], ra.Frac[k], rb.Frac[k]);
+        AddStripPoint(aCut, bCut, fa, fb);
+
+        RenderRay(ra, watts, width, bin, shared + 1, aCut, fa);
+        RenderRay(rb, watts, width, bin, shared + 1, bCut, fb);
+    }
+
+    void AddStripPoint(D2 a, D2 b, double fa, double fb)
+    {
+        _render.Add((float)a.X);
+        _render.Add((float)a.Y);
+        _render.Add((float)b.X);
+        _render.Add((float)b.Y);
+        _render.Add((float)fa);
+        _render.Add((float)fb);
+    }
+
     /// A lone ray drawn as a beam of fixed width from leg `first` on (incoherent slivers).
     void RenderRay(PathRec r, double watts, double width, int bin, int first = 1)
     {
@@ -1857,6 +1900,29 @@ public partial class LightEngine : RefCounted
         _render.Add(n);
         _render.Add((float)width);
         for (int k = first; k < r.Pts.Count; k++)
+        {
+            D2 a = r.Pts[k];
+            _render.Add((float)a.X);
+            _render.Add((float)a.Y);
+            _render.Add((float)r.Frac[k]);
+        }
+    }
+
+    /// A lone ray drawn from `start` (fraction `frac`), then through its points from `next` on.
+    void RenderRay(PathRec r, double watts, double width, int bin, int next, D2 start, double frac)
+    {
+        int n = r.Pts.Count - next + 1;
+        if (n < 2 || start.DistanceTo(r.Pts[^1]) < 1e-9)
+            return;
+        _render.Add(1);   // BeamGeometry.SLIVER
+        _render.Add(bin);
+        _render.Add((float)watts);
+        _render.Add(n);
+        _render.Add((float)width);
+        _render.Add((float)start.X);
+        _render.Add((float)start.Y);
+        _render.Add((float)frac);
+        for (int k = next; k < r.Pts.Count; k++)
         {
             D2 a = r.Pts[k];
             _render.Add((float)a.X);

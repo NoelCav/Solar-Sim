@@ -14,7 +14,8 @@ namespace SolarSim;
 public partial class BeamMesh : RefCounted
 {
     const int Bins = 6;
-    static readonly double[] CrossSteps = { 0.5, 0.25, 0.1, 0.03 };
+    const double SliceGrowth = 1.5;   // Width ratio between neighbouring slices of a leg
+    const int MaxSlices = 24;
 
     double _sunLevel, _logGain, _minWidth;
     readonly List<Vector2> _verts = new();
@@ -85,30 +86,22 @@ public partial class BeamMesh : RefCounted
             ts.Clear();
             ts.Add(0.0);
             double tCross = -1.0;
+            // Brightness goes as 1/width and is interpolated linearly across a slice, so slices
+            // are spaced geometrically in width (each at most SliceGrowth wider than the last),
+            // packed toward the narrow end: even slices would smear focus brightness along the
+            // leg (a 40 m leg sliced at a few percent spreads it over metres).
             if (w0 * w1 < 0.0)
             {
+                // The rays cross (a focus): slice each side outward from the crossing.
                 tCross = w0 / (w0 - w1);
-                double reach = Math.Max(tCross, 1.0 - tCross);
                 ts.Add(tCross);
-                foreach (double d in CrossSteps)
-                {
-                    double span = d * reach;
-                    if (tCross - span > 0.0)
-                        ts.Add(tCross - span);
-                    if (tCross + span < 1.0)
-                        ts.Add(tCross + span);
-                }
-                ts.Add(1.0);
-                ts.Sort();
+                AddWidthSlices(ts, 0.0, Math.Abs(w0), tCross, 0.0);
+                AddWidthSlices(ts, tCross, 0.0, 1.0, Math.Abs(w1));
             }
             else
-            {
-                // Slices grow with how strongly the leg converges or diverges.
-                double ratio = Math.Max(Math.Abs(w0), Math.Abs(w1)) / Math.Max(Math.Min(Math.Abs(w0), Math.Abs(w1)), _minWidth);
-                int m = Math.Clamp((int)Math.Ceiling(Math.Log(ratio) / Math.Log(2.0)) + 1, 1, 6);
-                for (int j = 1; j <= m; j++)
-                    ts.Add((double)j / m);
-            }
+                AddWidthSlices(ts, 0.0, Math.Abs(w0), 1.0, Math.Abs(w1));
+            ts.Add(1.0);
+            ts.Sort();
             var prevA = new Vector2((float)(a0x * px), (float)(a0y * px));
             var prevB = new Vector2((float)(b0x * px), (float)(b0y * px));
             Color prevC = ColorOf(rgb, Tone(p / Math.Max(Math.Abs(w0), _minWidth)));
@@ -131,6 +124,21 @@ public partial class BeamMesh : RefCounted
                 prevB = pb;
                 prevC = c;
             }
+        }
+    }
+
+    /// Slice points strictly inside (t0, t1), where the width goes linearly from wa to wb.
+    void AddWidthSlices(List<double> ts, double t0, double wa, double t1, double wb)
+    {
+        double lo = Math.Max(Math.Min(wa, wb), _minWidth), hi = Math.Max(wa, wb);
+        if (hi <= lo * SliceGrowth || Math.Abs(wb - wa) < 1e-12)
+            return;
+        int m = Math.Min((int)Math.Ceiling(Math.Log(hi / lo) / Math.Log(SliceGrowth)), MaxSlices);
+        for (int j = 1; j < m; j++)
+        {
+            double f = (lo * Math.Pow(hi / lo, (double)j / m) - wa) / (wb - wa);
+            if (f > 0.0 && f < 1.0)
+                ts.Add(t0 + (t1 - t0) * f);
         }
     }
 

@@ -11,7 +11,7 @@ extends Node2D
 
 enum Mode { SELECT, BUILD, PAINT }
 
-const PICK_RADIUS_M := 0.2
+const PICK_PX := 6.0            ## How close (screen pixels) the pointer must be to a line
 const ROTATE_STEP_DEG := 5.0
 const FINE_STEP_DEG := 1.0
 const SNAP_DEG := 15.0
@@ -107,7 +107,7 @@ func _target_id() -> int:
 func hovered_object() -> int:
 	var m := mouse_m()
 	var best := -1
-	var best_d := PICK_RADIUS_M
+	var best_d := PICK_PX / (SimConst.TILE_PX / SimConst.TILE_M * _zoom())
 	for obj: SimObject in world.objects.values():
 		var pieces := obj.world_pieces()
 		if obj.def.is_body() and Geometry2D.is_point_in_polygon(m, OpticsGen.outline(pieces)):

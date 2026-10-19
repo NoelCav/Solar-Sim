@@ -21,6 +21,12 @@ func setup(p_world: SimWorld) -> void:
 	z_index = -10
 	color = Color(0, 0, 0, 0)    # Everything is drawn in _draw
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Screen space, behind the world: a rect repositioned from the canvas transform each
+	# frame lags a camera moved later in the frame, showing black at the edges while panning.
+	var layer := CanvasLayer.new()
+	layer.layer = -1
+	get_parent().add_child(layer)
+	reparent(layer, false)
 	var g := Gradient.new()
 	g.offsets = PackedFloat32Array([0.0, 0.08, 0.35, 1.0])
 	g.colors = PackedColorArray([Color(1, 1, 1, 0.95), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.15),
@@ -37,10 +43,8 @@ func setup(p_world: SimWorld) -> void:
 func _process(_delta: float) -> void:
 	if world == null:
 		return
-	# Cover exactly what the camera sees.
-	var inv := get_viewport().get_canvas_transform().affine_inverse()
-	position = inv * Vector2.ZERO
-	size = inv.basis_xform(get_viewport_rect().size)
+	position = Vector2.ZERO
+	size = get_viewport_rect().size
 	queue_redraw()
 
 
