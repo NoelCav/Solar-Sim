@@ -11,7 +11,9 @@ dotnet build "Solar Sim.csproj"
 godot --path .
 ```
 
-The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens. Hover anything for the inspector (material, temperature, absorbed light by band, object readings).
+The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens. Hover anything for the inspector (material, temperature, absorbed light by band, object readings and temperature).
+
+What you see: the sky glows from the screen edge the sunlight comes from and is colored by the sun's actual spectrum (red at dawn and dusk); below the original ground line a dark earth backdrop sits behind the tiles. Lenses, prisms and mirrors have their own temperature (Heat view fills them with it).
 
 Controls (the window opens maximized and the interface scales with it; every key below also has a button):
 
@@ -20,11 +22,11 @@ Controls (the window opens maximized and the interface scales with it; every key
 | Select tool (Esc, 0) — default | Click an object to select it, drag to move, drag its ring handle to tilt (Ctrl snaps 15°); drag empty space to pan |
 | Build tool (B, 1–5) | Pick an item from the bar, LMB place (R/F tilt the ghost first), RMB back to Select |
 | Paint tool (T) | LMB paint, RMB erase, Q/E or the swatches for material, `[` `]` size |
-| WASD / middle-drag, wheel | Pan, zoom |
+| WASD / middle-drag, wheel | Pan, zoom (up to 64×; outlines and labels stay crisp) |
 | R / F (Shift = fine), Shift+wheel | Tilt the selected or hovered object |
 | X / Delete | Delete the selected or hovered object |
-| Space, Tab | Pause, cycle speed (1× 2× 4×) |
-| `,` `.` | Time −/+ 1 hour |
+| Space, Tab, or the speed buttons | Pause, speed 1× 2× 4× 8× 16× |
+| `,` `.` (Shift: 6 h), or the jump buttons | Move the clock −/+ 30 min, 1 h, 6 h without simulating the time between (the sun moves, temperatures don't) |
 | H, or the view bar (top right) | Views: Normal · Light (all wavelengths in false color, tiles show absorbed light) · Heat (every tile's temperature; hover the legend to read values) |
 | G / J, or the wavelength slider | Show one spectral band (UV, blue, green, red, near IR, IR) or all |
 | F1 | Hide/show the help lines |
@@ -40,7 +42,11 @@ return SimProbe.run("objects")                 # ids, positions, angles, absorbe
 return SimProbe.run("region", {"x0": 40, "y0": 14, "x1": 48, "y1": 20, "layer": "light"})  # ASCII map
 return SimProbe.run("trace", {"x": 43.4, "y": 17.0, "dx": 0.96, "dy": -0.28})  # one test ray, leg by leg
 return SimProbe.run("rotate", {"id": 4, "angle": 30})
+return SimProbe.run("step", {"n": 5})          # pause, then advance exactly 5 ticks
+return SimProbe.run("fan", {...})              # dense plain-ray ground truth (exit-angle histogram)
 ```
+
+Other commands: `state`, `defs`, `object`, `tile`, `peaks`, `beams`, `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`). Prefer these over screenshots when checking behaviour: they return exact numbers and cost far less.
 
 Positions are meters (x right, y down), angles degrees. Commands go through the sim's command queue like player input.
 

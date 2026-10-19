@@ -2,7 +2,7 @@
 
 > Living document. Sections marked **LOCKED** are architecture decisions we build against and should not change without a deliberate migration. Everything else is tunable.
 >
-> Last updated: 2026-10-19 (M3 planning)
+> Last updated: 2026-10-19 (UI/sky/thermal pass; next: moonlight)
 
 ---
 
@@ -383,8 +383,9 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 |---|---|
 | **M0 — Skeleton** | Godot project, `SimWorld` tick loop, command queue, tile grid with all layers allocated, material resources, debug tile renderer, camera |
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
-| M2 — Environment & creative mode | Deferred: sky & sunsets later; current free-placement tools stay as dev tools. Creative mode is a later concern |
-| **M3a — First playable loop** | Object thermal nodes (D13), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
+| M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
+| **Next — Moonlight & moon cycle** | Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
+| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18), Si cell, wires (D14), grid sale → money, shop pages with unlocks |
 | M3b — Stands & crafter | Stands holding lenses (D16), generic lenses, lens crafter with focus region and manufacturing error |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
 | M3 — Cells & power | Cell model, power network, batteries, grid market |
@@ -455,6 +456,16 @@ The hot loops moved to C# (Godot .NET), per §5.5; GDScript keeps the models and
 | 4× speed in the editor (debug build) | ~14 fps | 60 fps |
 
 Results match the GDScript implementation (all tests; checksums within ~0.003 %). Remaining GDScript cost sits in per-pass setup (surface sync, sun map, direct-light sheet: ~3–6 ms) and is the next candidate if edits need to get cheaper still.
+
+### 18.5 UI, sky and thermal pass (2026-10-19)
+
+- **Interface:** full-window with canvas_items scaling; tool bar with Select (default: click, drag, ring handle to tilt, drag empty space to pan), Build (item list with shape icons) and Paint (material swatches); views Normal · Light · Heat with a wavelength slider for one bin; legend hover shows the value; speed buttons 1–16×; clock jumps ±30 min, 1 h, 6 h; zoom to 64× with objects, tool overlays and markers drawn in screen units (crisp).
+- **Light:** re-trace every 0.1° of sun with a 0.25 s crossfade (smooth motion). Run samples sit on a grid fixed to the run's object and pooled reflections use fixed boundaries, direction splits and a weighted-median representative, so caustics no longer pop between passes (checked tick by tick against a dense plain-ray ground truth with SimProbe `fan`). Fixed: glass absorption depended on tile alignment (inside-body check now uses the stretch to the next surface); object cache verifies the entry point and re-splits cached absorption legs across tiles.
+- **Atmosphere (§6.2):** per-bin Rayleigh, haze and water/ozone optical depths × Kasten–Young air mass replace the Meinel total and reddening dial.
+- **Sky:** no sun/moon disks; a glow from the screen edge the light comes from, colored by the arriving spectrum; zenith colored by short-path scattered light, horizon by the reddened direct light; stars and a pale-blue moon glow at night (placeholder until moonlight is simulated, see roadmap).
+- **Heat:** solid/liquid heat capacity scales with the day compression (1/120): realistic daily ground cycle, air warmed by the ground. Heat view colors every tile by absolute temperature. Objects own a thermal node (D13): light absorbed in a body heats the object, which convects into the tiles its outline touches and radiates.
+- **World:** background walls below the original ground line, earth beyond the site edges; tile shader (grain, bevels, seams, depth).
+- **Agent tooling:** `debug/sim_probe.gd` (`SimProbe` autoload) reads and drives the running game through the MCP's game_eval. Extend it with every new system so behaviour can be checked by numbers rather than screenshots.
 
 ## 19. Open questions
 
