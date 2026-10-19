@@ -25,6 +25,12 @@ var piece_count := 0
 # Tile buckets, CSR layout: segments of tile i are cell_items[cell_start[i] .. cell_start[i+1]).
 var cell_start := PackedInt32Array()
 var cell_items := PackedInt32Array()
+## Flat copies of each segment's start and edge vector for the tracer's inner loop
+## (float64: positions span tens of meters and rays are nudged by 1e-5 m).
+var ax := PackedFloat64Array()
+var ay := PackedFloat64Array()
+var ex := PackedFloat64Array()
+var ey := PackedFloat64Array()
 var _width := 0
 var _height := 0
 
@@ -76,6 +82,14 @@ func shading_normal(s: int, u: float) -> Vector2:
 func build_buckets(width: int, height: int) -> void:
 	_width = width
 	_height = height
+	var count_s := count()
+	for arr in [ax, ay, ex, ey]:
+		arr.resize(count_s)
+	for s in count_s:
+		ax[s] = a[s].x
+		ay[s] = a[s].y
+		ex[s] = b[s].x - a[s].x
+		ey[s] = b[s].y - a[s].y
 	var n := width * height
 	var counts := PackedInt32Array()
 	counts.resize(n + 1)

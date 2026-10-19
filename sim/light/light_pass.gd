@@ -18,6 +18,7 @@ var dni := 0.0
 var spectrum := Spectrum.make_zero()
 var done := true
 var ms := 0.0                    ## CPU time spent on this pass so far
+var stage_ms := {"map": 0.0, "direct": 0.0, "beams": 0.0}   ## Breakdown of ms
 
 ## Direct-light sheet: where each drawn lane enters the site and where it stops.
 ## A lane that hits optics stops at the optic; the beam takes over from there.
@@ -43,6 +44,7 @@ func start(world: SimWorld) -> void:
 	sheet_from.clear()
 	sheet_to.clear()
 	done = false
+	stage_ms = {"map": 0.0, "direct": 0.0, "beams": 0.0}
 	dir = Vector2.ZERO
 	dni = 0.0
 	spectrum = Spectrum.make_zero()
@@ -51,8 +53,11 @@ func start(world: SimWorld) -> void:
 		dni = world.sun_dni
 		spectrum = world.sun_spectrum.duplicate()
 		map.build(grid, tracer.opaque, surfaces, dir, SimConst.LANE_WIDTH_M)
+		var t1 := Time.get_ticks_usec()
+		stage_ms.map = (t1 - t0) / 1000.0
 		beams.begin(tracer, map, grid, spectrum)
 		_direct()
+		stage_ms.direct = (Time.get_ticks_usec() - t1) / 1000.0
 		for run in map.runs:
 			for b in Spectrum.BIN_COUNT:
 				if spectrum[b] > 0.0:
@@ -70,7 +75,9 @@ func step(max_paths: int) -> bool:
 		beams.trace_run(task[0], task[1])
 		_next += 1
 	done = _next >= _tasks.size()
-	ms += (Time.get_ticks_usec() - t0) / 1000.0
+	var spent := (Time.get_ticks_usec() - t0) / 1000.0
+	ms += spent
+	stage_ms.beams += spent
 	return done
 
 

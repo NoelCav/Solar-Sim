@@ -21,7 +21,9 @@ enum Kind { LENS, MIRROR, PRISM, PROBE }
 @export var radius_front_m: float = 1.0
 @export var radius_back_m: float = 1.0
 @export var apex_angle_deg: float = 60.0
-@export var arc_segments: int = 32
+## Segments per curved face. Shading normals are interpolated, so refraction stays smooth;
+## 16 keeps the shape within ~0.5 mm for typical radii.
+@export var arc_segments: int = 16
 
 @export_group("Optics")
 ## Mirror reflectance per spectral bin.

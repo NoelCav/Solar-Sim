@@ -15,7 +15,7 @@ extends RefCounted
 ## reflection along the path) and traced as ordinary rays.
 
 const BASE_SPACING := 0.1      ## Initial sample spacing across a run, m (refinement finds edges)
-const MIN_SPACING := 0.01      ## Narrowest interval worth refining, m (tiles are 0.25 m)
+const MIN_SPACING := 0.02      ## Narrowest interval worth refining, m (one lane; tiles are 0.25 m)
 const MIN_WIDTH_M := 0.001     ## Rendering: beam width floor where rays cross at a focus
 const LANDING_TOL_M := 0.35   ## Same-path rays landing this close count as one beam (~1 tile)
 const REFL_POOL_M := 0.5       ## Pooled reflections: one secondary ray per this much wavefront
@@ -32,7 +32,8 @@ var tri_pts := PackedVector2Array()
 var tri_irr := PackedFloat32Array()
 var tri_bin := PackedByteArray()
 
-var _intervals: Array = []
+var _intervals: Array = []   ## [ua, ra, ub, rb, Span, spread] in u order
+var _last_spread: Array = []
 ## Pooled reflections per reflection index along the path: [watts, pos, dir, medium, body, u0].
 var _refl: Dictionary = {}
 
@@ -78,10 +79,10 @@ func _trace_at(u: float, s0: float, bin: int) -> Tracer.PathRec:
 func _refine(ua: float, ra: Tracer.PathRec, ub: float, rb: Tracer.PathRec, s0: float, bin: int) -> void:
 	var kind := _classify(ra, rb)
 	if kind != Span.SPLIT:
-		_intervals.append([ua, ra, ub, rb, kind])
+		_intervals.append([ua, ra, ub, rb, kind, _last_spread])
 		return
 	if ub - ua <= MIN_SPACING:
-		_intervals.append([ua, ra, ub, rb, Span.SPLIT])
+		_intervals.append([ua, ra, ub, rb, Span.SPLIT, []])
 		return
 	var um := (ua + ub) * 0.5
 	var rm := _trace_at(um, s0, bin)
@@ -99,7 +100,8 @@ func _classify(ra: Tracer.PathRec, rb: Tracer.PathRec) -> Span:
 		return Span.SPLIT
 	if ra.pts.size() != rb.pts.size() or ra.sig != rb.sig:
 		return Span.SPLIT
-	if ra.term != Tracer.Term.OPAQUE or not _spread(ra, rb).is_empty():
+	_last_spread = [] if ra.term != Tracer.Term.OPAQUE else _spread(ra, rb)
+	if ra.term != Tracer.Term.OPAQUE or not _last_spread.is_empty():
 		return Span.EXACT
 	var end_a := ra.pts[ra.pts.size() - 1]
 	var end_b := rb.pts[rb.pts.size() - 1]
@@ -160,7 +162,7 @@ func _settle(iv: Array, irr: float, bin: int) -> void:
 			if ra.term == Tracer.Term.ESCAPE:
 				tracer.escaped_w += arriving
 			else:
-				var sp := _spread(ra, rb)
+				var sp: Array = iv[5]
 				var tiles: PackedInt32Array = sp[0]
 				var weights: PackedFloat32Array = sp[1]
 				for k in tiles.size():

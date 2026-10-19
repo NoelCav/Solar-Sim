@@ -20,6 +20,7 @@ extends RefCounted
 
 const EPS := 1e-7      ## Minimum hit distance, m
 const NUDGE := 1e-5    ## Child rays start this far off the surface, m
+const U_EPS := 1e-6    ## Along-segment tolerance for hits
 const MAX_RENDER_SEGMENTS := 60000
 
 enum Ev { MISS, EXIT, START_OPAQUE, OPAQUE, MEDIA, SURFACE }
@@ -155,7 +156,7 @@ func build_blocks() -> void:
 		var r: Rect2 = _body_bounds.get(id, Rect2(surfaces.a[s], Vector2.ZERO))
 		_body_bounds[id] = r.expand(surfaces.a[s]).expand(surfaces.b[s])
 	for id in _body_bounds:
-		_body_bounds[id] = _body_bounds[id].grow(0.01)
+		_body_bounds[id] = _body_bounds[id].grow(1e-3)
 	var bs := 1 << BLOCK_SHIFT
 	_blocks_w = (grid.width + bs - 1) >> BLOCK_SHIFT
 	var blocks_h := (grid.height + bs - 1) >> BLOCK_SHIFT
@@ -528,8 +529,14 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 			return
 		medium = prev_mat
 
-	var seg_a := surfaces.a
-	var seg_b := surfaces.b
+	var sax := surfaces.ax
+	var say := surfaces.ay
+	var sex := surfaces.ex
+	var sey := surfaces.ey
+	var ox := o.x
+	var oy := o.y
+	var dx := d.x
+	var dy := d.y
 	var cell_start := surfaces.cell_start
 	var cell_items := surfaces.cell_items
 
@@ -543,9 +550,9 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 		var i := cy * w + cx
 		var t1 := minf(t_max_x, t_max_y)
 
-		# A body ray that walks out of its body's bounds slipped past a corner
-		# (grazing hit, nudge): it is in the tile medium again.
-		if body >= 0 and not _body_bounds.get(body, Rect2()).has_point(o + d * t0):
+		# A body ray whose stretch through this tile lies outside its body's bounds slipped past
+		# a corner (grazing hit, nudge): it is in the tile medium again.
+		if body >= 0 and not _body_bounds.get(body, Rect2()).has_point(o + d * (0.5 * (t0 + t1))):
 			body = -1
 			medium = mat[i]
 			prev_mat = medium
@@ -569,16 +576,18 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 		var best_u := 0.0
 		for k in range(cell_start[i], cell_start[i + 1]):
 			var s := cell_items[k]
-			var e := seg_b[s] - seg_a[s]
-			var denom := d.x * e.y - d.y * e.x
-			if absf(denom) < 1e-12:
+			var sx := sex[s]
+			var sy := sey[s]
+			var denom := dx * sy - dy * sx
+			if denom > -1e-12 and denom < 1e-12:
 				continue
-			var q := seg_a[s] - o
-			var t := (q.x * e.y - q.y * e.x) / denom
+			var qx := sax[s] - ox
+			var qy := say[s] - oy
+			var t := (qx * sy - qy * sx) / denom
 			if t <= EPS or t >= best_t:
 				continue
-			var u := (q.x * d.y - q.y * d.x) / denom
-			if u < 0.0 or u > 1.0:
+			var u := (qx * dy - qy * dx) / denom
+			if u < -U_EPS or u > 1.0 + U_EPS:   # Tolerance keeps shared vertices watertight
 				continue
 			best_t = t
 			best_s = s
