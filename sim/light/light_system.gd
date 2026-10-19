@@ -37,6 +37,7 @@ var _traced_dir := Vector2.ZERO
 var _traced_dni := 0.0          ## DNI behind the deposits in use (sim state)
 var _lit_tiles := PackedInt32Array()
 var _lit_power := PackedFloat32Array()
+var _obj_power := {}            ## Object id -> W absorbed in its body, at _traced_dni (sim state)
 var _diffuse_absorptivity := PackedFloat32Array()   ## AM1.5-weighted, per material
 
 var _pass_active := false
@@ -134,6 +135,7 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 		return
 	_pass_active = false
 	_shown = p
+	_obj_power = e.ObjectAbsorbed()
 	_lit_tiles = shown_lit.duplicate()
 	_lit_power.resize(_lit_tiles.size())
 	for k in _lit_tiles.size():
@@ -148,10 +150,14 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 func _deposit(world: SimWorld, dt: float) -> void:
 	var g := world.grid
 	var energy := g.energy_in
-	if _traced_dni > 0.0 and not _lit_tiles.is_empty():
+	if _traced_dni > 0.0:
 		var scale := world.sun_dni / _traced_dni * dt
 		for k in _lit_tiles.size():
 			energy[_lit_tiles[k]] += _lit_power[k] * scale
+		for id in _obj_power:
+			var obj: SimObject = world.objects.get(id)
+			if obj != null:
+				obj.heat_in += _obj_power[id] * scale
 	if world.diffuse_irradiance > 0.0:
 		var per_tile := world.diffuse_irradiance * SimConst.TILE_M * SimConst.DEPTH_M * dt
 		var mat := g.material

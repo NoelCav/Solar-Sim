@@ -41,6 +41,7 @@ var _g_down := PackedFloat32Array()      ## Per tile, to the neighbour below (0 
 var _vert_gas := PackedByteArray()       ## Per tile: this tile and the one below are both gas
 var _is_gas := PackedByteArray()         ## Per tile
 var _kernel := HeatKernel.new()
+var _objects := ObjectThermal.new()
 
 
 func system_name() -> StringName:
@@ -52,6 +53,7 @@ func tick(world: SimWorld, dt: float) -> void:
 	var bands := SimConst.HEAT_BANDS
 	step_rows(world, dt * bands, _band * h / bands, (_band + 1) * h / bands)
 	_band = (_band + 1) % bands
+	_objects.step(world, dt)
 
 
 ## One heat step of `h` seconds over the whole grid.

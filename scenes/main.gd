@@ -4,7 +4,7 @@ extends Node2D
 
 const WORLD_WIDTH := 300
 const WORLD_HEIGHT := 120
-const SPEEDS: Array[int] = [1, 2, 4]
+const SPEEDS: Array[int] = [1, 2, 4, 8, 16]
 
 @export var world_seed := 1
 @export var place_demo_rig := true
@@ -57,6 +57,7 @@ func _ready() -> void:
 	_objects.setup(world)
 	_beams.setup(world)
 	_overlay.setup(world)
+	_objects.overlay = _overlay
 	_brush.setup(world)
 	_tool.setup(world, object_db, _brush, _objects)
 	_markers.setup(world, _overlay)
@@ -101,9 +102,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"wavelength_prev"):
 		set_wavelength(wavelength - 1 if wavelength >= 0 else Spectrum.BIN_COUNT - 1)
 	elif event.is_action_pressed(&"time_forward"):
-		skip_hours(1.0)
+		skip_hours(6.0 if Input.is_key_pressed(KEY_SHIFT) else 1.0)
 	elif event.is_action_pressed(&"time_back"):
-		skip_hours(-1.0)
+		skip_hours(-6.0 if Input.is_key_pressed(KEY_SHIFT) else -1.0)
 
 
 ## Switches what the beams, tile overlay and markers show (ViewMode).
@@ -112,6 +113,7 @@ func set_view(v: int) -> void:
 	_beams.view = v
 	_overlay.view = v
 	_markers.view = v
+	_objects.view = v
 	_hud.refresh_view()
 
 
@@ -129,7 +131,14 @@ func toggle_pause() -> void:
 
 
 func cycle_speed() -> void:
-	speed = SPEEDS[(SPEEDS.find(speed) + 1) % SPEEDS.size()]
+	set_speed(SPEEDS[(SPEEDS.find(speed) + 1) % SPEEDS.size()])
+
+
+## Runs at one of SPEEDS, unpausing.
+func set_speed(n: int) -> void:
+	speed = n
+	if paused:
+		toggle_pause()
 
 
 ## Moves the clock by whole hours (the sun follows even while paused).

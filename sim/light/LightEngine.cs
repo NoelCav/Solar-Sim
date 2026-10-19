@@ -491,18 +491,24 @@ public partial class LightEngine : RefCounted
     // Deposits
     // ===========================================================================================
 
-    /// <summary>Adds absorbed power in one bin to a tile (and to an object's tally if body >= 0).</summary>
+    /// <summary>
+    /// Adds absorbed power in one bin: to object `body` when body >= 0 (it heats the object's
+    /// own thermal node, D13), else to tile i.
+    /// </summary>
     public void ApplyBin(int i, int bin, double watts, int body = -1)
     {
         if (watts <= 0)
             return;
-        if (_tilePower[i] == 0f)
-            _lit.Add(i);
-        _tilePower[i] += (float)watts;
-        _bandPower[i * Bands + BandOf[bin]] += (float)watts;
         _absorbed += watts;
         if (body >= 0)
             _objAbsorbed[body] = (_objAbsorbed.TryGetValue(body, out double v) ? v : 0) + watts;
+        else
+        {
+            if (_tilePower[i] == 0f)
+                _lit.Add(i);
+            _tilePower[i] += (float)watts;
+            _bandPower[i * Bands + BandOf[bin]] += (float)watts;
+        }
         if (_log != null)
         {
             _log.Deps.Add(i);

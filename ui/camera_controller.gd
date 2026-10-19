@@ -5,7 +5,7 @@ extends Camera2D
 @export var pan_speed := 900.0
 @export var zoom_step := 1.15
 @export var min_zoom := 0.25
-@export var max_zoom := 6.0
+@export var max_zoom := 64.0   ## Close enough to see light inside a lens
 
 var _dragging := false
 

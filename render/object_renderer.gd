@@ -2,10 +2,13 @@ class_name ObjectRenderer
 extends Node2D
 ## Draws placed objects from their optical polylines: lens and prism bodies as tinted
 ## glass, mirrors as a bright face over a dark back, probes as a dashed line with readout.
+## In the heat view, lenses, prisms and mirrors are filled with their own temperature color.
 
 var world: SimWorld
 var highlighted_id := -1
 var selected_id := -1
+var view := ViewMode.NORMAL
+var overlay: OverlayRenderer   ## For the heat scale
 
 var _font: Font
 
@@ -24,6 +27,7 @@ func _draw() -> void:
 	if world == null:
 		return
 	var px := SimConst.TILE_PX / SimConst.TILE_M
+	var heat := view == ViewMode.HEAT and overlay != null
 	for obj: SimObject in world.objects.values():
 		var def := obj.def
 		var pieces := obj.world_pieces()
@@ -35,7 +39,7 @@ func _draw() -> void:
 				for p in outline:
 					pts.append(p * px)
 				if pts.size() >= 3:
-					draw_colored_polygon(pts, def.color)
+					draw_colored_polygon(pts, _heat_color(obj) if heat else def.color)
 					pts.append(pts[0])
 					var edge := Color(0.9, 0.97, 1.0, 0.9 if hl else 0.6)
 					if obj.id == selected_id:
@@ -45,7 +49,7 @@ func _draw() -> void:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
 				var back := Vector2.from_angle(obj.angle + PI * 0.5) * 2.0
-				draw_line(a + back, b + back, Color(0.15, 0.15, 0.18), 3.0)
+				draw_line(a + back, b + back, _heat_color(obj) if heat else Color(0.15, 0.15, 0.18), 3.0)
 				draw_line(a, b, def.color if not hl else Color.WHITE, 2.0, true)
 			ObjectDef.Kind.PROBE:
 				var a: Vector2 = pieces[0][0][0] * px
@@ -54,3 +58,10 @@ func _draw() -> void:
 				var label := "%.0f W/m²  (%.1f×)" % [obj.probe_irradiance(),
 					obj.probe_irradiance() / maxf(world.sun_dni, 1.0)]
 				draw_string(_font, b + Vector2(4, 4), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, def.color)
+
+
+func _heat_color(obj: SimObject) -> Color:
+	var t := obj.temperature_k if obj.temperature_k > 0.0 else world.ambient_k
+	var c := overlay.heat_gradient.sample(OverlayRenderer.heat_x(SimConst.k_to_c(t)))
+	c.a = 0.95
+	return c

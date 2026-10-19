@@ -12,6 +12,11 @@ var angle: float
 var absorbed_w := 0.0
 var incident := Spectrum.make_zero()
 
+## Own thermal node (D13), kept by ThermalSystem: temperature (0 until first set to the air
+## around it) and energy received this tick (light), J.
+var temperature_k := 0.0
+var heat_in := 0.0
+
 
 func _init(p_id: int, p_def: ObjectDef, p_position: Vector2, p_angle: float) -> void:
 	id = p_id

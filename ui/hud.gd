@@ -27,7 +27,7 @@ var _heat: ThermalSystem
 var _status: Label
 var _perf: Label
 var _pause_button: Button
-var _speed_button: Button
+var _speed_buttons: Array[Button] = []
 var _view_buttons: Array[Button] = []
 var _wave_slider: HSlider
 var _wave_label: Label
@@ -121,11 +121,25 @@ func _build_status() -> void:
 	_pause_button = _button("Pause", "Pause or resume the simulation (Space)", runner.toggle_pause)
 	_pause_button.custom_minimum_size.x = 64
 	row.add_child(_pause_button)
-	_speed_button = _button("1×", "Simulation speed (Tab)", runner.cycle_speed)
-	_speed_button.custom_minimum_size.x = 40
-	row.add_child(_speed_button)
-	row.add_child(_button("−1 h", "Move the clock back an hour (,)", runner.skip_hours.bind(-1.0)))
-	row.add_child(_button("+1 h", "Move the clock forward an hour (.)", runner.skip_hours.bind(1.0)))
+	var group := ButtonGroup.new()
+	for n in Main.SPEEDS:
+		var b := _button("%d×" % n, "Run at %d× speed (Tab cycles)" % n, runner.set_speed.bind(n))
+		b.toggle_mode = true
+		b.button_group = group
+		b.custom_minimum_size.x = 36
+		row.add_child(b)
+		_speed_buttons.append(b)
+	# Jumps move the clock (and the sun) without simulating the time in between.
+	var jumps := HBoxContainer.new()
+	jumps.add_theme_constant_override(&"separation", 4)
+	box.add_child(jumps)
+	var label := _small_label()
+	label.text = "Jump clock"
+	jumps.add_child(label)
+	for h: float in [-6.0, -1.0, 1.0, 6.0]:
+		var tip := "Move the clock %+d h without simulating it (%s%s)" % [int(h), "Shift+" if absf(h) > 1.0 else "",
+			"." if h > 0.0 else ","]
+		jumps.add_child(_button("%+d h" % int(h), tip, runner.skip_hours.bind(h)))
 	_perf = Label.new()
 	_perf.add_theme_font_size_override(&"font_size", 11)
 	_perf.add_theme_color_override(&"font_color", DIM)
@@ -140,7 +154,8 @@ func _update_status() -> void:
 		else "Night   air %.1f °C" % SimConst.k_to_c(world.ambient_k)
 	_status.text = clock + "\n" + sun
 	_pause_button.text = "Play" if runner.paused else "Pause"
-	_speed_button.text = "%d×" % runner.speed
+	for k in _speed_buttons.size():
+		_speed_buttons[k].set_pressed_no_signal(not runner.paused and Main.SPEEDS[k] == runner.speed)
 	_perf.text = "%d fps · sim %.1f ms/frame · light %.0f ms (%d rays) · heat %.1f ms" % [
 		Engine.get_frames_per_second(), runner.sim_ms, _light.last_trace_ms,
 		_light.stats.get("rays", 0), _heat.last_step_ms]
@@ -464,6 +479,8 @@ func _object_text(obj: SimObject) -> String:
 		s += "\n[color=#8a93a0]UV %s · visible %s · IR %s[/color]" % [_irr(bands[0]), _irr(bands[1]), _irr(bands[2])]
 	else:
 		s += "\nabsorbing %.1f W" % obj.absorbed_w
+		if obj.temperature_k > 0.0:
+			s += " · %.1f °C" % SimConst.k_to_c(obj.temperature_k)
 	return s + "\n"
 
 

@@ -90,7 +90,8 @@ func _object_info(obj: SimObject) -> Dictionary:
 	var d := {"id": obj.id, "key": str(obj.def.key), "name": obj.def.display_name,
 		"kind": ObjectDef.Kind.keys()[obj.def.kind], "x": snappedf(obj.position.x, 0.001),
 		"y": snappedf(obj.position.y, 0.001), "angle_deg": snappedf(rad_to_deg(obj.angle), 0.01),
-		"absorbed_w": snappedf(obj.absorbed_w, 0.01)}
+		"absorbed_w": snappedf(obj.absorbed_w, 0.01),
+		"temp_c": snappedf(SimConst.k_to_c(obj.temperature_k), 0.01) if obj.temperature_k > 0.0 else null}
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		d["probe_w_m2"] = snappedf(obj.probe_irradiance(), 0.1)
 	return d
