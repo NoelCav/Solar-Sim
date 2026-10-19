@@ -16,7 +16,6 @@ extends RefCounted
 
 const BASE_SPACING := 0.1      ## Initial sample spacing across a run, m (refinement finds edges)
 const MIN_SPACING := 0.02      ## Narrowest interval worth refining, m (one lane; tiles are 0.25 m)
-const MIN_WIDTH_M := 0.001     ## Rendering: beam width floor where rays cross at a focus
 const LANDING_TOL_M := 0.35   ## Same-path rays landing this close count as one beam (~1 tile)
 const REFL_POOL_M := 0.5       ## Pooled reflections: one secondary ray per this much wavefront
 
@@ -27,10 +26,9 @@ var map: SunMap
 var grid: TileGrid
 var irradiance := PackedFloat32Array()   ## Direct normal irradiance per bin, W/m²
 
-# Render output: triangles (3 points each) with per-vertex irradiance and one bin each.
-var tri_pts := PackedVector2Array()
-var tri_irr := PackedFloat32Array()
-var tri_bin := PackedByteArray()
+# Render output: references to traced paths; BeamGeometry turns them into triangles.
+var strips: Array = []    ## [ray a, ray b, watts, bin, last leg]
+var slivers: Array = []   ## [ray, watts, width m, bin, first leg]
 
 var _intervals: Array = []   ## [ua, ra, ub, rb, Span, spread] in u order
 var _last_spread: Array = []
@@ -43,9 +41,8 @@ func begin(p_tracer: Tracer, p_map: SunMap, p_grid: TileGrid, p_irradiance: Pack
 	map = p_map
 	grid = p_grid
 	irradiance = p_irradiance
-	tri_pts.clear()
-	tri_irr.clear()
-	tri_bin.clear()
+	strips.clear()
+	slivers.clear()
 
 
 ## Traces one run ([first lane, last lane, min depth, key]) in one bin.
@@ -234,78 +231,14 @@ func _emit_reflection(acc: Array, bin: int) -> void:
 	tracer.trace(acc[1] + dir * Tracer.NUDGE, dir, p, false, acc[3], acc[4])
 
 
-# --- Rendering ------------------------------------------------------------------------------
+# --- Render records ---------------------------------------------------------------------
+# Geometry is built by the renderer (BeamGeometry), only for the bins a view shows.
 
-## A coherent beam between two rays, leg by leg after the first interaction. Irradiance
-## goes as 1/width, so each leg is cut into slices (packed toward the point where the rays
-## cross, at a focus) and brightness is interpolated per slice rather than across the leg.
-## Draws legs after the first interaction, stopping before leg `last` (-1 = all legs).
+## A coherent beam between two rays, drawn up to (not including) leg `last` (-1 = all).
 func _render_strip(ra: Tracer.PathRec, rb: Tracer.PathRec, watts: float, bin: int, last := -1) -> void:
-	for k in range(1, ra.pts.size() - 1 if last < 0 else last):
-		var a0 := ra.pts[k]
-		var a1 := ra.pts[k + 1]
-		var b0 := rb.pts[k]
-		var b1 := rb.pts[k + 1]
-		var leg := (a1 - a0).normalized()
-		var p := watts * 0.5 * (ra.frac[k] + rb.frac[k])
-		# Signed width along the leg is linear in t; a sign change is the crossing.
-		var w0 := leg.cross(b0 - a0)
-		var w1 := leg.cross(b1 - a1)
-		var ts := PackedFloat32Array([0.0, 1.0])
-		var t_cross := -1.0
-		if w0 * w1 < 0.0:
-			t_cross = w0 / (w0 - w1)
-			ts.append(t_cross)
-			for d in [0.5, 0.25, 0.12, 0.06, 0.03, 0.015]:
-				var span: float = d * maxf(t_cross, 1.0 - t_cross)
-				if t_cross - span > 0.0:
-					ts.append(t_cross - span)
-				if t_cross + span < 1.0:
-					ts.append(t_cross + span)
-		else:
-			var ratio := maxf(absf(w0), absf(w1)) / maxf(minf(absf(w0), absf(w1)), MIN_WIDTH_M)
-			var n := clampi(int(ratio), 1, 8)   # Strongly converging legs get more slices
-			for j in range(1, n):
-				ts.append(float(j) / n)
-		ts.sort()
-		for j in ts.size() - 1:
-			var t0 := ts[j]
-			var t1 := ts[j + 1]
-			var pa0 := a0.lerp(a1, t0)
-			var pa1 := a0.lerp(a1, t1)
-			var pb0 := b0.lerp(b1, t0)
-			var pb1 := b0.lerp(b1, t1)
-			var irr0 := _irr(p, absf(lerpf(w0, w1, t0)))
-			var irr1 := _irr(p, absf(lerpf(w0, w1, t1)))
-			if t0 == t_cross:
-				_tri(pa0, pa1, pb1, irr0, irr1, irr1, bin)
-			elif t1 == t_cross:
-				_tri(pa0, pa1, pb0, irr0, irr1, irr0, bin)
-			else:
-				_tri(pa0, pa1, pb1, irr0, irr1, irr1, bin)
-				_tri(pa0, pb1, pb0, irr0, irr1, irr0, bin)
+	strips.append([ra, rb, watts, bin, last])
 
 
-## A lone ray drawn as a beam of fixed width (incoherent slivers).
+## A lone ray drawn as a beam of fixed width from leg `first` on (incoherent slivers).
 func _render_ray(r: Tracer.PathRec, watts: float, width: float, bin: int, first := 1) -> void:
-	for k in range(first, r.pts.size() - 1):
-		var a := r.pts[k]
-		var b := r.pts[k + 1]
-		var side := (b - a).normalized().orthogonal() * (width * 0.5)
-		var irr := _irr(watts * r.frac[k], width)
-		_tri(a - side, b - side, b + side, irr, irr, irr, bin)
-		_tri(a - side, b + side, a + side, irr, irr, irr, bin)
-
-
-func _irr(watts: float, width: float) -> float:
-	return watts / (maxf(width, MIN_WIDTH_M) * SimConst.DEPTH_M)
-
-
-func _tri(a: Vector2, b: Vector2, c: Vector2, ia: float, ib: float, ic: float, bin: int) -> void:
-	tri_pts.append(a)
-	tri_pts.append(b)
-	tri_pts.append(c)
-	tri_irr.append(ia)
-	tri_irr.append(ib)
-	tri_irr.append(ic)
-	tri_bin.append(bin)
+	slivers.append([r, watts, width, bin, first])

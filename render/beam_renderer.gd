@@ -8,9 +8,7 @@ extends MeshInstance2D
 ## - secondary rays (pooled reflections) as thin lines.
 ## Colors follow the current view (ViewMode); unsplit sunlight sums to white.
 
-const REFERENCE_DNI := 1000.0       ## Irradiance that tones to SUN_LEVEL
-const SUN_LEVEL := 0.12             ## Brightness of plain sunlight
-const LOG_GAIN := 3.5               ## How fast brightness grows with concentration
+const REFERENCE_DNI := 1000.0       ## Irradiance that tones to BeamGeometry.SUN_LEVEL
 const SHEET_LEVEL := 0.07           ## Brightness of the direct-light sheet
 const VERTEX_SCALE := 4.0           ## Vertex colors are stored /4 and scaled back by self_modulate
 const RAY_WIDTH_PX := 1.5
@@ -43,9 +41,7 @@ func _process(_delta: float) -> void:
 
 ## Brightness for a concentration ratio C (1 = plain sunlight).
 static func tone(c: float) -> float:
-	if c <= 1.0:
-		return SUN_LEVEL * c
-	return SUN_LEVEL * (1.0 + LOG_GAIN * log(c))
+	return BeamGeometry.tone(c)
 
 
 ## Per-bin colors for the view, scaled so AM1.5 sunlight across the shown bins is white.
@@ -136,20 +132,8 @@ func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) 
 
 
 func _build_beams(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
-	var pts := _light.beam_pts
-	var irr := _light.beam_irr
-	var bins := _light.beam_bin
-	for t in bins.size():
-		var bin := bins[t]
-		var rgb := _rgb[bin]
-		if rgb == Vector3.ZERO:
-			continue
-		var ref := REFERENCE_DNI * Spectrum.AM15_SHARE[bin]
-		for j in 3:
-			var v := t * 3 + j
-			var level := tone(irr[v] / ref) / VERTEX_SCALE
-			verts.append(pts[v] * px)
-			cols.append(Color(rgb.x * level, rgb.y * level, rgb.z * level, 1.0))
+	BeamGeometry.build(_light.beam_strips, _light.beam_slivers, _rgb, REFERENCE_DNI, px,
+		VERTEX_SCALE, verts, cols)
 
 
 func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:

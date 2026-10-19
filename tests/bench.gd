@@ -38,28 +38,30 @@ func _run(db: MaterialDB, objects: ObjectDB, scenario: String, hour: float) -> v
 	var light: LightSystem = world.get_system(&"light")
 	var heat: ThermalSystem = world.get_system(&"heat")
 	light.retrace(world)   # Warm-up (builds faces, buckets, blocks)
-	var n := 3
-	var stages := {"map": 0.0, "direct": 0.0, "beams": 0.0}
-	var total := 0.0
-	for k in n:
+	# Fastest of several runs: timings on a desktop are noisy, the minimum is repeatable.
+	var stages := {}
+	var total := INF
+	for k in 4:
 		light.retrace(world)
 		var p: LightPass = light._pass
-		for key in stages:
-			stages[key] += p.stage_ms[key] / n
-		total += p.ms / n
+		if p.ms < total:
+			total = p.ms
+			stages = p.stage_ms.duplicate()
 	var s := light.stats
 	var balance: float = (s.absorbed + s.escaped + s.scattered + s.culled) / s.emitted
 	var checksum := 0.0
 	for i in light.tile_power.size():
 		checksum += light.tile_power[i] * float(i % 97 + 1)
-	print("%s @ %02.0fh: pass %.1f ms (map %.1f, direct %.1f, beams %.1f) · %d paths · %d tris · balance %.6f · checksum %.4f" % [
-		scenario, hour, total, stages.map, stages.direct, stages.beams, s.rays, light.beam_bin.size(),
+	print("%s @ %02.0fh: pass %.1f ms (map %.1f, direct %.1f, beams %.1f) · %d paths · %d strips · balance %.6f · checksum %.4f" % [
+		scenario, hour, total, stages.map, stages.direct, stages.beams, s.rays, light.beam_strips.size() + light.beam_slivers.size(),
 		balance, checksum])
 	var r := BeamRenderer.new()
 	r.setup(world)
-	var t := Time.get_ticks_usec()
-	r._rebuild()
-	var render_ms := (Time.get_ticks_usec() - t) / 1000.0
+	var render_ms := INF
+	for k in 3:
+		var t := Time.get_ticks_usec()
+		r._rebuild()
+		render_ms = minf(render_ms, (Time.get_ticks_usec() - t) / 1000.0)
 	r.free()
 	var heat_ms := 0.0
 	for k in 12:
