@@ -78,7 +78,7 @@ public partial class LightEngine : RefCounted
         public Term Term;
         public int TermTile = -1, TermSide = -1;
         public double Remain = 1.0;
-        public readonly List<double> Deps = new();    // (tile, fraction, body, x, y)…
+        public readonly List<double> Deps = new();    // (tile, fraction, body, ax, ay, bx, by, tau)…
         public readonly List<double> Probes = new();  // (owner, power)…
         public readonly List<double> Refls = new();   // (x, y, dx, dy, fraction, medium, body)…
         public D2 ContO, ContD;
@@ -207,6 +207,12 @@ public partial class LightEngine : RefCounted
     int _next;
     Dictionary<(int, int, int, int), TaskLog> _logs = new();
     int _replayed, _cacheHits, _cacheMisses;
+
+    /// Whether identical objects share traced sample paths (off = trace every path; tests).
+    public static bool CacheEnabled = true;
+
+    /// Sets CacheEnabled for every engine (callable from GDScript on any instance).
+    public void SetCacheEnabled(bool on) => CacheEnabled = on;
     ObjInfo _runObj;
     int _runId;
     readonly List<Interval> _intervals = new();
@@ -508,7 +514,10 @@ public partial class LightEngine : RefCounted
     void AddScattered(double w) { _scattered += w; if (_log != null) _log.Scattered += w; }
     void AddCulled(double w) { _culled += w; if (_log != null) _log.Culled += w; }
 
-    void DepositBin(int i, int bin, double watts, int body, D2 at)
+    /// Deposits into tile i. While recording a path, also keeps where the power was absorbed:
+    /// a point (a == b) or a leg a→b of optical depth tau, so a cached copy placed at another
+    /// offset from the tile grid can re-split it across the tiles it crosses there.
+    void DepositBin(int i, int bin, double watts, int body, D2 a, D2 b, double tau = 0)
     {
         if (watts <= 0)
             return;
@@ -517,8 +526,11 @@ public partial class LightEngine : RefCounted
             _rec.Deps.Add(i);
             _rec.Deps.Add(watts);
             _rec.Deps.Add(body);
-            _rec.Deps.Add(at.X);
-            _rec.Deps.Add(at.Y);
+            _rec.Deps.Add(a.X);
+            _rec.Deps.Add(a.Y);
+            _rec.Deps.Add(b.X);
+            _rec.Deps.Add(b.Y);
+            _rec.Deps.Add(tau);
         }
         else
             ApplyBin(i, bin, watts, body);
@@ -667,7 +679,7 @@ public partial class LightEngine : RefCounted
                 for (int b = 0; b < Bins; b++)
                 {
                     outP[b] = p[b] * _refl[s * Bins + b];
-                    DepositBin(tile, b, p[b] - outP[b], owner, hit);
+                    DepositBin(tile, b, p[b] - outP[b], owner, hit, hit);
                 }
                 D2 r = d - n * (2.0 * d.Dot(n));
                 Push(hit + r * Nudge, r, outP, medium, body, events + 1);
@@ -823,7 +835,7 @@ public partial class LightEngine : RefCounted
                     else if (_coating[s] == CoatMirror)
                     {
                         double keep = p[bin] * _refl[s * Bins + bin];
-                        DepositBin(TileAt(hit), bin, p[bin] - keep, owner, hit);
+                        DepositBin(TileAt(hit), bin, p[bin] - keep, owner, hit, hit);
                         p[bin] = keep;
                         d = d - n * (2.0 * d.Dot(n));
                     }
@@ -955,31 +967,6 @@ public partial class LightEngine : RefCounted
             }
             int i = cy * w + cx;
             double t1 = Math.Min(tmx, tmy);
-            // A body ray whose stretch through this tile lies outside its body's bounds slipped
-            // past a corner (grazing hit, nudge): it is in the tile medium again.
-            if (body >= 0 && !(_bounds.TryGetValue(body, out R2 bb) && bb.Has(o + d * (0.5 * (t0 + t1)))))
-            {
-                body = -1;
-                medium = mat[i];
-                prevMat = medium;
-            }
-            // Tile medium boundary.
-            if (body < 0 && hasFace)
-            {
-                int m = mat[i];
-                if (m != prevMat)
-                {
-                    _evKind = _opaque[m] == 1 ? Ev.Opaque : Ev.Media;
-                    _evT = t0;
-                    _evTile = i;
-                    _evFace = face;
-                    _evMat = m;
-                    _evPrevMat = prevMat;
-                    _evMedium = medium;
-                    _evBody = body;
-                    return;
-                }
-            }
             // Optical surfaces bucketed in this tile.
             double bestT = double.PositiveInfinity, bestU = 0;
             int bestS = -1;
@@ -1002,9 +989,37 @@ public partial class LightEngine : RefCounted
                 bestS = s;
                 bestU = u;
             }
+            // A body ray whose stretch through this tile (up to its next surface) lies outside its
+            // body's bounds slipped past a corner (grazing hit, nudge): it is in the tile medium
+            // again. Up to the next surface, not the tile edge: a ray leaving the glass midway
+            // through a tile is inside for that whole stretch, wherever the tile grid falls.
+            double tEnd = bestS >= 0 && bestT <= t1 + Eps ? bestT : t1;
+            if (body >= 0 && !(_bounds.TryGetValue(body, out R2 bb) && bb.Has(o + d * (0.5 * (t0 + tEnd)))))
+            {
+                body = -1;
+                medium = mat[i];
+                prevMat = medium;
+            }
+            // Tile medium boundary.
+            if (body < 0 && hasFace)
+            {
+                int m = mat[i];
+                if (m != prevMat)
+                {
+                    _evKind = _opaque[m] == 1 ? Ev.Opaque : Ev.Media;
+                    _evT = t0;
+                    _evTile = i;
+                    _evFace = face;
+                    _evMat = m;
+                    _evPrevMat = prevMat;
+                    _evMedium = medium;
+                    _evBody = body;
+                    return;
+                }
+            }
             if (bestS >= 0 && bestT <= t1 + Eps)
             {
-                AbsorbLeg(p, medium, bestT - t0, i, body, o + d * (0.5 * (t0 + bestT)));
+                AbsorbLeg(p, medium, bestT - t0, i, body, o + d * t0, o + d * bestT);
                 _evKind = Ev.Surface;
                 _evT = bestT;
                 _evSeg = bestS;
@@ -1014,7 +1029,7 @@ public partial class LightEngine : RefCounted
                 _evBody = body;
                 return;
             }
-            AbsorbLeg(p, medium, t1 - t0, i, body, o + d * (0.5 * (t0 + t1)));
+            AbsorbLeg(p, medium, t1 - t0, i, body, o + d * t0, o + d * t1);
             int r = _airDist[i] - 1;
             if (body < 0 && r >= 1)
             {
@@ -1065,8 +1080,8 @@ public partial class LightEngine : RefCounted
         }
     }
 
-    /// Beer–Lambert absorption over `length` m inside `medium`; heat goes to tile i.
-    void AbsorbLeg(double[] p, int medium, double length, int i, int body, D2 mid)
+    /// Beer–Lambert absorption over the leg from→to (`length` m) inside `medium`; heat goes to tile i.
+    void AbsorbLeg(double[] p, int medium, double length, int i, int body, D2 from, D2 to)
     {
         if (length <= 0 || _hasBulk[medium] == 0)
             return;
@@ -1076,7 +1091,7 @@ public partial class LightEngine : RefCounted
             if (p[b] > 0 && k > 0)
             {
                 double keep = Math.Exp(-k * length);
-                DepositBin(i, b, p[b] * (1.0 - keep), body, mid);
+                DepositBin(i, b, p[b] * (1.0 - keep), body, from, to, k * length);
                 p[b] *= keep;
             }
         }
@@ -1369,20 +1384,27 @@ public partial class LightEngine : RefCounted
     PathRec TraceAt(double u, double s0, int bin)
     {
         D2 origin = _perp * u + _dir * s0;
-        if (_runObj == null)
+        if (_runObj == null || !CacheEnabled)
             return TracePrimary(origin, _dir, bin);
         var key = (_runObj.DefIdx, _runObj.AngleQ, bin, (long)Math.Round((u - _runObj.Uc) * 1e6));
         if (_cache.TryGetValue(key, out PathRec local))
         {
-            if (local != null)
+            // The cached part is only valid if this ray reaches this object where the cached one
+            // reached its own: another object or tile in the way (e.g. a lens above this one)
+            // changes everything after.
+            if (local != null && EntersAt(origin, bin, local.Pts[1] + _runObj.Pos))
             {
                 _cacheHits++;
                 PathRec rec = Instantiate(local);
+                rec.Pts[0] = origin;
                 _rayCount++;
                 ContinuePrimary(rec);
                 return rec;
             }
-            return TracePrimary(origin, _dir, bin);
+            PathRec own = TracePrimary(origin, _dir, bin, _runId);
+            if (own.Term == Term.Pending)
+                ContinuePrimary(own);
+            return own;
         }
         _cacheMisses++;
         PathRec fresh = TracePrimary(origin, _dir, bin, _runId);
@@ -1390,6 +1412,26 @@ public partial class LightEngine : RefCounted
         if (fresh.Term == Term.Pending)
             ContinuePrimary(fresh);
         return fresh;
+    }
+
+    readonly PathRec _scratch = new();
+    readonly double[] _scratchP = new double[Bins];
+
+    /// Whether a sun ray from `origin` first meets the run's object at `entry`.
+    bool EntersAt(D2 origin, int bin, D2 entry)
+    {
+        PathRec saved = _rec;
+        _rec = _scratch;   // Nothing on the way should deposit; anything that does is dropped
+        Array.Clear(_scratchP);
+        _scratchP[bin] = 1.0;
+        March(origin, _dir, _scratchP, -1, -1);
+        _rec = saved;
+        _scratch.Deps.Clear();
+        if (_evKind != Ev.Surface || _owner[_evSeg] != _runId)
+            return false;
+        D2 hit = _evO + _dir * _evT;
+        D2 off = hit - entry;
+        return off.X * off.X + off.Y * off.Y < 1e-12;
     }
 
     /// Copy of the object part of a path relative to the object: positions minus its position,
@@ -1407,13 +1449,16 @@ public partial class LightEngine : RefCounted
         foreach (int v in rec.Sig)
             c.Sig.Add(v >= 0 ? v - 2 * fp : v);
         var deps = rec.Deps;
-        for (int k = 0; k < deps.Count; k += 5)
+        for (int k = 0; k < deps.Count; k += 8)
         {
             c.Deps.Add(-1);
             c.Deps.Add(deps[k + 1]);
             c.Deps.Add(deps[k + 2] >= 0 ? -2 : deps[k + 2]);
             c.Deps.Add(deps[k + 3] - off.X);
             c.Deps.Add(deps[k + 4] - off.Y);
+            c.Deps.Add(deps[k + 5] - off.X);
+            c.Deps.Add(deps[k + 6] - off.Y);
+            c.Deps.Add(deps[k + 7]);
         }
         var refls = rec.Refls;
         for (int k = 0; k < refls.Count; k += 7)
@@ -1446,14 +1491,12 @@ public partial class LightEngine : RefCounted
         foreach (int v in c.Sig)
             r.Sig.Add(v >= 0 ? v + 2 * fp : v);
         var deps = c.Deps;
-        for (int k = 0; k < deps.Count; k += 5)
+        for (int k = 0; k < deps.Count; k += 8)
         {
-            var at = new D2(deps[k + 3] + off.X, deps[k + 4] + off.Y);
-            r.Deps.Add(TileAt(at));
-            r.Deps.Add(deps[k + 1]);
-            r.Deps.Add(deps[k + 2] == -2 ? _runId : deps[k + 2]);
-            r.Deps.Add(at.X);
-            r.Deps.Add(at.Y);
+            var a = new D2(deps[k + 3] + off.X, deps[k + 4] + off.Y);
+            var b = new D2(deps[k + 5] + off.X, deps[k + 6] + off.Y);
+            int body = deps[k + 2] == -2 ? _runId : (int)deps[k + 2];
+            SplitDeposit(r, deps[k + 1], body, a, b, deps[k + 7]);
         }
         var refls = c.Refls;
         for (int k = 0; k < refls.Count; k += 7)
@@ -1603,11 +1646,64 @@ public partial class LightEngine : RefCounted
         }
     }
 
+    /// Adds a recorded deposit to path r, split over the tiles its leg a→b crosses here in
+    /// proportion to Beer–Lambert absorption along it (optical depth tau); a point goes whole
+    /// to its tile. Exact for any offset of the leg from the tile grid.
+    void SplitDeposit(PathRec r, double frac, int body, D2 a, D2 b, double tau)
+    {
+        D2 d = b - a;
+        double len = Math.Sqrt(d.X * d.X + d.Y * d.Y);
+        if (len < 1e-12)
+        {
+            AddDep(r, TileAt(a), frac, body, a, a, 0);
+            return;
+        }
+        // Tile-boundary crossings along the leg, as fractions of its length.
+        var ts = _splitTs;
+        ts.Clear();
+        ts.Add(0.0);
+        for (int axis = 0; axis < 2; axis++)
+        {
+            double p0 = axis == 0 ? a.X : a.Y, dd = axis == 0 ? d.X : d.Y;
+            if (Math.Abs(dd) < 1e-15)
+                continue;
+            double lo = Math.Min(p0, p0 + dd), hi = Math.Max(p0, p0 + dd);
+            for (double g = Math.Floor(lo / _tm + 1.0) * _tm; g < hi; g += _tm)
+                ts.Add((g - p0) / dd);
+        }
+        ts.Add(1.0);
+        ts.Sort();
+        double norm = tau > 1e-9 ? 1.0 - Math.Exp(-tau) : 1.0;
+        for (int j = 0; j + 1 < ts.Count; j++)
+        {
+            double t0 = ts[j], t1 = ts[j + 1];
+            if (t1 - t0 < 1e-12)
+                continue;
+            double w = tau > 1e-9 ? (Math.Exp(-tau * t0) - Math.Exp(-tau * t1)) / norm : t1 - t0;
+            D2 p0 = a + d * t0, p1 = a + d * t1;
+            AddDep(r, TileAt(a + d * (0.5 * (t0 + t1))), frac * w, body, p0, p1, tau * (t1 - t0));
+        }
+    }
+
+    readonly List<double> _splitTs = new();
+
+    static void AddDep(PathRec r, int tile, double frac, int body, D2 a, D2 b, double tau)
+    {
+        r.Deps.Add(tile);
+        r.Deps.Add(frac);
+        r.Deps.Add(body);
+        r.Deps.Add(a.X);
+        r.Deps.Add(a.Y);
+        r.Deps.Add(b.X);
+        r.Deps.Add(b.Y);
+        r.Deps.Add(tau);
+    }
+
     /// Applies a path's recorded deposits, probe crossings and reflections for `watts` of input.
     void ApplyPath(PathRec r, double watts, int bin, double u)
     {
         var deps = r.Deps;
-        for (int k = 0; k < deps.Count; k += 5)
+        for (int k = 0; k < deps.Count; k += 8)
             ApplyBin((int)deps[k], bin, watts * deps[k + 1], (int)deps[k + 2]);
         var probes = r.Probes;
         for (int k = 0; k < probes.Count; k += 2)

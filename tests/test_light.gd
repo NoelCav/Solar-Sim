@@ -349,3 +349,132 @@ func test_incremental_distance_field_matches_rebuild() -> void:
 	var incremental: PackedByteArray = tr.AirDist()
 	tr.BuildAccel()
 	check(incremental == tr.AirDist(), "distance field after local updates equals a full rebuild")
+
+
+## Paraxial ray through two thick lenses in series (exact surface trace) lands where ray
+## transfer matrices predict.
+func test_two_lenses_in_series_match_ray_matrices() -> void:
+	var world := _make_world()
+	var r := 2.0
+	var t := 0.15
+	var gap := 0.6                  # Center to center
+	var c1 := Vector2(10.0, 4.0)
+	var c2 := c1 + Vector2(0.0, gap)
+	_place(world, _lens_def(r, r, t), c1)
+	_place(world, _lens_def(r, r, t), c2)
+	var tr := _tracer(world)
+	var bin := Spectrum.Bin.GREEN
+	var h := 0.02
+	tr.Trace(Vector2(c1.x + h, 0.5), Vector2.DOWN, _single_bin(bin, 1.0))
+	var crossing := INF
+	var seg_from: PackedVector2Array = tr.SegFrom()
+	var seg_to: PackedVector2Array = tr.SegTo()
+	for k in seg_from.size():
+		var a := seg_from[k]
+		var b := seg_to[k]
+		if a.y > c2.y + t * 0.5 - 0.01 and absf(b.x - a.x) > 1e-9:
+			var s := (c1.x - a.x) / (b.x - a.x)
+			if s >= 0.0 and s <= 1.0 and b.y > a.y:
+				crossing = minf(crossing, a.y + s * (b.y - a.y))
+	# Ray matrices on (height, angle): refraction at radius R from n1 to n2, then travel.
+	var n := world.materials.get_by_key(&"crown_glass").refractive_index(Spectrum.WAVELENGTH_UM[bin])
+	var ray := Vector2(h, 0.0)
+	var steps := [[1.0, n, r], [t, 0.0, 0.0], [n, 1.0, -r], [gap - t, 0.0, 0.0],
+		[1.0, n, r], [t, 0.0, 0.0], [n, 1.0, -r]]
+	for st: Array in steps:
+		if st[1] == 0.0:
+			ray.x += st[0] * ray.y          # Travel a distance
+		else:
+			var n1: float = st[0]
+			var n2: float = st[1]
+			ray.y = (n1 * ray.y - (n2 - n1) * ray.x / st[2]) / n2
+	var expected := -ray.x / ray.y      # Distance past the last vertex to the axis
+	check_near(crossing - (c2.y + t * 0.5), expected, expected * 0.01, "focus after two lenses")
+
+
+## Sunlight through two stacked lenses (the second sees converging light, and is an
+## identical object, so it exercises the shared object cache): the beam pipeline matches
+## a dense plain ray tree across the ground, and energy balances.
+func test_beams_match_ray_tree_through_two_lenses() -> void:
+	var world := _flat_world(40, 30, 25)
+	world.time_s = 0.47 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var ground := 25 * SimConst.TILE_M
+	# Two f ≈ 1.15 m lenses 0.5 m apart focus ≈ 0.45 m past the second: on the ground.
+	_place(world, lens, Vector2(5.0, ground - 1.05))
+	_place(world, lens, Vector2(5.0, ground - 0.55))
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var s := light.stats
+	check_near((s.absorbed + s.escaped + s.scattered + s.culled) / s.emitted, 1.0, 1e-4, "energy balance")
+	var g := world.grid
+	var beams := PackedFloat32Array()
+	for x in g.width:
+		beams.append(light.tile_power[g.idx(x, 25)])
+	var tr := light.tracer()
+	tr.Begin()
+	var spacing := 0.002
+	var x0 := -2.0
+	while x0 < g.width * SimConst.TILE_M + 2.0:
+		var p := Spectrum.make_zero()
+		for b in Spectrum.BIN_COUNT:
+			p[b] = world.sun_spectrum[b] * spacing * SimConst.DEPTH_M
+		var d := world.sun_direction
+		tr.Trace(Vector2(x0, 0.0) - d * 0.0, d, p)
+		x0 += spacing
+	var rays: PackedFloat32Array = tr.TilePower()
+	var peak := 0
+	var total := 0.0
+	var diff := 0.0
+	for x in g.width:
+		var rp := rays[g.idx(x, 25)]
+		if rp > rays[g.idx(peak, 25)]:
+			peak = x
+		total += rp
+		diff += absf(beams[x] - rp)
+	var beam_peak := 0
+	for x in g.width:
+		if beams[x] > beams[beam_peak]:
+			beam_peak = x
+	check_eq(beam_peak, peak, "focus lands on the same tile")
+	var win_b := 0.0
+	var win_r := 0.0
+	for x in range(maxi(peak - 1, 0), mini(peak + 2, g.width)):
+		win_b += beams[x]
+		win_r += rays[g.idx(x, 25)]
+	var plain := rays[g.idx(g.width - 5, 25)]   # Open ground, plain sunlight
+	check(rays[g.idx(peak, 25)] > 1.5 * plain, "rays concentrate (%.1f W at the focus tile, %.1f W in plain sun)"
+		% [rays[g.idx(peak, 25)], plain])
+	check_near(win_b / win_r, 1.0, 0.05, "beam vs ray tree at the focus")
+	check(diff / total < 0.05, "ground profile differs by %.2f%%" % [100.0 * diff / total])
+
+
+## Moving the upper of two stacked lenses changes what the lower one receives: an
+## incremental pass must retrace the lower lens too and match a fresh trace.
+func test_incremental_pass_with_lenses_in_series() -> void:
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var worlds: Array[SimWorld] = []
+	for k in 2:
+		var world := _flat_world(80, 40, 30)
+		world.time_s = 0.46 * SimConst.DAY_LENGTH_S
+		world.tick()
+		_place(world, lens, Vector2(6.0, 5.0))
+		_place(world, lens, Vector2(6.0, 5.6))
+		_place(world, lens, Vector2(14.0, 5.0))   # Unrelated, should replay
+		worlds.append(world)
+	var edited := worlds[0]
+	var light: LightSystem = edited.get_system(&"light")
+	light.retrace(edited)
+	for world in worlds:
+		var obj: SimObject = world.objects.values()[0]
+		world.enqueue(TransformObjectCommand.new(obj.id, obj.position + Vector2(0.15, 0.0), 0.15))
+		world.flush_commands()
+	light.retrace(edited)
+	var fresh_light: LightSystem = worlds[1].get_system(&"light")
+	fresh_light.retrace(worlds[1])
+	var worst := 0.0
+	for i in light.tile_power.size():
+		worst = maxf(worst, absf(light.tile_power[i] - fresh_light.tile_power[i]))
+	check(worst < 1e-3, "tile power matches a full trace (max diff %.6f W)" % worst)
+	check_near(light.stats.absorbed, fresh_light.stats.absorbed, 1e-3, "absorbed total")
