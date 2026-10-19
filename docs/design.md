@@ -163,7 +163,15 @@ Per hit, by surface and material:
 - **Absorption at opaque surfaces** — per-bin absorptivity; absorbed power → that tile's `energy_in` or that object's receiver. The rest reflects diffusely (cheap: drop below threshold, or one low-power scattered child).
 - **Participating media** — smoke/steam density attenuates rays crossing a tile; scattered fraction feeds visual-only god rays.
 
-Ray tree rules:
+#### 6.4.1 Light pass pipeline (since M1.5)
+
+Rays are only spent where light meets optics:
+
+1. **Sun map (direct light):** sunlight is parallel, so the site is cut into 2 cm lanes across the sun direction and every sun-facing tile face and optical surface is projected onto them, keeping the nearest hit per lane (a 1D shadow map, as in terrain shadow-height maps). Lanes ending on opaque faces deposit directly with no rays; shadows fall out for free. Cost scales with exposed faces, not ray length.
+2. **Beams (optics):** consecutive lanes whose first hit is the same object (or tile media: water, glass) form a run, traced per spectral bin as a wavefront. Sample rays start 10 cm apart; an interval is halved until both rays follow the same optical path (same faces, landing on one straight stretch of surface) or it is 1 cm wide (adaptive beam tracing). A coherent interval is a beam: its energy is spread exactly over where it lands and it is drawn as a filled strip with brightness ∝ 1/width, so focal spots are smooth and correctly concentrated from a few dozen rays. Each sample ray stands for half of each neighbouring interval; deposits recorded along its path are applied with that weight, so energy is conserved exactly.
+3. **Secondary light:** Fresnel reflections are pooled along the wavefront (one ray per 0.5 m) and traced as an ordinary ray tree.
+
+Ray tree rules (secondary light):
 - Rays carry all 6 bins until the first refraction, then split per bin (so prisms make rainbows).
 - Child rays (reflections) spawn only above a power threshold. Max depth 8.
 - Output of a trace: (a) segment list with per-bin power → renderer, (b) energy deposits → sim.
@@ -369,6 +377,13 @@ What shipped, and decisions made while building it (none change a LOCKED decisio
 - **Creative extras pulled forward:** object placement/drag/rotate/delete with undo, and ±1 h time skip.
 
 **Performance (GDScript, full 300×120 site, demo rig, noon):** a full re-trace is ~50–60 ms (~3.5k ray paths, ~15 µs per path); a heat band is ~2 ms. Slicing keeps an average tick at ~6–7 ms headless, but the in-editor debug build is roughly 1.5–2× slower and 4× speed drops well below 60 fps. Per §5.5, the tracer and heat loop are the first candidates for a C#/GDExtension port.
+
+### 18.2 Light engine v2 and views (2026-10-18)
+
+- Light pass rebuilt as §6.4.1 (sun map + adaptive beams + pooled reflections). Demo rig: rays per pass 3.5k → ~0.9k; direct light needs none; exact energy balance; beams agree with dense plain rays at a lens focus within 5 % (tested). Caustics (spherical-aberration cusps, off-axis arcs) now render as filled, gradient-lit shapes.
+- Re-trace threshold raised to 1° of sun movement (≈2 cm focal shift for a 1.2 m lens); intensity between passes still follows DNI. Average tick ~6 ms headless.
+- Views: Normal (visible light; lit surfaces glow with absorbed light; ×-sun marker at the hottest spot of light), Light (all bins in false color + absorbed-light overlay), UV, Infrared (single-band beams + absorbed-band overlay), Heat (temperature, hidden within the daily swing of the site mean). Legend and peak marker per view; cursor inspector shows material, temperature, sun/shadow/concentration and absorbed light by band, and object readings.
+- Still GDScript-bound: a primary path costs ~70–100 µs (PathRec bookkeeping and marching). 1× is comfortable; 4× in the editor's debug build runs ~14 fps. The native port remains the next performance step, now on a port-friendly algorithm (flat arrays, no recursion besides shallow refinement).
 
 ## 19. Open questions
 

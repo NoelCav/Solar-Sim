@@ -19,8 +19,12 @@ func _initialize() -> void:
 	for k in 5:
 		light.retrace(world)
 		trace_ms += light.last_trace_ms
-	print("full re-trace: %.1f ms avg, %d ray paths, %d render segments, %.0f W emitted" % [
-		trace_ms / 5.0, light.stats.rays, light.render_from.size(), light.stats.emitted])
+	print("full re-trace: %.1f ms avg, %d lanes, %d ray paths, %d beam triangles, %.0f W emitted" % [
+		trace_ms / 5.0, light.stats.lanes, light.stats.rays, light.beam_bin.size(), light.stats.emitted])
+	var s := light.stats
+	print("  balance: absorbed %.0f  escaped %.0f  scattered %.0f  culled %.1f  (sum/emitted %.6f)" % [
+		s.absorbed, s.escaped, s.scattered, s.culled,
+		(s.absorbed + s.escaped + s.scattered + s.culled) / s.emitted])
 	var heat_ms := 0.0
 	for k in 10:
 		heat.tick(world, SimConst.DT)

@@ -36,12 +36,12 @@ const REDDENING := 0.08             ## Rayleigh-style per-bin attenuation streng
 const DIFFUSE_W_M2 := 110.0         ## Diffuse sky irradiance with the sun high (non-focusable)
 
 # --- Light (§6.4) ---
-const RAY_SPACING_M := 0.04         ## Perpendicular spacing of sun rays (each ray = DNI × spacing × depth)
+const LANE_WIDTH_M := 0.02          ## Sun-map lane width across the sun direction
 const MIN_CHILD_W := 0.02           ## Reflected child rays below this power are culled
 const MIN_RAY_W := 1e-4             ## Any ray below this is culled
 const MAX_RAY_EVENTS := 24          ## Surface interactions along one ray path, children included
-const RETRACE_ANGLE_DEG := 0.25     ## Re-trace when the sun has moved this far
-const RESTART_ANGLE_DEG := 2.0      ## Abandon a pass in progress if the sun jumps this far
+const RETRACE_ANGLE_DEG := 1.0      ## Re-trace when the sun has moved this far (≈2 cm of focal shift at 1.2 m)
+const RESTART_ANGLE_DEG := 3.0      ## Abandon a pass in progress if the sun jumps this far
 
 # --- Heat (§7) ---
 const HEAT_BANDS := 6               ## Heat updates one of N row bands per tick, with dt × N
@@ -54,4 +54,4 @@ const AIR_EDDY_K := 1.0             ## W/(m·K), effective air↔air conductivit
 const BUOYANCY_BOOST := 4.0         ## Extra air↔air transfer when the lower tile is hotter
 const AIR_RELAX_PER_S := 0.05       ## Rate open air relaxes toward ambient
 const SKY_DEPRESSION_K := 20.0      ## Clear-sky temperature below ambient
-const RAY_PATHS_PER_TICK := 300     ## Ray paths (children included) traced per tick; a re-trace spans several ticks
+const RAY_PATHS_PER_TICK := 80      ## Ray paths (children included) traced per tick; a re-trace spans several ticks

@@ -5,7 +5,8 @@
 [ext_resource type="Script" path="res://render/tile_renderer.gd" id="3_tiles"]
 [ext_resource type="Script" path="res://ui/creative_brush.gd" id="4_brush"]
 [ext_resource type="Script" path="res://ui/camera_controller.gd" id="5_camera"]
-[ext_resource type="Script" path="res://ui/debug_hud.gd" id="6_hud"]
+[ext_resource type="Script" path="res://ui/hud.gd" id="6_hud"]
+[ext_resource type="Script" path="res://ui/map_markers.gd" id="11_markers"]
 [ext_resource type="Script" path="res://render/beam_renderer.gd" id="7_beams"]
 [ext_resource type="Script" path="res://render/object_renderer.gd" id="8_objects"]
 [ext_resource type="Script" path="res://render/overlay_renderer.gd" id="9_overlay"]
@@ -46,6 +47,9 @@ script = ExtResource("7_beams")
 [node name="Overlay" type="Sprite2D" parent="."]
 script = ExtResource("9_overlay")
 
+[node name="Markers" type="Node2D" parent="."]
+script = ExtResource("11_markers")
+
 [node name="Brush" type="Node2D" parent="."]
 script = ExtResource("4_brush")
 
@@ -57,5 +61,6 @@ script = ExtResource("5_camera")
 
 [node name="HudLayer" type="CanvasLayer" parent="."]
 
-[node name="Hud" type="Label" parent="HudLayer"]
+[node name="Hud" type="Control" parent="HudLayer"]
+mouse_filter = 2
 script = ExtResource("6_hud")

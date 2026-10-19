@@ -58,3 +58,10 @@ static func total(s: PackedFloat32Array) -> float:
 	for v in s:
 		t += v
 	return t
+
+
+# --- Bands: coarse groupings of bins for views and per-band deposits ---
+enum Band { UV, VISIBLE, INFRARED }
+const BAND_COUNT := 3
+const BAND_OF: Array[int] = [0, 1, 1, 1, 2, 2]
+const BAND_NAMES: Array[String] = ["UV", "visible", "infrared"]

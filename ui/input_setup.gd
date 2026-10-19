@@ -20,6 +20,7 @@ const KEYS := {
 	&"overlay_cycle": [KEY_H],
 	&"time_back": [KEY_COMMA],
 	&"time_forward": [KEY_PERIOD],
+	&"toggle_help": [KEY_F1],
 }
 
 

@@ -1,36 +1,30 @@
 class_name BeamRenderer
 extends MeshInstance2D
-## Draws traced light as additive quads, one per ray segment (design doc §6.7).
-## Each quad is as wide as the ray spacing, so side-by-side rays tile into an even sheet
-## whose brightness follows irradiance; converging rays overlap and add up past 1.0,
-## which the HDR 2D buffer keeps and the glow pass blooms. Unsplit sunlight is
-## white-balanced; rays split after a refraction show their bin color.
-## In the light overlay NIR and IR get false colors too.
+## Draws the published light (design doc §6.7), additively into the HDR 2D buffer:
+## - the direct-light sheet: a faint tint over everywhere direct sun reaches, so shadows
+##   read clearly;
+## - beams: filled triangles whose brightness follows irradiance through a log tone curve,
+##   so plain sunlight is faint, a 10× beam is bright and a focus blooms through the glow;
+## - secondary rays (pooled reflections) as thin lines.
+## Colors follow the current view (ViewMode); unsplit sunlight sums to white.
 
-## Brightness of plain sunlight at REFERENCE_DNI. Concentration multiplies it.
-const BASE_INTENSITY := 0.12
-const REFERENCE_DNI := 1000.0
-const MAX_VERTEX_INTENSITY := 64.0
-
-const OVERLAY_COLORS: Array[Color] = [
-	Color(0.55, 0.20, 1.00),
-	Color(0.15, 0.35, 1.00),
-	Color(0.20, 1.00, 0.30),
-	Color(1.00, 0.20, 0.10),
-	Color(1.00, 0.55, 0.00),
-	Color(1.00, 0.00, 0.60),
-]
+const REFERENCE_DNI := 1000.0       ## Irradiance that tones to SUN_LEVEL
+const SUN_LEVEL := 0.12             ## Brightness of plain sunlight
+const LOG_GAIN := 3.5               ## How fast brightness grows with concentration
+const SHEET_LEVEL := 0.07           ## Brightness of the direct-light sheet
+const SHEET_BREAK_M := 0.3          ## Neighbouring lanes ending further apart than this: shadow edge
+const VERTEX_SCALE := 4.0           ## Vertex colors are stored /4 and scaled back by self_modulate
+const RAY_WIDTH_PX := 1.5
 
 var world: SimWorld
-var show_invisible := false:
+var view := ViewMode.NORMAL:
 	set(value):
-		show_invisible = value
+		view = value
 		_seen_version = -1
 
 var _light: LightSystem
 var _seen_version := -1
-var _bin_rgb: Array[Vector3] = []   ## Per-bin color, white-balanced, per watt of reference ray
-var _bin_rgb_all: Array[Vector3] = []
+var _rgb: Array[Vector3] = []       ## Per-bin color for the current view, white-balanced
 
 
 func setup(p_world: SimWorld) -> void:
@@ -40,9 +34,7 @@ func setup(p_world: SimWorld) -> void:
 	var mat := CanvasItemMaterial.new()
 	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	material = mat
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	_bin_rgb = _balanced(Spectrum.DISPLAY_COLOR, false)
-	_bin_rgb_all = _balanced(OVERLAY_COLORS, true)
+	self_modulate = Color(VERTEX_SCALE, VERTEX_SCALE, VERTEX_SCALE, 1.0)
 
 
 func _process(_delta: float) -> void:
@@ -50,90 +42,135 @@ func _process(_delta: float) -> void:
 		_rebuild()
 
 
-## Scales bin colors so AM1.5 sunlight sums to white and a reference ray has unit power.
-func _balanced(colors: Array[Color], include_invisible: bool) -> Array[Vector3]:
+## Brightness for a concentration ratio C (1 = plain sunlight).
+static func tone(c: float) -> float:
+	if c <= 1.0:
+		return SUN_LEVEL * c
+	return SUN_LEVEL * (1.0 + LOG_GAIN * log(c))
+
+
+## Per-bin colors for the view, scaled so AM1.5 sunlight across the shown bins is white.
+func _balance() -> void:
+	var colors := ViewMode.bin_colors(view)
 	var white := Vector3.ZERO
 	for b in Spectrum.BIN_COUNT:
-		if include_invisible or colors[b].a > 0.0:
+		if colors[b].a > 0.0:
 			white += Vector3(colors[b].r, colors[b].g, colors[b].b) * Spectrum.AM15_SHARE[b]
-	var ref_w := REFERENCE_DNI * SimConst.RAY_SPACING_M * SimConst.DEPTH_M
-	var out: Array[Vector3] = []
+	_rgb.clear()
 	for b in Spectrum.BIN_COUNT:
 		var c := colors[b]
 		var v := Vector3.ZERO
-		if include_invisible or c.a > 0.0:
-			v = Vector3(c.r / white.x, c.g / white.y, c.b / white.z) * (BASE_INTENSITY / ref_w)
-		out.append(v)
-	return out
+		if c.a > 0.0:
+			v = Vector3(c.r / maxf(white.x, 1e-3), c.g / maxf(white.y, 1e-3), c.b / maxf(white.z, 1e-3)) \
+				* Spectrum.AM15_SHARE[b]
+			# A single-band view (UV, IR) has no white to balance against: keep its hue.
+			if v.x + v.y + v.z > 0.0 and _shown_bins(colors) <= 2:
+				v = Vector3(c.r, c.g, c.b) * Spectrum.AM15_SHARE[b] / _shown_share(colors)
+		_rgb.append(v * ViewMode.beam_gain(view))
+
+
+static func _shown_bins(colors: Array[Color]) -> int:
+	var n := 0
+	for c in colors:
+		if c.a > 0.0:
+			n += 1
+	return n
+
+
+static func _shown_share(colors: Array[Color]) -> float:
+	var s := 0.0
+	for b in Spectrum.BIN_COUNT:
+		if colors[b].a > 0.0:
+			s += Spectrum.AM15_SHARE[b]
+	return s
 
 
 func _rebuild() -> void:
 	_seen_version = _light.trace_version
-	var from := _light.render_from
-	var to := _light.render_to
-	var power := _light.render_power
-	var n := from.size()
-	if n == 0:
-		mesh = null
-		return
-	var bins := _bin_rgb_all if show_invisible else _bin_rgb
+	_balance()
 	var px := SimConst.TILE_PX / SimConst.TILE_M
-	var half_w := SimConst.RAY_SPACING_M * px * 0.5
 	var verts := PackedVector2Array()
-	var colors := PackedColorArray()
-	var uvs := PackedVector2Array()
-	var indices := PackedInt32Array()
-	verts.resize(n * 4)
-	colors.resize(n * 4)
-	uvs.resize(n * 4)
-	indices.resize(n * 6)
-	var q := 0
-	for k in n:
-		var rgb := Vector3.ZERO
-		for b in Spectrum.BIN_COUNT:
-			rgb += bins[b] * power[k * Spectrum.BIN_COUNT + b]
-		if rgb.x + rgb.y + rgb.z < 1e-4:
-			continue
-		rgb = rgb.clampf(0.0, MAX_VERTEX_INTENSITY)
-		var a := from[k] * px
-		var b2 := to[k] * px
-		var dir := b2 - a
-		if dir.length_squared() < 1e-6:
-			continue
-		var side := Vector2(-dir.y, dir.x).normalized() * half_w
-		var c := Color(rgb.x, rgb.y, rgb.z, 1.0)
-		var v := q * 4
-		verts[v] = a - side
-		verts[v + 1] = a + side
-		verts[v + 2] = b2 + side
-		verts[v + 3] = b2 - side
-		uvs[v] = Vector2(0, 0)
-		uvs[v + 1] = Vector2(1, 0)
-		uvs[v + 2] = Vector2(1, 1)
-		uvs[v + 3] = Vector2(0, 1)
-		for j in 4:
-			colors[v + j] = c
-		var t := q * 6
-		indices[t] = v
-		indices[t + 1] = v + 1
-		indices[t + 2] = v + 2
-		indices[t + 3] = v
-		indices[t + 4] = v + 2
-		indices[t + 5] = v + 3
-		q += 1
-	if q == 0:
+	var cols := PackedColorArray()
+	_build_sheet(verts, cols, px)
+	_build_beams(verts, cols, px)
+	_build_rays(verts, cols, px)
+	if verts.is_empty():
 		mesh = null
 		return
-	verts.resize(q * 4)
-	colors.resize(q * 4)
-	uvs.resize(q * 4)
-	indices.resize(q * 6)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_COLOR] = colors
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	arrays[Mesh.ARRAY_INDEX] = indices
+	arrays[Mesh.ARRAY_COLOR] = cols
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh = m
+
+
+func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
+	var from := _light.sheet_from
+	var to := _light.sheet_to
+	if from.size() < 2:
+		return
+	# Tint from the current spectrum through the view's colors (reddens at sunset).
+	var rgb := Vector3.ZERO
+	var share_sum := 0.0
+	for b in Spectrum.BIN_COUNT:
+		share_sum += Spectrum.AM15_SHARE[b]
+	var total := Spectrum.total(world.sun_spectrum)
+	if total <= 0.0:
+		return
+	for b in Spectrum.BIN_COUNT:
+		if Spectrum.AM15_SHARE[b] > 0.0:
+			rgb += _rgb[b] * (world.sun_spectrum[b] / total) / Spectrum.AM15_SHARE[b] * share_sum
+	var level := SHEET_LEVEL * minf(total / REFERENCE_DNI, 1.0) / VERTEX_SCALE
+	var c := Color(rgb.x * level, rgb.y * level, rgb.z * level, 1.0)
+	for k in from.size() - 1:
+		if to[k].distance_to(to[k + 1]) > SHEET_BREAK_M:
+			continue
+		var a0 := from[k] * px
+		var a1 := from[k + 1] * px
+		var b0 := to[k] * px
+		var b1 := to[k + 1] * px
+		verts.append_array([a0, b0, b1, a0, b1, a1])
+		for j in 6:
+			cols.append(c)
+
+
+func _build_beams(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
+	var pts := _light.beam_pts
+	var irr := _light.beam_irr
+	var bins := _light.beam_bin
+	for t in bins.size():
+		var bin := bins[t]
+		var rgb := _rgb[bin]
+		if rgb == Vector3.ZERO:
+			continue
+		var ref := REFERENCE_DNI * Spectrum.AM15_SHARE[bin]
+		for j in 3:
+			var v := t * 3 + j
+			var level := tone(irr[v] / ref) / VERTEX_SCALE
+			verts.append(pts[v] * px)
+			cols.append(Color(rgb.x * level, rgb.y * level, rgb.z * level, 1.0))
+
+
+func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
+	var from := _light.ray_from
+	var to := _light.ray_to
+	var power := _light.ray_power
+	# A pooled reflection ray stands for REFL_POOL_M of wavefront.
+	var width_m := BeamTracer.REFL_POOL_M
+	for k in from.size():
+		var rgb := Vector3.ZERO
+		for b in Spectrum.BIN_COUNT:
+			var irr := power[k * Spectrum.BIN_COUNT + b] / (width_m * SimConst.DEPTH_M)
+			if irr > 0.0:
+				rgb += _rgb[b] * tone(irr / (REFERENCE_DNI * Spectrum.AM15_SHARE[b]))
+		if rgb.x + rgb.y + rgb.z < 1e-4:
+			continue
+		var a := from[k] * px
+		var b2 := to[k] * px
+		var side := (b2 - a).normalized().orthogonal() * (RAY_WIDTH_PX * 0.5)
+		var c := Color(rgb.x / VERTEX_SCALE, rgb.y / VERTEX_SCALE, rgb.z / VERTEX_SCALE, 1.0)
+		verts.append_array([a - side, b2 - side, b2 + side, a - side, b2 + side, a + side])
+		for j in 6:
+			cols.append(c)

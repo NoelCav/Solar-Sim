@@ -14,6 +14,7 @@ var paused := false
 var speed := 1
 
 var sim_ms := 0.0         ## Smoothed CPU time spent stepping the sim per frame
+var view := ViewMode.NORMAL
 
 var _accumulator := 0.0
 var _light: LightSystem
@@ -27,7 +28,8 @@ var _previewed := Vector2i(-1, -1)
 @onready var _brush: CreativeBrush = $Brush
 @onready var _tool: ObjectTool = $ObjectTool
 @onready var _camera: CameraController = $Camera
-@onready var _hud: DebugHud = $HudLayer/Hud
+@onready var _markers: MapMarkers = $Markers
+@onready var _hud: Hud = $HudLayer/Hud
 
 
 func _ready() -> void:
@@ -56,6 +58,7 @@ func _ready() -> void:
 	_overlay.setup(world)
 	_brush.setup(world)
 	_tool.setup(world, object_db, _brush, _objects)
+	_markers.setup(world, _overlay)
 	_hud.setup(world, self, _brush, _tool, _overlay)
 	_camera.position = Vector2(WORLD_WIDTH * 0.5, WORLD_HEIGHT * WorldGen.SURFACE_FRACTION - 8.0) * SimConst.TILE_PX
 	_camera.zoom = Vector2.ONE * 1.5
@@ -92,9 +95,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"sim_speed"):
 		speed = SPEEDS[(SPEEDS.find(speed) + 1) % SPEEDS.size()]
 	elif event.is_action_pressed(&"overlay_cycle"):
-		_overlay.cycle()
-		_beams.show_invisible = _overlay.mode == OverlayRenderer.Mode.LIGHT
+		set_view((view + 1) % ViewMode.COUNT)
 	elif event.is_action_pressed(&"time_forward") or event.is_action_pressed(&"time_back"):
 		var hour := SimConst.DAY_LENGTH_S / 24.0
 		var direction := 1.0 if event.is_action_pressed(&"time_forward") else -1.0
 		world.enqueue(SetTimeCommand.new(world.time_s + direction * hour))
+
+
+## Switches what the beams, tile overlay and markers show (ViewMode).
+func set_view(v: int) -> void:
+	view = v
+	_beams.view = v
+	_overlay.view = v
+	_markers.view = v
+	_hud.refresh_view()

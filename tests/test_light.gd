@@ -16,8 +16,8 @@ func _place(world: SimWorld, def: ObjectDef, pos: Vector2, angle: float = 0.0) -
 func _tracer(world: SimWorld) -> Tracer:
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)   # Builds surfaces + buckets
-	light.tracer.begin()
-	return light.tracer
+	light.tracer().begin()
+	return light.tracer()
 
 
 func _single_bin(bin: int, watts: float) -> PackedFloat32Array:
@@ -155,7 +155,7 @@ func test_sun_trace_conserves_energy() -> void:
 	_place(world, load("res://data/objects/mirror_aluminum.tres"), Vector2(13.0, 3.0), 0.6)
 	var light: LightSystem = world.get_system(&"light")
 	light.retrace(world)
-	var tr := light.tracer
+	var tr := light.tracer()
 	var out := tr.absorbed_w + tr.escaped_w + tr.scattered_w + tr.culled_w
 	check(tr.emitted_w > 0.0, "sun emitted light")
 	check_near(out / tr.emitted_w, 1.0, 1e-4, "energy balance")
@@ -200,3 +200,85 @@ func test_no_stray_deposits_in_open_air() -> void:
 			if light.tile_power[i] > 0.0 and g.material[i] == MaterialDB.AIR_ID and g.object_id[i] < 0:
 				stray += 1
 	check_eq(stray, 0, "air tiles heated outside any object")
+
+
+func _flat_world(w: int = 40, h: int = 20, ground_row: int = 15) -> SimWorld:
+	var world := SimWorld.new(load_materials(), w, h, 1)
+	var g := world.grid
+	var stone := world.materials.id_of(&"stone")
+	for y in range(ground_row, h):
+		for x in w:
+			g.material[g.idx(x, y)] = stone
+	g.mark_structure_changed()
+	return world
+
+
+## Direct light on flat ground: each surface tile absorbs DNI × cos(zenith) × face width ×
+## slice depth × absorptivity, with no rays traced.
+func test_direct_sun_on_flat_ground() -> void:
+	var world := _flat_world()
+	world.time_s = 0.42 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var g := world.grid
+	var i := g.idx(20, 15)
+	var stone := world.materials.get_by_key(&"stone")
+	var expected := 0.0
+	for b in Spectrum.BIN_COUNT:
+		expected += world.sun_spectrum[b] * stone.surface_absorptivity[b]
+	expected *= SimConst.TILE_M * world.sun_direction.y * SimConst.DEPTH_M
+	check_near(light.tile_power[i], expected, expected * 0.1, "surface tile power")
+	check_eq(light.tile_power[g.idx(20, 16)], 0.0, "tile below the surface is dark")
+	check_eq(light.stats.rays, 0, "no rays needed without optics")
+
+
+## A floating block casts a shadow on the ground along the sun direction.
+func test_block_casts_shadow() -> void:
+	var world := _flat_world()
+	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var g := world.grid
+	var stone := world.materials.id_of(&"stone")
+	var cells := PackedInt32Array()
+	for x in range(18, 22):
+		cells.append(g.idx(x, 5))
+	world.enqueue(PaintTilesCommand.new(cells, stone))
+	world.flush_commands()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	check_eq(light.tile_power[g.idx(20, 15)], 0.0, "ground under the block is shaded")
+	check(light.tile_power[g.idx(10, 15)] > 0.0, "ground beside it is lit")
+	check(light.tile_power[g.idx(20, 5)] > 0.0, "the block's top is lit")
+
+
+## Beams and plain rays agree on how much light a lens puts into its focal tiles.
+func test_beams_match_ray_tree_at_focus() -> void:
+	var world := _flat_world(40, 30, 25)
+	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	# Lens 1.2 m above the ground so the focus lands on the surface.
+	_place(world, lens, Vector2(5.0, 25 * SimConst.TILE_M - 1.23))
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var g := world.grid
+	var beam_focus := 0.0
+	for x in range(18, 22):   # Tiles under the lens (x 4.5–5.5 m)
+		beam_focus += light.tile_power[g.idx(x, 25)]
+	# Reference: dense plain rays across the lens only.
+	var tr := light.tracer()
+	tr.begin()
+	var spacing := 0.002
+	var x := 4.5
+	while x < 5.5:
+		var p := Spectrum.make_zero()
+		for b in Spectrum.BIN_COUNT:
+			p[b] = world.sun_spectrum[b] * spacing * SimConst.DEPTH_M
+		tr.trace(Vector2(x, 0.5), world.sun_direction, p)
+		x += spacing
+	var ray_focus := 0.0
+	for xx in range(18, 22):
+		ray_focus += tr.tile_power[g.idx(xx, 25)]
+	check(beam_focus > 100.0, "focus collects light (%.1f W)" % beam_focus)
+	check_near(beam_focus / ray_focus, 1.0, 0.05, "beam vs ray tree at focus")

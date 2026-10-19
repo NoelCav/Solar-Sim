@@ -16,7 +16,11 @@ var front_mat := PackedInt32Array()
 var back_mat := PackedInt32Array()
 var coating := PackedInt32Array()
 var owner := PackedInt32Array()         ## Object id
+var piece := PackedInt32Array()         ## Index of the add_polyline call that made the segment
 var reflectance: Array[PackedFloat32Array] = []   ## Per-bin, mirrors only
+## Each face of an object is one piece; segments of a smooth face share it, so rays hitting
+## neighbouring segments of the same face still count as following the same path.
+var piece_count := 0
 
 # Tile buckets, CSR layout: segments of tile i are cell_items[cell_start[i] .. cell_start[i+1]).
 var cell_start := PackedInt32Array()
@@ -26,9 +30,10 @@ var _height := 0
 
 
 func clear() -> void:
-	for arr in [a, b, normal, normal_a, normal_b, front_mat, back_mat, coating, owner]:
+	for arr in [a, b, normal, normal_a, normal_b, front_mat, back_mat, coating, owner, piece]:
 		arr.clear()
 	reflectance.clear()
+	piece_count = 0
 
 
 func count() -> int:
@@ -56,7 +61,9 @@ func add_polyline(points: PackedVector2Array, normals: PackedVector2Array, p_fro
 		back_mat.append(p_back)
 		coating.append(p_coating)
 		owner.append(p_owner)
+		piece.append(piece_count)
 		reflectance.append(p_reflectance)
+	piece_count += 1
 
 
 ## Shading normal at parameter u along segment s, on the same side as the geometric normal.

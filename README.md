@@ -10,7 +10,7 @@ Godot 4.7+. Open the project in the editor and press Play, or:
 godot --path .
 ```
 
-The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens.
+The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens. Hover anything for the inspector (material, temperature, absorbed light by band, object readings).
 
 Controls:
 
@@ -19,7 +19,8 @@ Controls:
 | WASD / middle-drag, wheel | Pan, zoom |
 | Space, Tab | Pause, cycle speed (1× 2× 4×) |
 | `,` `.` | Time −/+ 1 hour |
-| H | Overlay: normal → heat → light (light also shows NIR/IR beams in false color) |
+| H, or the view bar (top right) | Views: Normal · Light (all wavelengths, false color) · UV · Infrared · Heat |
+| F1 | Hide/show the help bar |
 | 0 | Tile brush: LMB paint, RMB erase, Q/E material, `[` `]` size |
 | 1–5 | Object tool: LMB place or drag, RMB remove |
 | R / F (Shift = fine) | Rotate hovered object |
