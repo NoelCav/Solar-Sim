@@ -1,0 +1,202 @@
+extends TestSuite
+## Optics checks against closed-form physics (design doc §17 workflow).
+
+
+## An all-air world with the given objects, sun off so only test rays are traced.
+func _make_world(w: int = 80, h: int = 80) -> SimWorld:
+	return SimWorld.new(load_materials(), w, h, 1)
+
+
+func _place(world: SimWorld, def: ObjectDef, pos: Vector2, angle: float = 0.0) -> SimObject:
+	world.enqueue(PlaceObjectCommand.new(def, pos, angle))
+	world.flush_commands()
+	return world.objects[world.next_object_id - 1]
+
+
+func _tracer(world: SimWorld) -> Tracer:
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)   # Builds surfaces + buckets
+	light.tracer.begin()
+	return light.tracer
+
+
+func _single_bin(bin: int, watts: float) -> PackedFloat32Array:
+	var p := Spectrum.make_zero()
+	p[bin] = watts
+	return p
+
+
+func _lens_def(r1: float, r2: float, t: float, d: float = 1.0) -> ObjectDef:
+	var def := ObjectDef.new()
+	def.key = &"test_lens"
+	def.kind = ObjectDef.Kind.LENS
+	def.material = &"crown_glass"
+	def.size_m = d
+	def.radius_front_m = r1
+	def.radius_back_m = r2
+	def.thickness_m = t
+	def.arc_segments = 256
+	return def
+
+
+## Paraxial rays through a thick biconvex lens cross the axis at the back focal distance
+## predicted by the lensmaker's equation.
+func test_lens_focal_length_matches_lensmaker() -> void:
+	var world := _make_world()
+	var r := 2.0
+	var t := 0.15
+	var center := Vector2(10.0, 4.0)
+	_place(world, _lens_def(r, r, t), center)
+	var tr := _tracer(world)
+	var bin := Spectrum.Bin.GREEN
+	tr.trace(Vector2(center.x + 0.02, 0.5), Vector2.DOWN, _single_bin(bin, 1.0))
+	# Find the transmitted leg below the lens and where it crosses x = center.x.
+	var crossing := INF
+	for k in tr.seg_from.size():
+		var a := tr.seg_from[k]
+		var b := tr.seg_to[k]
+		if a.y > center.y + t * 0.5 - 0.01 and absf(b.x - a.x) > 1e-9:
+			var s := (center.x - a.x) / (b.x - a.x)
+			if s >= 0.0 and s <= 1.0 and b.y > a.y:
+				crossing = minf(crossing, a.y + s * (b.y - a.y))
+	var n := world.materials.get_by_key(&"crown_glass").refractive_index(Spectrum.WAVELENGTH_UM[bin])
+	var inv_f := (n - 1.0) * (2.0 / r - (n - 1.0) * t / (n * r * r))
+	var f := 1.0 / inv_f
+	var bfd := f * (1.0 - (n - 1.0) * t / (n * r))
+	check_near(crossing - (center.y + t * 0.5), bfd, bfd * 0.01, "back focal distance")
+
+
+## A ray from air into a glass tile bends by Snell's law.
+func test_refraction_into_glass_tile_obeys_snell() -> void:
+	var world := _make_world(20, 20)
+	var glass := world.materials.id_of(&"crown_glass")
+	var g := world.grid
+	var cells := PackedInt32Array()
+	for y in range(10, 20):
+		for x in 20:
+			cells.append(g.idx(x, y))
+	world.enqueue(PaintTilesCommand.new(cells, glass))
+	world.flush_commands()
+	var tr := _tracer(world)
+	var theta_i := deg_to_rad(40.0)
+	var d := Vector2(sin(theta_i), cos(theta_i))
+	var bin := Spectrum.Bin.RED
+	tr.trace(Vector2(1.0, 1.0), d, _single_bin(bin, 1.0))
+	var inside := Vector2.ZERO
+	for k in tr.seg_from.size():
+		if tr.seg_from[k].y > 2.4999 and tr.seg_to[k].y > tr.seg_from[k].y:
+			inside = (tr.seg_to[k] - tr.seg_from[k]).normalized()
+			break
+	var n := world.materials.get_def(glass).refractive_index(Spectrum.WAVELENGTH_UM[bin])
+	var air := world.materials.get_def(MaterialDB.AIR_ID).refractive_index(Spectrum.WAVELENGTH_UM[bin])
+	check_near(asin(inside.x), asin(air * sin(theta_i) / n), 1e-4, "refraction angle")
+
+
+## Light inside glass beyond the critical angle reflects completely.
+func test_total_internal_reflection() -> void:
+	var world := _make_world(20, 20)
+	var glass := world.materials.id_of(&"crown_glass")
+	var g := world.grid
+	var cells := PackedInt32Array()
+	for y in range(0, 10):
+		for x in 20:
+			cells.append(g.idx(x, y))
+	world.enqueue(PaintTilesCommand.new(cells, glass))
+	world.flush_commands()
+	var tr := _tracer(world)
+	var theta := deg_to_rad(60.0)   # Critical angle for n ≈ 1.52 is ~41°
+	tr.trace(Vector2(0.5, 0.5), Vector2(sin(theta), cos(theta)), _single_bin(Spectrum.Bin.GREEN, 1.0))
+	var escaped_below := false
+	for k in tr.seg_from.size():
+		if tr.seg_to[k].y > 2.5 + 0.01:
+			escaped_below = true
+	check(not escaped_below, "no light leaves through the bottom face")
+	check(tr.absorbed_w > 0.0, "the trapped ray is absorbed in the glass")
+
+
+## A prism bends blue more than red.
+func test_prism_disperses() -> void:
+	var world := _make_world()
+	var prism: ObjectDef = load("res://data/objects/prism_flint.tres")
+	var center := Vector2(10.0, 5.0)
+	_place(world, prism, center)   # Apex up
+	# Hit the left face ~50° off its normal (near minimum deviation; 30° would TIR in flint).
+	var face_mid := Vector2(center.x - 0.15, center.y - 0.087)
+	var d := Vector2.from_angle(deg_to_rad(-20.0))
+	var tr := _tracer(world)
+	var dirs := {}
+	for bin in [Spectrum.Bin.BLUE, Spectrum.Bin.RED]:
+		tr.begin()
+		tr.trace(face_mid - d * 2.0, d, _single_bin(bin, 1.0))
+		# Exit direction = the strongest leg that leaves the prism.
+		var best := -1
+		var best_w := 0.0
+		for k in tr.seg_from.size():
+			var w: float = tr.seg_power[k * Spectrum.BIN_COUNT + bin]
+			if tr.seg_from[k].distance_to(center) < 0.45 and tr.seg_to[k].distance_to(center) > 0.45 \
+					and w > best_w:
+				best = k
+				best_w = w
+		dirs[bin] = (tr.seg_to[best] - tr.seg_from[best]).normalized() if best >= 0 else d
+	var dev_blue := d.angle_to(dirs[Spectrum.Bin.BLUE])
+	var dev_red := d.angle_to(dirs[Spectrum.Bin.RED])
+	check(absf(dev_blue) > absf(dev_red) + deg_to_rad(0.3), "blue deviates more (blue %.2f°, red %.2f°)" % [
+		rad_to_deg(dev_blue), rad_to_deg(dev_red)])
+
+
+## Every emitted watt is absorbed, escapes, scatters or is culled.
+func test_sun_trace_conserves_energy() -> void:
+	var world := SimWorld.new(load_materials(), 64, 32, 3)
+	WorldGen.generate(world)
+	world.time_s = 0.42 * SimConst.DAY_LENGTH_S
+	world.tick()
+	_place(world, load("res://data/objects/lens_crown.tres"), Vector2(6.0, 3.0))
+	_place(world, load("res://data/objects/prism_flint.tres"), Vector2(10.0, 3.0), 0.4)
+	_place(world, load("res://data/objects/mirror_aluminum.tres"), Vector2(13.0, 3.0), 0.6)
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var tr := light.tracer
+	var out := tr.absorbed_w + tr.escaped_w + tr.scattered_w + tr.culled_w
+	check(tr.emitted_w > 0.0, "sun emitted light")
+	check_near(out / tr.emitted_w, 1.0, 1e-4, "energy balance")
+	check(tr.culled_w < 0.02 * tr.emitted_w, "culling stays small (%.2f%%)" % [100.0 * tr.culled_w / tr.emitted_w])
+
+
+## A lens concentrates sunlight: the probe at its focus reads far above plain DNI.
+func test_lens_concentrates_onto_probe() -> void:
+	var world := _make_world(80, 60)
+	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.tick()
+	var lens: ObjectDef = load("res://data/objects/lens_crown.tres")
+	var probe_def := ObjectDef.new()
+	probe_def.key = &"tiny_probe"
+	probe_def.kind = ObjectDef.Kind.PROBE
+	probe_def.size_m = 0.05
+	_place(world, lens, Vector2(10.0, 4.0))
+	# Thin-lens estimate f ≈ R / (2(n-1)) ≈ 1.15 m; the probe sits near the focus.
+	var probe := _place(world, probe_def, Vector2(10.0, 4.0 + 1.05))
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var concentration := probe.probe_irradiance() / world.sun_dni
+	check(concentration > 8.0, "concentration %.1f×" % concentration)
+
+
+## Light only heats open air where a body is: no ray may stay flagged as inside a lens or
+## prism after slipping past a corner (regression for grazing hits near prism corners).
+func test_no_stray_deposits_in_open_air() -> void:
+	var world := SimWorld.new(load_materials(), 300, 120, 1)
+	WorldGen.generate(world)
+	var objects := ObjectDB.new()
+	objects.load_dir()
+	DemoRig.place(world, objects)
+	var light: LightSystem = world.get_system(&"light")
+	var g := world.grid
+	var stray := 0
+	for hour in [7.5, 9.46, 11.0, 13.17, 15.0, 16.5]:
+		world.time_s = hour / 24.0 * SimConst.DAY_LENGTH_S
+		world.tick()
+		light.retrace(world)
+		for i in g.size():
+			if light.tile_power[i] > 0.0 and g.material[i] == MaterialDB.AIR_ID and g.object_id[i] < 0:
+				stray += 1
+	check_eq(stray, 0, "air tiles heated outside any object")

@@ -6,9 +6,29 @@
 [ext_resource type="Script" path="res://ui/creative_brush.gd" id="4_brush"]
 [ext_resource type="Script" path="res://ui/camera_controller.gd" id="5_camera"]
 [ext_resource type="Script" path="res://ui/debug_hud.gd" id="6_hud"]
+[ext_resource type="Script" path="res://render/beam_renderer.gd" id="7_beams"]
+[ext_resource type="Script" path="res://render/object_renderer.gd" id="8_objects"]
+[ext_resource type="Script" path="res://render/overlay_renderer.gd" id="9_overlay"]
+[ext_resource type="Script" path="res://ui/object_tool.gd" id="10_tool"]
+
+[sub_resource type="Environment" id="Environment_glow"]
+background_mode = 3
+glow_enabled = true
+glow_levels/1 = 1.0
+glow_levels/2 = 1.0
+glow_levels/3 = 1.0
+glow_levels/5 = 0.6
+glow_intensity = 0.9
+glow_strength = 1.1
+glow_blend_mode = 1
+glow_hdr_threshold = 1.0
+glow_hdr_scale = 1.5
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_glow")
 
 [node name="Sky" type="ColorRect" parent="."]
 mouse_filter = 2
@@ -17,8 +37,20 @@ script = ExtResource("2_sky")
 [node name="Tiles" type="Sprite2D" parent="."]
 script = ExtResource("3_tiles")
 
+[node name="Objects" type="Node2D" parent="."]
+script = ExtResource("8_objects")
+
+[node name="Beams" type="MeshInstance2D" parent="."]
+script = ExtResource("7_beams")
+
+[node name="Overlay" type="Sprite2D" parent="."]
+script = ExtResource("9_overlay")
+
 [node name="Brush" type="Node2D" parent="."]
 script = ExtResource("4_brush")
+
+[node name="ObjectTool" type="Node2D" parent="."]
+script = ExtResource("10_tool")
 
 [node name="Camera" type="Camera2D" parent="."]
 script = ExtResource("5_camera")

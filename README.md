@@ -10,21 +10,44 @@ Godot 4.7+. Open the project in the editor and press Play, or:
 godot --path .
 ```
 
-Controls: WASD / middle-drag pan, wheel zoom, Space pause, Tab speed, LMB paint, RMB erase, Q/E material, `[` `]` brush size, Ctrl+Z undo.
+The site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens.
+
+Controls:
+
+| Keys | Action |
+|---|---|
+| WASD / middle-drag, wheel | Pan, zoom |
+| Space, Tab | Pause, cycle speed (1× 2× 4×) |
+| `,` `.` | Time −/+ 1 hour |
+| H | Overlay: normal → heat → light (light also shows NIR/IR beams in false color) |
+| 0 | Tile brush: LMB paint, RMB erase, Q/E material, `[` `]` size |
+| 1–5 | Object tool: LMB place or drag, RMB remove |
+| R / F (Shift = fine) | Rotate hovered object |
+| X / Delete | Delete hovered object |
+| Ctrl+Z | Undo |
 
 ## Tests
 
-Headless sim tests:
+Headless sim tests (a test also fails on any script error raised while it runs):
 
 ```bash
 godot --headless --path . -s res://tests/run_tests.gd
 ```
 
+Per-system timings on a full-size site:
+
+```bash
+godot --headless --path . -s res://tests/bench.gd
+```
+
 ## Layout
 
 - `sim/` — pure simulation (no Nodes): world, tile grid, materials, commands, systems
-- `data/materials/` — material definitions (`.tres`, SI units)
+  - `light/` — spectrum, optical surfaces, generators, ray tracer, light system
+  - `thermal/` — heat grid
+  - `objects/` — object definitions and instances
+- `data/materials/`, `data/objects/` — content definitions (`.tres`, SI units)
 - `render/`, `ui/` — Nodes that read sim state and send commands
 - `scenes/` — entry scene
-- `tests/` — headless tests
+- `tests/` — headless tests and benchmark
 - `addons/godot_ai/` — Godot AI MCP plugin (v4.3.0)

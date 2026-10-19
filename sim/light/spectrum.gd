@@ -38,3 +38,23 @@ static func from_total(total_w: float) -> PackedFloat32Array:
 	for i in BIN_COUNT:
 		s[i] = total_w * AM15_SHARE[i]
 	return s
+
+
+## AM1.5 shares reshaped for air mass `am` (blue attenuates faster), scaled to total `total_w`.
+static func reddened(total_w: float, am: float) -> PackedFloat32Array:
+	var s := make_zero()
+	var sum := 0.0
+	for i in BIN_COUNT:
+		var rayleigh := pow(0.55 / WAVELENGTH_UM[i], 4.0)
+		s[i] = AM15_SHARE[i] * exp(-SimConst.REDDENING * (am - 1.5) * rayleigh)
+		sum += s[i]
+	for i in BIN_COUNT:
+		s[i] *= total_w / sum
+	return s
+
+
+static func total(s: PackedFloat32Array) -> float:
+	var t := 0.0
+	for v in s:
+		t += v
+	return t

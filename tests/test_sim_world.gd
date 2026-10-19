@@ -60,5 +60,5 @@ func test_same_seed_and_commands_are_deterministic() -> void:
 		w.enqueue(PaintTilesCommand.new(PackedInt32Array([10, 11, 12]), copper, 500.0))
 		for i in 100:
 			w.tick()
-	check_eq(a.grid.state_hash(), b.grid.state_hash(), "state hash")
-	check(a.grid.state_hash() != _make_world(43).grid.state_hash(), "different seed differs")
+	check_eq(a.state_hash(), b.state_hash(), "state hash")
+	check(a.state_hash() != _make_world(43).state_hash(), "different seed differs")

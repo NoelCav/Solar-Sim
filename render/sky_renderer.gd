@@ -4,8 +4,8 @@ extends ColorRect
 ## Real sky (air-mass reddening, sunsets) comes with the light system in M1.
 
 const NIGHT := Color(0.02, 0.03, 0.08)
-const DAY := Color(0.42, 0.65, 0.92)
-const DUSK := Color(0.85, 0.45, 0.25)
+const DAY := Color(0.22, 0.40, 0.66)
+const DUSK := Color(0.60, 0.30, 0.18)
 
 var world: SimWorld
 

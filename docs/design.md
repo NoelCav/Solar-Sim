@@ -2,7 +2,7 @@
 
 > Living document. Sections marked **LOCKED** are architecture decisions we build against and should not change without a deliberate migration. Everything else is tunable.
 >
-> Last updated: 2026-10-18
+> Last updated: 2026-10-18 (M1)
 
 ---
 
@@ -348,7 +348,7 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | Milestone | Scope |
 |---|---|
 | **M0 — Skeleton** | Godot project, `SimWorld` tick loop, command queue, tile grid with all layers allocated, material resources, debug tile renderer, camera |
-| **M1 — Light & heat** | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector |
+| **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
 | **M2 — Environment & creative mode** | Simple terrain/site, sky & sunsets, creative tools (§16.1), lens mount handles |
 | M3 — Cells & power | Cell model, power network, batteries, grid market |
 | M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule |
@@ -357,10 +357,25 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | M7 — Lens failure | Thermal slices, thermal lensing, sag, cracks, slag |
 | M8 — Progression | Research, economy, sites, survival mode |
 
+### 18.1 M1 notes (2026-10-18)
+
+What shipped, and decisions made while building it (none change a LOCKED decision):
+
+- **Sun:** Kasten–Young air mass, Meinel DNI, per-bin Rayleigh-style reddening; diffuse light lands on each column's first non-gas tile (not traced, not focusable).
+- **Tracer:** sun rays start just above the highest tile or surface; rays over empty 8×8-tile air blocks skip the block in one step. Outside bodies a ray's medium is the tile it is in, so painted glass/water tiles refract and absorb too. Inside/outside a body is decided by which side of a face is hit, with a bounds check so grazing rays at corners can't stay "inside". Opaque-surface remainder is counted as `scattered` (not yet traced). Every emitted watt is accounted as absorbed, escaped, scattered or culled (tested).
+- **Re-traces are tick-sliced:** a pass traces `RAY_PATHS_PER_TICK` ray paths per tick (deterministic), and published deposits are scaled by current DNI between passes. Geometry changes or a sun jump restart a pass. While paused, a render-only preview trace shows edits without touching sim state.
+- **Heat:** banded explicit integration, one of `HEAT_BANDS` row bands per tick, each pair exchanged once per cycle (energy conserved, tested). Convective film between surfaces and air, buoyancy-boosted air mixing, air relaxing to ambient, sky radiation from sky-facing tiles. Heat-capacity dial is 0.05 for solids and liquids.
+- **Objects:** lens (bi/plano-convex), prism, flat mirror (double-sided for now), irradiance probe. Absorption inside a lens heats the air tiles it sits in until lens thermal slices arrive (M7). The Si cell and heatsink move to M3 with the cell model and power network.
+- **Creative extras pulled forward:** object placement/drag/rotate/delete with undo, and ±1 h time skip.
+
+**Performance (GDScript, full 300×120 site, demo rig, noon):** a full re-trace is ~50–60 ms (~3.5k ray paths, ~15 µs per path); a heat band is ~2 ms. Slicing keeps an average tick at ~6–7 ms headless, but the in-editor debug build is roughly 1.5–2× slower and 4× speed drops well below 60 fps. Per §5.5, the tracer and heat loop are the first candidates for a C#/GDExtension port.
+
 ## 19. Open questions
 
 - Art direction: pixel art at 16 px (fits scale) vs. clean vector? Light rendering looks good either way.
 - Working title: *Bandgap*, *Heliolab*, *Photon Farm*, *Sunsink*…
 - Tuning: ray count/spacing, heat-capacity scale, dn/dT exaggeration.
 - Wind and weather depth.
-- GDScript vs. early C#/GDExtension port for the tracer — decide after M1 profiling.
+- GDScript vs. C#/GDExtension port for the tracer and heat loop — M1 profiling (§18.1) says port both; pick the language (the editor build in use is not .NET, so C# means switching editors; GDExtension needs a C++ toolchain).
+- Thermal tuning: heat-capacity dial vs. 25 cm tiles averaging away focal spots (the 1.5 m acrylic demo lens raises its focal tile only ~0.3 K/s).
+- Lens absorption heats host air tiles until M7 thermal slices; acceptable stopgap?

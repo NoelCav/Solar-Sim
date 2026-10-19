@@ -29,6 +29,11 @@ var energy_in := PackedFloat32Array()       ## Joules deposited this tick, consu
 ## Bumped on any structural change so renderers know to rebuild.
 var structure_version: int = 0
 
+var _sky_tiles := PackedInt32Array()
+var _sky_version := -1
+var _top_row := 0
+var _top_version := -1
+
 
 func _init(w: int, h: int, ambient_k: float = SimConst.DEFAULT_AMBIENT_K) -> void:
 	width = w
@@ -85,6 +90,33 @@ func set_material(i: int, mat_id: int) -> void:
 
 func mark_structure_changed() -> void:
 	structure_version += 1
+
+
+## Per column, the first tile from the top that is not a gas: the surfaces that see the
+## sky (diffuse light, sky radiation). Cached until the structure changes.
+func sky_tiles(is_gas: PackedByteArray) -> PackedInt32Array:
+	if _sky_version != structure_version:
+		_sky_tiles.clear()
+		for x in width:
+			for y in height:
+				var i := y * width + x
+				if not is_gas[material[i]]:
+					_sky_tiles.append(i)
+					break
+		_sky_version = structure_version
+	return _sky_tiles
+
+
+## Topmost row containing any non-air tile, or `height` if the grid is empty.
+func top_nonair_row() -> int:
+	if _top_version != structure_version:
+		_top_row = height
+		for i in size():
+			if material[i] != MaterialDB.AIR_ID:
+				_top_row = i / width
+				break
+		_top_version = structure_version
+	return _top_row
 
 
 ## Content hash over all persistent layers, used by determinism tests and desync checks.

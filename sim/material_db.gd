@@ -16,6 +16,7 @@ var conductivity := PackedFloat32Array()
 var emissivity := PackedFloat32Array()
 var tile_heat_capacity := PackedFloat32Array()
 var is_solid := PackedByteArray()
+var is_gas := PackedByteArray()
 
 
 ## Loads every .tres in the materials directory. Returns an error string, or "" on success.
@@ -95,6 +96,8 @@ func _build_tables() -> void:
 		arr.fill(0.0)
 	is_solid.resize(n)
 	is_solid.fill(0)
+	is_gas.resize(n)
+	is_gas.fill(0)
 	for def in defs:
 		if def == null:
 			continue
@@ -104,3 +107,4 @@ func _build_tables() -> void:
 		emissivity[def.id] = def.emissivity
 		tile_heat_capacity[def.id] = def.tile_heat_capacity()
 		is_solid[def.id] = 1 if def.is_solid() else 0
+		is_gas[def.id] = 1 if def.phase == MaterialDef.Phase.GAS else 0

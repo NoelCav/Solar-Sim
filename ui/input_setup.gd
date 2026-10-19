@@ -14,6 +14,12 @@ const KEYS := {
 	&"brush_prev": [KEY_Q],
 	&"brush_bigger": [KEY_BRACKETRIGHT],
 	&"brush_smaller": [KEY_BRACKETLEFT],
+	&"obj_rotate_ccw": [KEY_R],
+	&"obj_rotate_cw": [KEY_F],
+	&"obj_delete": [KEY_X, KEY_DELETE],
+	&"overlay_cycle": [KEY_H],
+	&"time_back": [KEY_COMMA],
+	&"time_forward": [KEY_PERIOD],
 }
 
 

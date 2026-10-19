@@ -1,7 +1,7 @@
 class_name EnvironmentSystem
 extends SimSystem
-## Time of day, sun direction and ambient temperature (tick step 2).
-## M0: a simple circular sun arc. Latitude, seasons, air mass and weather come in M1+.
+## Time of day, sun direction and intensity, ambient temperature (tick step 2).
+## Circular sun arc; latitude, seasons and weather come later.
 
 
 func system_name() -> StringName:
@@ -23,3 +23,21 @@ func tick(world: SimWorld, _dt: float) -> void:
 	# Ambient peaks mid-afternoon (~15:00), coldest before dawn.
 	world.ambient_k = world.site_mean_ambient_k \
 		+ SimConst.AMBIENT_SWING_K * sin((day - 0.375) * TAU)
+	_update_irradiance(world)
+
+
+## Direct normal irradiance from air mass (Kasten–Young air mass, Meinel attenuation),
+## reddened per bin so low sun is red (§6.2).
+func _update_irradiance(world: SimWorld) -> void:
+	if not world.sun_is_up:
+		world.air_mass = INF
+		world.sun_dni = 0.0
+		world.sun_spectrum = Spectrum.make_zero()
+		world.diffuse_irradiance = 0.0
+		return
+	var h := world.sun_elevation
+	var am := 1.0 / (sin(h) + 0.50572 * pow(rad_to_deg(h) + 6.07995, -1.6364))
+	world.air_mass = am
+	world.sun_dni = SimConst.SOLAR_CONSTANT * pow(0.7, pow(am, 0.678))
+	world.sun_spectrum = Spectrum.reddened(world.sun_dni, am)
+	world.diffuse_irradiance = SimConst.DIFFUSE_W_M2 * sqrt(sin(h))

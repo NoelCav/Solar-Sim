@@ -18,13 +18,22 @@ var ambient_k: float = SimConst.DEFAULT_AMBIENT_K
 var sun_direction := Vector2.DOWN       ## Direction light travels, y down
 var sun_elevation: float = 0.0          ## Radians above horizon
 var sun_is_up := false
+var air_mass: float = INF
+var sun_dni: float = 0.0                ## Direct normal irradiance, W/m²
+var sun_spectrum := Spectrum.make_zero()   ## DNI per spectral bin, W/m²
+var diffuse_irradiance: float = 0.0     ## Diffuse sky light on horizontal surfaces, W/m²
 
 # Site parameters
 var site_max_elevation_deg: float = 60.0
 var site_mean_ambient_k: float = SimConst.DEFAULT_AMBIENT_K
 
-## Systems in tick order (§5.3). Later milestones append light, objects, power, pipes,
-## heat, liquid, gas and damage systems here.
+## Placed objects by id, in placement order. Mutate only through commands (D6).
+var objects: Dictionary[int, SimObject] = {}
+var objects_version: int = 0            ## Bumped whenever objects are added, removed or moved
+var next_object_id: int = 1
+
+## Systems in tick order (§5.3). Later milestones insert objects, power, pipes,
+## liquid, gas and damage systems.
 var systems: Array[SimSystem] = []
 
 var _queue: Array[SimCommand] = []
@@ -38,7 +47,7 @@ func _init(p_materials: MaterialDB, width: int, height: int, p_seed: int = 1) ->
 	rng.seed = p_seed
 	grid = TileGrid.new(width, height, site_mean_ambient_k)
 	time_s = SimConst.START_TIME_OF_DAY * SimConst.DAY_LENGTH_S
-	systems = [EnvironmentSystem.new()]
+	systems = [EnvironmentSystem.new(), LightSystem.new(), ThermalSystem.new()]
 	_tick_environment_only()
 
 
@@ -93,6 +102,51 @@ func get_system(system_name: StringName) -> SimSystem:
 		if system.system_name() == system_name:
 			return system
 	return null
+
+
+## Low-level object insertion; callers outside the sim go through commands (D6).
+func add_object(obj: SimObject) -> void:
+	objects[obj.id] = obj
+	next_object_id = maxi(next_object_id, obj.id + 1)
+	_mark_footprint(obj, obj.id, -1)
+	objects_version += 1
+
+
+func remove_object(id: int) -> SimObject:
+	var obj: SimObject = objects.get(id)
+	if obj != null:
+		_mark_footprint(obj, -1, id)
+		objects.erase(id)
+		objects_version += 1
+	return obj
+
+
+## Moves/rotates an object, keeping its footprint marks in sync.
+func set_object_transform(id: int, position: Vector2, angle: float) -> void:
+	var obj: SimObject = objects.get(id)
+	if obj == null:
+		return
+	_mark_footprint(obj, -1, id)
+	obj.position = position
+	obj.angle = angle
+	_mark_footprint(obj, id, -1)
+	objects_version += 1
+
+
+## Content hash over all persistent state, used by determinism tests and desync checks.
+func state_hash() -> int:
+	var objs := []
+	for obj: SimObject in objects.values():
+		objs.append([obj.id, obj.def.key, obj.position, obj.angle])
+	return hash([grid.state_hash(), objs])
+
+
+## Writes `value` into object_id for footprint tiles currently holding `only_if`.
+func _mark_footprint(obj: SimObject, value: int, only_if: int) -> void:
+	var ids := grid.object_id
+	for i in obj.footprint(grid):
+		if ids[i] == only_if:
+			ids[i] = value
 
 
 func _tick_environment_only() -> void:

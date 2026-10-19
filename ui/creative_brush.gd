@@ -7,6 +7,7 @@ extends Node2D
 var world: SimWorld
 var selected_index := 0
 var brush_radius := 0
+var enabled := true      ## False while the object tool owns the mouse
 
 var _palette: Array[MaterialDef] = []
 var _painting_button := MOUSE_BUTTON_NONE
@@ -41,7 +42,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		brush_radius = maxi(brush_radius - 1, 0)
 	elif event.is_action_pressed(&"undo"):
 		world.enqueue(UndoCommand.new())
-	elif event is InputEventMouseButton:
+	elif event is InputEventMouseButton and enabled:
 		var mb := event as InputEventMouseButton
 		if mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
 			if mb.pressed:
@@ -77,7 +78,7 @@ func _paint_at(cell: Vector2i) -> void:
 
 
 func _draw() -> void:
-	if world == null:
+	if world == null or not enabled:
 		return
 	var cell := hovered_cell()
 	var r := brush_radius
