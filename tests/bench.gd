@@ -79,5 +79,26 @@ func _run(db: MaterialDB, objects: ObjectDB, scenario: String, hour: float) -> v
 		var ms := (Time.get_ticks_usec() - t0) / 1000.0
 		tick_total += ms
 		worst = maxf(worst, ms)
-	print("    beam mesh build %.1f ms · heat band %.2f ms · tick %.2f avg / %.2f worst ms" % [
-		render_ms, heat_ms, tick_total / 200.0, worst])
+	print("    beam mesh build %.1f ms · heat band %.2f ms · tick %.2f avg / %.2f worst ms · %s" % [
+		render_ms, heat_ms, tick_total / 200.0, worst, _drag(world)])
+
+
+## Interaction: drag the first object a little every tick for 3 s at 1×; how long ticks take
+## and how often the light catches up.
+func _drag(world: SimWorld) -> String:
+	var light: LightSystem = world.get_system(&"light")
+	var obj: SimObject = world.objects.values()[0]
+	var total := 0.0
+	var worst := 0.0
+	var publishes := 0
+	for k in 60:
+		var v0 := light.trace_version
+		world.enqueue(TransformObjectCommand.new(obj.id, obj.position + Vector2(0.01, 0), obj.angle, false))
+		var t := Time.get_ticks_usec()
+		world.tick()
+		var ms := (Time.get_ticks_usec() - t) / 1000.0
+		total += ms
+		worst = maxf(worst, ms)
+		if light.trace_version != v0:
+			publishes += 1
+	return "drag: tick %.1f avg / %.1f worst ms, light updated %d× in 60 ticks" % [total / 60.0, worst, publishes]

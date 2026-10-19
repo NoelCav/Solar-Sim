@@ -49,11 +49,19 @@ func system_name() -> StringName:
 func tick(world: SimWorld, dt: float) -> void:
 	if _pass == null:
 		_setup(world)
-	# Restart a running pass only if the sun jumped (creative time skip) far beyond normal
-	# drift during a pass; geometry edits are picked up by the next pass.
+	# Restart a running pass if the sun jumped (creative time skip) far beyond normal drift.
+	# Geometry edits are normally picked up by the next pass, but a long full pass (the sun
+	# moved) that is less than half done gives way to a quick incremental pass at the sun
+	# already shown, so edits appear promptly; the sun catches up once edits stop.
 	var obsolete := world.sun_is_up and _pass.dir != Vector2.ZERO \
 		and absf(world.sun_direction.angle_to(_pass.dir)) > deg_to_rad(SimConst.RESTART_ANGLE_DEG)
-	if (_pass_active and obsolete) or (not _pass_active and _needs_retrace(world)):
+	var edited := _pass_active and (world.grid.structure_version != _pass.structure_version \
+		or world.objects_version != _pass.objects_version)
+	if _pass_active and obsolete:
+		_start_pass(world)
+	elif edited and not _pass.incremental and _pass.progress() < 0.5 and _shown != null:
+		_start_pass(world, true)
+	elif not _pass_active and _needs_retrace(world):
 		_start_pass(world)
 	if _pass_active and _pass.step(SimConst.RAY_PATHS_PER_TICK):
 		_publish(world, _pass, true)
@@ -95,10 +103,10 @@ func tracer() -> Tracer:
 	return _pass.tracer
 
 
-func _start_pass(world: SimWorld) -> void:
+func _start_pass(world: SimWorld, edit_only := false) -> void:
 	# Two passes alternate: the new one reuses what it can from the last completed one.
 	_pass = _passes[1] if _shown == _passes[0] else _passes[0]
-	_pass.start(world, _shown)
+	_pass.start(world, _shown, edit_only)
 	_pass_active = true
 
 

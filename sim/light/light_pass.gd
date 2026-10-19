@@ -39,6 +39,7 @@ var _tasks: Array = []           ## [run, bin, TaskLog to replay or null]
 var _next := 0
 var logs: Dictionary = {}        ## Vector4i task key → TaskLog, for the next pass to reuse
 var replayed := 0                ## Tasks reused from the previous pass (stats)
+var incremental := false         ## This pass reuses the previous one (geometry-only pass)
 var _objects: Dictionary = {}    ## Object id → [position, angle, definition] at the start
 var _accel_key := Vector2i(-1, -1)   ## Geometry the tracer's acceleration was built for
 var _accel_objects: Dictionary = {}  ## Object id → [position, angle, definition] at that build
@@ -53,8 +54,10 @@ func _init(p_grid: TileGrid, materials: MaterialDB) -> void:
 
 
 ## Begins a pass over the world as it is now. With `prev` (the last completed pass), tasks
-## the edits since then can't have affected are replayed from it instead of traced.
-func start(world: SimWorld, prev: LightPass = null) -> void:
+## the edits since then can't have affected are replayed from it instead of traced. An
+## `edit_only` pass keeps prev's sun even if the sun has since drifted a little further
+## (up to RESTART_ANGLE_DEG), so edits show quickly; a later pass catches up with the sun.
+func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	var t0 := Time.get_ticks_usec()
 	var prev_material := prev.tracer.material if prev != null else PackedInt32Array()
 	structure_version = world.grid.structure_version
@@ -69,6 +72,7 @@ func start(world: SimWorld, prev: LightPass = null) -> void:
 	_next = 0
 	logs = {}
 	replayed = 0
+	incremental = false
 	sheet_from.clear()
 	sheet_to.clear()
 	done = false
@@ -80,9 +84,11 @@ func start(world: SimWorld, prev: LightPass = null) -> void:
 	for obj: SimObject in world.objects.values():
 		objects_now[obj.id] = [obj.position, obj.angle, obj.def]
 	if world.sun_is_up and world.sun_dni > 0.0 and world.sun_direction.y > 1e-3:
+		var max_drift := SimConst.RESTART_ANGLE_DEG if edit_only else SimConst.RETRACE_ANGLE_DEG
 		var reuse := prev != null and prev.dir != Vector2.ZERO \
-			and absf(world.sun_direction.angle_to(prev.dir)) < deg_to_rad(SimConst.RETRACE_ANGLE_DEG) \
-			and absf(world.sun_dni / prev.dni - 1.0) < 0.1
+			and absf(world.sun_direction.angle_to(prev.dir)) < deg_to_rad(max_drift) \
+			and absf(world.sun_dni / prev.dni - 1.0) < (0.25 if edit_only else 0.1)
+		incremental = reuse
 		if reuse:
 			# A geometry-only pass keeps the sun the previous pass traced, so unaffected tasks
 			# can be replayed exactly; the next sun-triggered pass catches up.
@@ -114,6 +120,11 @@ func start(world: SimWorld, prev: LightPass = null) -> void:
 	_objects = objects_now
 	ms = (Time.get_ticks_usec() - t0) / 1000.0
 	done = _tasks.is_empty()
+
+
+## Fraction of tasks done.
+func progress() -> float:
+	return float(_next) / _tasks.size() if not _tasks.is_empty() else 1.0
 
 
 ## Runs tasks until about `max_paths` more ray paths' worth of work is done (-1 = finish);

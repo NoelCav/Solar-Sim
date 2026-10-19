@@ -92,3 +92,21 @@ func test_night_sky_cools_surface() -> void:
 	for k in SimConst.TICK_RATE * 60:
 		world.tick()
 	check(g.temperature[surface] < t0 - 0.2, "surface cooled %.2f K" % (t0 - g.temperature[surface]))
+
+
+## Skipping quiet rows (uniform rows next to an equal row) leaves the simulation unchanged.
+func test_quiet_rows_match_full_conduction() -> void:
+	var temps: Array[PackedFloat32Array] = []
+	for quiet in [true, false]:
+		var world := SimWorld.new(load_materials(), 48, 40, 5)
+		WorldGen.generate(world)
+		world.time_s = 0.45 * SimConst.DAY_LENGTH_S
+		var heat: ThermalSystem = world.get_system(&"heat")
+		heat.quiet_rows_enabled = quiet
+		for k in SimConst.TICK_RATE * 60:
+			world.tick()
+		temps.append(world.grid.temperature.duplicate())
+	var worst := 0.0
+	for i in temps[0].size():
+		worst = maxf(worst, absf(temps[0][i] - temps[1][i]))
+	check(worst < 0.01, "max temperature difference %.5f K" % worst)
