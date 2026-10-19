@@ -438,9 +438,9 @@ func _update_inspector() -> void:
 	var obj: SimObject = world.objects.get(tool.hovered_id)
 	if obj != null:
 		lines.append(_object_text(obj))
-	_inspect_chart.visible = obj != null and obj.def.kind == ObjectDef.Kind.PROBE and obj.probe_irradiance() > 0.0
+	_inspect_chart.visible = obj != null and obj.def.kind == ObjectDef.Kind.PROBE and obj.incident_irradiance() > 0.0
 	if _inspect_chart.visible:
-		_inspect_chart.show_spectrum(obj.probe_spectrum(), world.light_spectrum)
+		_inspect_chart.show_spectrum(obj.incident_spectrum(), world.light_spectrum)
 	lines.append(_tile_text(g.idx(cell.x, cell.y), cell))
 	_inspect_label.text = "\n".join(lines)
 	_inspector.reset_size()
@@ -490,14 +490,20 @@ func _object_text(obj: SimObject) -> String:
 	var s := "[b][color=#ffd873]%s[/color][/b]  [color=#8a93a0]%.1f°[/color]" % [obj.def.display_name,
 		wrapf(rad_to_deg(obj.angle), -180.0, 180.0)]
 	if obj.def.kind == ObjectDef.Kind.PROBE:
-		var irr := obj.probe_irradiance()
+		var irr := obj.incident_irradiance()
 		s += "\nreads %s  (%.1f× %s)" % [Readout.irradiance(irr), Readout.times_light(world, irr), Readout.light_name(world)]
-		var spectrum := obj.probe_spectrum()
+		var spectrum := obj.incident_spectrum()
 		var bands := PackedFloat32Array([0, 0, 0])
 		for b in Spectrum.BIN_COUNT:
 			bands[Spectrum.BAND_OF[b]] += spectrum[b]
 		s += "\n[color=#8a93a0]%s[/color]" % Readout.bands(bands[0], bands[1], bands[2])
 	else:
+		if obj.def.kind == ObjectDef.Kind.CELL:
+			var irr := obj.incident_irradiance() * _light.power_scale(world)
+			var watts := SolarCell.object_power(obj, _light.power_scale(world))
+			var eta := watts / (irr * obj.def.size_m * SimConst.DEPTH_M) if irr > 0.0 else 0.0
+			s += "\ncould make %.1f W  [color=#8a93a0](%.0f%% of %s)[/color]" % [watts, eta * 100.0,
+				Readout.irradiance(irr)]
 		s += "\nabsorbing %.1f W" % obj.absorbed_w
 		if obj.temperature_k > 0.0:
 			s += " · %.1f °C" % SimConst.k_to_c(obj.temperature_k)

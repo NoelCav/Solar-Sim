@@ -31,6 +31,7 @@ public partial class LightEngine : RefCounted
     const double ReplayDepsPerPath = 30.0;   // A replay costs ~one ray path per this many deposits
     const int CoatMirror = 1;
     const int CoatProbe = 2;
+    const int CoatCell = 3;   // A mirror whose front face also records the light arriving on it
     const int AirId = 0;
 
     struct D2
@@ -79,7 +80,7 @@ public partial class LightEngine : RefCounted
         public int TermTile = -1, TermSide = -1;
         public double Remain = 1.0;
         public readonly List<double> Deps = new();    // (tile, fraction, body, ax, ay, bx, by, tau)…
-        public readonly List<double> Probes = new();  // (owner, power)…
+        public readonly List<double> Incident = new();  // (owner, power)…
         public readonly List<double> Refls = new();   // (x, y, dx, dy, fraction, medium, body)…
         public D2 ContO, ContD;
         public int ContEvents;
@@ -92,7 +93,7 @@ public partial class LightEngine : RefCounted
         public double SMin;
         public List<double> Deps = new();     // (tile, bin, watts, body)…
         public readonly List<double> Strips = new();   // (strip index, watts arriving, watts absorbed)…
-        public readonly List<double> Probes = new();   // (owner, bin, watts)…
+        public readonly List<double> Incident = new();   // (owner, bin, watts)…
         public double Escaped, Scattered, Culled;
         public Vector2[] SegFrom = Array.Empty<Vector2>(), SegTo = Array.Empty<Vector2>();
         public float[] SegPower = Array.Empty<float>();
@@ -601,17 +602,17 @@ public partial class LightEngine : RefCounted
         return Math.Clamp((int)Math.Floor(along * _strips), 0, _strips - 1);
     }
 
-    /// <summary>Adds a probe reading.</summary>
-    public void AddProbe(int owner, int bin, double watts)
+    /// <summary>Adds light arriving on an object's active face (a probe, a cell's front).</summary>
+    public void AddIncident(int owner, int bin, double watts)
     {
         if (!_objIncident.TryGetValue(owner, out double[] acc))
             _objIncident[owner] = acc = new double[Bins];
         acc[bin] += watts;
         if (_log != null)
         {
-            _log.Probes.Add(owner);
-            _log.Probes.Add(bin);
-            _log.Probes.Add(watts);
+            _log.Incident.Add(owner);
+            _log.Incident.Add(bin);
+            _log.Incident.Add(watts);
         }
     }
 
@@ -838,11 +839,15 @@ public partial class LightEngine : RefCounted
         {
             case CoatProbe:
                 for (int b = 0; b < Bins; b++)
-                    AddProbe(owner, b, p[b]);
+                    AddIncident(owner, b, p[b]);
                 Push(hit + d * Nudge, d, p, medium, body, events + 1);
                 break;
             case CoatMirror:
+            case CoatCell:
             {
+                if (_coating[s] == CoatCell && fromFront)
+                    for (int b = 0; b < Bins; b++)
+                        AddIncident(owner, b, p[b]);
                 var outP = new double[Bins];
                 int tile = TileAt(hit);
                 for (int b = 0; b < Bins; b++)
@@ -999,14 +1004,19 @@ public partial class LightEngine : RefCounted
                     {
                         // A probe only reads what crosses it: no event in the path, so rays on
                         // either side of its ends still make one beam (no split, no seam).
-                        rec.Probes.Add(owner);
-                        rec.Probes.Add(p[bin]);
+                        rec.Incident.Add(owner);
+                        rec.Incident.Add(p[bin]);
                         o = hit + d * Nudge;
                         continue;
                     }
                     rec.Sig.Add(_piece[s] * 2 + (fromFront ? 0 : 1));
-                    if (_coating[s] == CoatMirror)
+                    if (_coating[s] == CoatMirror || _coating[s] == CoatCell)
                     {
+                        if (_coating[s] == CoatCell && fromFront)
+                        {
+                            rec.Incident.Add(owner);
+                            rec.Incident.Add(p[bin]);
+                        }
                         double keep = p[bin] * _refl[s * Bins + bin];
                         DepositBin(TileAt(hit), bin, p[bin] - keep, owner, hit, hit);
                         p[bin] = keep;
@@ -1425,9 +1435,9 @@ public partial class LightEngine : RefCounted
         var deps = t.Deps;
         for (int k = 0; k < deps.Count; k += 4)
             ApplyBin((int)deps[k], (int)deps[k + 1], deps[k + 2], (int)deps[k + 3]);
-        var probes = t.Probes;
-        for (int k = 0; k < probes.Count; k += 3)
-            AddProbe((int)probes[k], (int)probes[k + 1], probes[k + 2]);
+        var incident = t.Incident;
+        for (int k = 0; k < incident.Count; k += 3)
+            AddIncident((int)incident[k], (int)incident[k + 1], incident[k + 2]);
         var strips = t.Strips;
         for (int k = 0; k < strips.Count; k += 3)
             AddStrip((int)strips[k], (float)strips[k + 1], (float)strips[k + 2]);
@@ -1622,7 +1632,7 @@ public partial class LightEngine : RefCounted
     /// its pieces numbered from 0, its id as -2.
     PathRec Localize(PathRec rec)
     {
-        if (rec.Probes.Count > 0)
+        if (rec.Incident.Count > 0)
             return null;
         D2 off = _runObj.Pos;
         int fp = _runObj.FirstPiece;
@@ -1902,9 +1912,9 @@ public partial class LightEngine : RefCounted
         var deps = r.Deps;
         for (int k = 0; k < deps.Count; k += 8)
             ApplyBin((int)deps[k], bin, watts * deps[k + 1], (int)deps[k + 2]);
-        var probes = r.Probes;
-        for (int k = 0; k < probes.Count; k += 2)
-            AddProbe((int)probes[k], bin, watts * probes[k + 1]);
+        var incident = r.Incident;
+        for (int k = 0; k < incident.Count; k += 2)
+            AddIncident((int)incident[k], bin, watts * incident[k + 1]);
         var refls = r.Refls;
         for (int k = 0, idx = 0; k < refls.Count; k += 7, idx++)
         {

@@ -5,7 +5,7 @@ extends RefCounted
 ## name the media a ray crosses between. Per-vertex normals are interpolated along the
 ## segment for smooth refraction. Segments are bucketed per tile for the tracer.
 
-enum Coating { NONE, MIRROR, PROBE }
+enum Coating { NONE, MIRROR, PROBE, CELL }
 
 var a := PackedVector2Array()
 var b := PackedVector2Array()

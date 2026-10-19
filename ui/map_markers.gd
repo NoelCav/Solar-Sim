@@ -31,7 +31,7 @@ func _process(_delta: float) -> void:
 
 ## A probe's reading: irradiance and how many times plain light from the source it is.
 static func probe_text(world: SimWorld, obj: SimObject) -> String:
-	var irr := obj.probe_irradiance()
+	var irr := obj.incident_irradiance()
 	return "%s  (%.1f×)" % [Readout.irradiance(irr), Readout.times_light(world, irr)]
 
 

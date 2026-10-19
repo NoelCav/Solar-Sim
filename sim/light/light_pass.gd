@@ -235,6 +235,8 @@ func _sync_surfaces(world: SimWorld) -> void:
 				coating = SurfaceSet.Coating.MIRROR
 			ObjectDef.Kind.PROBE:
 				coating = SurfaceSet.Coating.PROBE
+			ObjectDef.Kind.CELL:
+				coating = SurfaceSet.Coating.CELL
 			_:
 				back = mats.id_of(def.material)
 		for piece in obj.world_pieces():
@@ -303,7 +305,7 @@ func _direct() -> void:
 		if surfaces.coating[s] == SurfaceSet.Coating.PROBE:
 			var n := map.lanes_reaching(surfaces.a[s], surfaces.b[s]).size()
 			for b in Spectrum.BIN_COUNT:
-				engine.AddProbe(surfaces.owner[s], b, spectrum[b] * lane_area * n)
+				engine.AddIncident(surfaces.owner[s], b, spectrum[b] * lane_area * n)
 	var far := (grid.width + grid.height) * SimConst.TILE_M
 	for k in range(0, map.count, SHEET_STRIDE):
 		var s_in := map.entry_s(k)

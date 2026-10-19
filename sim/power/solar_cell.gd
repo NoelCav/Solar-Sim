@@ -36,6 +36,16 @@ static func max_power(def: ObjectDef, spectrum: PackedFloat32Array, temp_k: floa
 	return p * eta
 
 
+## What cell object `obj` could deliver now, W: its traced front-face light times `light_scale`
+## (LightSystem.power_scale), at its own temperature.
+static func object_power(obj: SimObject, light_scale: float) -> float:
+	var s := obj.incident.duplicate()
+	for b in Spectrum.BIN_COUNT:
+		s[b] *= light_scale
+	var t := obj.temperature_k if obj.temperature_k > 0.0 else T_REF_K
+	return max_power(obj.def, s, t, obj.def.size_m * SimConst.DEPTH_M)
+
+
 ## η_voltage at concentration c (clamped below at a thousandth of a sun).
 static func voltage_efficiency(def: ObjectDef, c: float) -> float:
 	return def.cell_voltage_factor * (1.0 + KT_Q_V * log(maxf(c, 1e-3)) / def.cell_voc_v)

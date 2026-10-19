@@ -7,8 +7,8 @@ var def: ObjectDef
 var position: Vector2
 var angle: float
 
-## Written by the light system each trace: power absorbed in the body (W), and for probes
-## the power crossing the probe per spectral bin (W).
+## Written by the light system each trace: power absorbed in the body (W), and for probes and
+## cells the power arriving on the active face per spectral bin (W).
 var absorbed_w := 0.0
 var incident := Spectrum.make_zero()
 
@@ -34,8 +34,8 @@ func world_pieces() -> Array:
 	return OpticsGen.transformed(def.build_pieces(), transform())
 
 
-## Probe reading per spectral bin, W/m² across its face.
-func probe_spectrum() -> PackedFloat32Array:
+## Light arriving on the active face (probe, cell front) per spectral bin, W/m² across it.
+func incident_spectrum() -> PackedFloat32Array:
 	var s := incident.duplicate()
 	var area := def.size_m * SimConst.DEPTH_M
 	for b in Spectrum.BIN_COUNT:
@@ -43,9 +43,9 @@ func probe_spectrum() -> PackedFloat32Array:
 	return s
 
 
-## Probe irradiance, W/m² across its face.
-func probe_irradiance() -> float:
-	return Spectrum.total(probe_spectrum())
+## Light arriving on the active face, W/m² across it.
+func incident_irradiance() -> float:
+	return Spectrum.total(incident_spectrum())
 
 
 ## Tiles whose area the object's bounding box touches.

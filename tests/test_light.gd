@@ -206,7 +206,7 @@ func test_lens_concentrates_onto_probe() -> void:
 	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
 	world.tick()
 	var probe := _lens_over_probe(world)
-	var concentration := probe.probe_irradiance() / world.sun_dni
+	var concentration := probe.incident_irradiance() / world.sun_dni
 	check(concentration > 8.0, "concentration %.1f×" % concentration)
 
 
@@ -228,7 +228,7 @@ func test_moonlight_through_lens() -> void:
 	check(world.light_is_moon, "moon is the traced light")
 	var probe := _lens_over_probe(world)
 	_check_energy_balance((world.get_system(&"light") as LightSystem).stats)
-	var concentration := probe.probe_irradiance() / world.light_dni
+	var concentration := probe.incident_irradiance() / world.light_dni
 	check(concentration > 8.0, "concentration %.1f×" % concentration)
 
 

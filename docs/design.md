@@ -269,9 +269,9 @@ For each bin with photon energy E absorbed by a junction of bandgap Eg:
 - **E < Eg:** not absorbed → transmits to the next layer (stacks) or is partly absorbed by the back contact as heat (single cells).
 - **E ≥ Eg:** absorbed. Electrical output `= P_bin × (Eg / E) × η_collect × η_voltage × η_temp × η_series`; everything else → heat.
   - `η_collect` ≈ 0.9
-  - `η_voltage` ≈ 0.75 × (1 + (kT/q)·ln(C) / Voc₀) — concentration *raises* efficiency (real)
+  - `η_voltage` ≈ 0.5 × (1 + (kT/q)·ln(C) / Voc₀) — concentration *raises* efficiency (real); 0.5 (fill factor and Voc losses) calibrates Si to ≈22 % at 1 sun (0.75 would give the ~33 % detailed-balance limit)
   - `η_temp` = 1 − β·(T − 298 K); β ≈ 0.004/K (Si), 0.002/K (GaAs)
-  - `η_series` = 1 − r_s·C — resistive loss grows with concentration
+  - `η_series` = 1 − r_s·C — resistive loss grows with concentration; r_s ≈ 0.002 for Si (best around 20–50 suns, nothing left by 500)
 - **Multi-junction (series):** each layer's photon current ∝ Σ(P_bin / E_bin) absorbed; stack current = **min** of layers; excess becomes heat. 4-terminal upgrade removes matching.
 - **Damage:** degrades above ~85 °C, fails ~150–200 °C (encapsulant smokes, cell cracks → debris).
 

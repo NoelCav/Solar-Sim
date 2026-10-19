@@ -7,7 +7,7 @@ extends RefCounted
 ## temperature. Later systems (cells, lens slices in M7) refine this node, not replace it.
 
 const SIGMA := 5.670374e-8
-const SHEET_THICKNESS_M := 0.003   ## Mirrors and probes: a thin sheet of their material
+const SHEET_THICKNESS_M := 0.003   ## Mirrors and cells: a thin sheet of their material
 const CONTACT_STEP_M := 0.05       ## Outline sampling for the tiles an object touches
 
 ## Per object id: [capacity J/K, surface m², emissivity, contact tiles, transform key]
@@ -84,7 +84,7 @@ func _info(world: SimWorld, obj: SimObject) -> Array:
 	else:
 		for piece in pieces:
 			outline.append_array(piece[0])
-		if def.kind == ObjectDef.Kind.MIRROR:
+		if def.kind == ObjectDef.Kind.MIRROR or def.kind == ObjectDef.Kind.CELL:
 			volume = def.size_m * SHEET_THICKNESS_M * SimConst.DEPTH_M
 	var perimeter := 0.0
 	for k in outline.size() - 1:

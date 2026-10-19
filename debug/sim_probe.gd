@@ -96,8 +96,8 @@ func _object_info(obj: SimObject) -> Dictionary:
 		"temp_c": snappedf(SimConst.k_to_c(obj.temperature_k), 0.01) if obj.temperature_k > 0.0 else null}
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		# Unrounded: moonlight readings are mW/m².
-		d["probe_w_m2"] = obj.probe_irradiance()
-		d["spectrum_w_m2"] = Array(obj.probe_spectrum())
+		d["probe_w_m2"] = obj.incident_irradiance()
+		d["spectrum_w_m2"] = Array(obj.incident_spectrum())
 	return d
 
 
