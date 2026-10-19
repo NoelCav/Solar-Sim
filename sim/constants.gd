@@ -41,7 +41,7 @@ const MIN_CHILD_W := 0.02           ## Reflected child rays below this power are
 const MIN_RAY_W := 1e-4           ## Any ray below this is culled
 const REFL_POOL_M := 0.5           ## Pooled Fresnel reflections: one secondary ray per this much wavefront
 const MAX_RAY_EVENTS := 24          ## Surface interactions along one ray path, children included
-const RETRACE_ANGLE_DEG := 1.0      ## Re-trace when the sun has moved this far (≈2 cm of focal shift at 1.2 m)
+const RETRACE_ANGLE_DEG := 0.1      ## Re-trace when the sun has moved this far (≈0.27 s at 1×), so light moves smoothly
 const RESTART_ANGLE_DEG := 3.0      ## Abandon a pass in progress if the sun jumps this far
 
 # --- Heat (§7) ---

@@ -36,6 +36,9 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D10 | **Physics time = sim time.** The sun moves faster than reality; physics does not | A 12-min day compresses the sun's path, not heat flow |
 | D11 | **Data-driven content**: materials and objects are Godot `Resource`s (`.tres`) | New content without code |
 | D12 | **Destruction leaves debris tiles**; objects cannot be repaired in place | Must be mined/deconstructed and rebuilt |
+| D13 | **Objects own internal thermal nodes** coupled to their footprint tiles by contact conductance | One mechanism for cells (M3), lens slices (M7), batteries, heatsinks. Replaces "lens absorption heats host air tiles" |
+| D14 | **Conduits are tile layers + rebuilt graphs**: wires, pipes (and later data) share one network framework; each kind plugs in its own per-tick solver | Graph rebuilt only when a conduit tile changes; per-tick work runs on the compact graph |
+| D15 | **Designs are data**: an object instance references a design (def parameters), saved by value; built-in `.tres` defs are just stock designs. Every buyable thing carries `cost` and `unlock` fields in its def | Lens bench, shop, saves and research all read the same data (D11) |
 
 ## 4. World & scale
 
@@ -306,6 +309,8 @@ Water is a resource: open cooling (towers, evaporating pools) loses water; deser
 
 ## 15. Progression (sketch — later)
 
+- **Shop / buy menu:** the Build bar becomes the shop outside creative mode: lenses, cells, mirrors, wires, pipes, tiles, each with a price (D15). Bought items are placed directly (no inventory juggling at first); deconstruction refunds a fraction (D12). Creative mode ignores prices and locks.
+- **Two currencies, two sources:** money from selling power (grid market, §10) buys items; **research** comes from feeding power into a research machine (kWh → research points), so "putting power in the machine" unlocks new materials and objects. Money may also buy research at a poor rate, so a stuck player can always progress.
 - Research unlocks materials, coatings (AR, texturing, passivation), lens types, cells, coolants, automation.
 - Sites as prestige: temperate → desert (high DNI, hot, dust, scarce water) → arctic (cold, low sun) → high altitude (UV) → orbit (AM0 1361 W/m², radiative cooling only).
 - Contracts/challenges for sandbox direction.
@@ -381,7 +386,7 @@ What shipped, and decisions made while building it (none change a LOCKED decisio
 ### 18.2 Light engine v2 and views (2026-10-18)
 
 - Light pass rebuilt as §6.4.1 (sun map + adaptive beams + pooled reflections). Demo rig: rays per pass 3.5k → ~0.9k; direct light needs none; exact energy balance; beams agree with dense plain rays at a lens focus within 5 % (tested). Caustics (spherical-aberration cusps, off-axis arcs) now render as filled, gradient-lit shapes.
-- Re-trace threshold raised to 1° of sun movement (≈2 cm focal shift for a 1.2 m lens); intensity between passes still follows DNI. Average tick ~6 ms headless.
+- Re-trace threshold raised to 1° of sun movement (≈2 cm focal shift for a 1.2 m lens); intensity between passes still follows DNI. Average tick ~6 ms headless. (Since the C# port: back to 0.1°, with a 0.25 s crossfade between published passes, so light moves smoothly.)
 - Views: Normal (visible light; lit surfaces glow with absorbed light; ×-sun marker at the hottest spot of light), Light (all bins in false color + absorbed-light overlay), UV, Infrared (single-band beams + absorbed-band overlay), Heat (temperature, hidden within the daily swing of the site mean). Legend and peak marker per view; cursor inspector shows material, temperature, sun/shadow/concentration and absorbed light by band, and object readings.
 - Still GDScript-bound: a primary path costs ~70–100 µs (PathRec bookkeeping and marching). 1× is comfortable; 4× in the editor's debug build runs ~14 fps. The native port remains the next performance step, now on a port-friendly algorithm (flat arrays, no recursion besides shallow refinement).
 

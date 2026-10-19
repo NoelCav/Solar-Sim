@@ -12,6 +12,7 @@ const REFERENCE_DNI := 1000.0       ## Irradiance that tones to BeamGeometry.SUN
 const SHEET_LEVEL := 0.07           ## Brightness of the direct-light sheet
 const VERTEX_SCALE := 4.0           ## Vertex colors are stored /4 and scaled back by self_modulate
 const RAY_WIDTH_PX := 1.5
+const FADE_S := 0.25                ## Crossfade from the previous light to a newly published one
 
 var world: SimWorld
 var view := ViewMode.NORMAL:
@@ -26,6 +27,8 @@ var wavelength := -1:               ## Single bin to show, or -1 for all (ViewMo
 var _light: LightSystem
 var _seen_version := -1
 var _rgb: Array[Vector3] = []       ## Per-bin color for the current view, white-balanced
+var _old: MeshInstance2D            ## The previous light, fading out after each publish
+var _fade := 1.0                    ## 0 → 1 over FADE_S after a publish
 
 
 func setup(p_world: SimWorld) -> void:
@@ -36,11 +39,29 @@ func setup(p_world: SimWorld) -> void:
 	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	material = mat
 	self_modulate = Color(VERTEX_SCALE, VERTEX_SCALE, VERTEX_SCALE, 1.0)
+	_old = MeshInstance2D.new()
+	_old.material = mat
+	_old.self_modulate = self_modulate
+	_old.show_behind_parent = true
+	add_child(_old)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _light != null and _light.trace_version != _seen_version:
+		# Light that moved (the sun, an edit) crossfades instead of jumping; a view change
+		# swaps at once.
+		var moved := _seen_version >= 0
+		_old.mesh = mesh if moved else null
 		_rebuild()
+		_fade = 0.0 if moved else 1.0
+	if _fade < 1.0:
+		_fade = minf(_fade + delta / FADE_S, 1.0)
+		if _fade >= 1.0:
+			_old.mesh = null
+	# Additive blending weights by alpha, so the two meshes sum to one full copy
+	# (self_modulate, which children don't inherit).
+	self_modulate.a = _fade
+	_old.self_modulate.a = 1.0 - _fade
 
 
 ## Brightness for a concentration ratio C (1 = plain sunlight).
