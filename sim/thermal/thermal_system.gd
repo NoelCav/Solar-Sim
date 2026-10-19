@@ -15,8 +15,11 @@ extends SimSystem
 ## Open gas tiles also relax toward ambient; sky-facing surfaces radiate to the sky.
 ##
 ## Quiet rows: a row whose tiles all share one temperature, next to a row below at that same
-## temperature, exchanges nothing (to within FLAT_EPS_K), so its pairs are skipped. Deep rock
-## and open sky are mostly quiet. Per-row flags are refreshed after each band step.
+## temperature, exchanges nothing (to within 1e-4 K), so its pairs are skipped. Deep rock
+## and open sky are mostly quiet.
+##
+## This class builds the model (capacities, conductances, stability); the per-tile loops run
+## in compiled code (HeatKernel, C#).
 
 var conduction_enabled := true
 var radiation_enabled := true
@@ -37,10 +40,7 @@ var _g_right := PackedFloat32Array()     ## Per tile, to the right neighbour (0 
 var _g_down := PackedFloat32Array()      ## Per tile, to the neighbour below (0 on the last row)
 var _vert_gas := PackedByteArray()       ## Per tile: this tile and the one below are both gas
 var _is_gas := PackedByteArray()         ## Per tile
-var _dq := PackedFloat32Array()         ## Scratch flux per tile; kept all-zero between steps
-var _row_flat := PackedByteArray()       ## Per row: all tiles at one temperature (see FLAT_EPS_K)
-
-const FLAT_EPS_K := 1e-4   ## Temperature differences below this count as none (quiet rows)
+var _kernel := HeatKernel.new()
 
 
 func system_name() -> StringName:
@@ -67,34 +67,13 @@ func step_rows(world: SimWorld, h: float, row0: int, row1: int) -> void:
 		_setup(world.materials)
 	if _built_version != g.structure_version:
 		_build(world)
-	var w := g.width
-	var i0 := row0 * w
-	var i1 := row1 * w
-	var temp := g.temperature
-	var energy := g.energy_in
-	var inv := _inv_c
-	var flat := _row_flat
-	for i in range(i0, i1):
-		if energy[i] != 0.0:
-			temp[i] += energy[i] * inv[i]
-			energy[i] = 0.0
-			flat[i / w] = 0
 	subcycles = maxi(1, ceili(h * _max_rate / 0.45))
-	if conduction_enabled:
-		var hs := h / subcycles
-		for k in subcycles:
-			# Row flags are only fresh for the first subcycle.
-			_conduct(g, hs, row0, row1, k == 0 and quiet_rows_enabled)
-	if radiation_enabled:
-		_radiate(world, h, i0, i1)
-	if ambient_enabled:
-		var keep := exp(-SimConst.AIR_RELAX_PER_S * h)
-		var amb := world.ambient_k
-		var gas := _is_gas
-		for i in range(i0, i1):
-			if gas[i] == 1:
-				temp[i] = amb + (temp[i] - amb) * keep
-	_refresh_flat(g, row0, mini(row1 + 1, g.height))
+	var out: Array = _kernel.StepRows(g.temperature, g.energy_in, h, row0, row1, subcycles,
+		conduction_enabled, radiation_enabled, ambient_enabled, quiet_rows_enabled,
+		world.ambient_k, world.ambient_k - SimConst.SKY_DEPRESSION_K, SimConst.BUOYANCY_BOOST,
+		SimConst.AIR_RELAX_PER_S)
+	g.temperature = out[0]
+	g.energy_in = out[1]
 	last_step_ms = (Time.get_ticks_usec() - start) / 1000.0
 
 
@@ -109,82 +88,6 @@ func total_energy(world: SimWorld) -> float:
 	for i in temp.size():
 		e += temp[i] / _inv_c[i]
 	return e
-
-
-## Pairs owned by rows [row0, row1): right neighbours and the neighbour below. Quiet rows
-## (see above) are skipped when `skip_quiet`.
-func _conduct(g: TileGrid, hs: float, row0: int, row1: int, skip_quiet: bool) -> void:
-	var temp := g.temperature
-	var w := g.width
-	var h := g.height
-	var dq := _dq
-	var gr := _g_right
-	var gd := _g_down
-	var vg := _vert_gas
-	var flat := _row_flat
-	var boost := SimConst.BUOYANCY_BOOST
-	var touched := PackedInt32Array()   # Rows whose tiles received flux, ascending
-	for y in range(row0, row1):
-		if skip_quiet and flat[y] == 1 and (y == h - 1 \
-				or (flat[y + 1] == 1 and absf(temp[y * w] - temp[(y + 1) * w]) <= FLAT_EPS_K)):
-			continue
-		if touched.is_empty() or touched[touched.size() - 1] != y:
-			touched.append(y)
-		if y + 1 < h:
-			touched.append(y + 1)
-		for i in range(y * w, y * w + w):
-			var ti := temp[i]
-			var c := gr[i]
-			if c > 0.0:
-				var q := c * (ti - temp[i + 1])
-				dq[i] -= q
-				dq[i + 1] += q
-			c = gd[i]
-			if c > 0.0:
-				var tj := temp[i + w]
-				if vg[i] == 1 and tj > ti:
-					c *= boost
-				var q := c * (ti - tj)
-				dq[i] -= q
-				dq[i + w] += q
-	var inv := _inv_c
-	for y in touched:
-		for i in range(y * w, y * w + w):
-			temp[i] += dq[i] * hs * inv[i]
-			dq[i] = 0.0
-
-
-## Recomputes the quiet-row flags for rows [row0, row1).
-func _refresh_flat(g: TileGrid, row0: int, row1: int) -> void:
-	var temp := g.temperature
-	var w := g.width
-	var flat := _row_flat
-	for y in range(row0, row1):
-		var base := y * w
-		var t0 := temp[base]
-		var f := 1
-		for i in range(base + 1, base + w):
-			if absf(temp[i] - t0) > FLAT_EPS_K:
-				f = 0
-				break
-		flat[y] = f
-
-
-func _radiate(world: SimWorld, h: float, i0: int, i1: int) -> void:
-	var g := world.grid
-	var temp := g.temperature
-	var mat := g.material
-	var emiss := world.materials.emissivity
-	var t_sky := world.ambient_k - SimConst.SKY_DEPRESSION_K
-	var t_sky4 := t_sky * t_sky * t_sky * t_sky
-	var area := SimConst.TILE_M * SimConst.DEPTH_M
-	for i in g.sky_tiles(world.materials.is_gas):
-		if i < i0 or i >= i1:
-			continue
-		var t := temp[i]
-		var p := emiss[mat[i]] * SimConst.STEFAN_BOLTZMANN * (t * t * t * t - t_sky4) * area
-		var dt := p * h * _inv_c[i]
-		temp[i] = t - dt if absf(dt) < absf(t - t_sky) else t_sky
 
 
 func _setup(mats: MaterialDB) -> void:
@@ -225,13 +128,11 @@ func _build(world: SimWorld) -> void:
 	var w := g.width
 	var mat := g.material
 	var is_gas := world.materials.is_gas
-	for arr in [_inv_c, _g_right, _g_down, _dq]:
+	for arr in [_inv_c, _g_right, _g_down]:
 		arr.resize(n)
 		arr.fill(0.0)
 	_vert_gas.resize(n)
 	_vert_gas.fill(0)
-	_row_flat.resize(g.height)
-	_row_flat.fill(0)
 	_is_gas.resize(n)
 	_is_gas.fill(0)
 	var row_sum := PackedFloat32Array()
@@ -261,6 +162,12 @@ func _build(world: SimWorld) -> void:
 	for i in n:
 		_max_rate = maxf(_max_rate, row_sum[i] * _inv_c[i])
 	_built_version = g.structure_version
+	var sky := g.sky_tiles(world.materials.is_gas)
+	var sky_emissivity := PackedFloat32Array()
+	for i in sky:
+		sky_emissivity.append(world.materials.emissivity[mat[i]])
+	_kernel.Build(w, g.height, _inv_c, _g_right, _g_down, _vert_gas, _is_gas, sky,
+		sky_emissivity, SimConst.TILE_M * SimConst.DEPTH_M)
 
 
 static func _add_pair(sums: PackedFloat32Array, i: int, w: int, c: float) -> void:
