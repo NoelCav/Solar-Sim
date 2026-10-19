@@ -216,7 +216,22 @@ public partial class LightEngine : RefCounted
     ObjInfo _runObj;
     int _runId;
     readonly List<Interval> _intervals = new();
-    readonly List<double[]> _pool = new();   // Per reflection index: watts, x, y, dx, dy, medium, body, u0, used
+    readonly List<ReflPool> _pool = new();   // Per reflection index along the path
+
+    /// Reflected light of neighbouring samples gathered into one secondary ray. Boundaries sit
+    /// on a fixed grid in u (not wherever sampling started), a sharp change of direction or
+    /// medium starts a new pool (a different surface), and the ray emitted is the pool's
+    /// power-weighted median sample, so it moves smoothly as the sun moves instead of jumping
+    /// to whichever sample came last.
+    sealed class ReflPool
+    {
+        public long Cell;
+        public int Medium, Body;
+        public double Watts;
+        public readonly List<double> Samples = new();   // (watts, x, y, dx, dy)…
+    }
+
+    const double ReflSplitCos = 0.985;   // ~10°: a bigger turn between samples is another surface
     R2 _bbox;
     bool _bboxEmpty = true;
 
@@ -267,7 +282,15 @@ public partial class LightEngine : RefCounted
         _refl = ToDouble(reflectance);
         _cellStart = cellStart;
         _cellItems = cellItems;
+        // A fixed point on each object (its first vertex) that its runs' samples are laid out
+        // from, so the samples stay put on the object as the sun moves.
+        _anchor.Clear();
+        for (int s = 0; s < _segCount; s++)
+            if (owner[s] >= 0 && !_anchor.ContainsKey(owner[s]))
+                _anchor[owner[s]] = new D2(ax[s], ay[s]);
     }
+
+    readonly Dictionary<int, D2> _anchor = new();
 
     /// <summary>Tile materials as of the pass start.</summary>
     public void SetMaterial(int[] material) => _mat = material;
@@ -1324,23 +1347,23 @@ public partial class LightEngine : RefCounted
         _runObj = _objects.TryGetValue(_runId, out ObjInfo info) ? info : null;
         double s0 = task.SMin - 0.02;
         var us = new List<double> { uLo };
-        if (_runObj == null)
+        // Samples on a grid fixed to the run's object (glass tiles: to the world), so as the sun
+        // moves they slide with the object instead of being re-spread between the run's
+        // lane-quantized edges each pass (which made caustics pop); identical cached objects
+        // also ask for identical rays.
+        double uc = 0;
+        if (_runObj != null)
         {
-            int n = Math.Max(1, (int)Math.Ceiling((uHi - uLo) / BaseSpacing));
-            for (int i = 1; i <= n; i++)
-                us.Add(uLo + (uHi - uLo) * i / n);
-        }
-        else
-        {
-            // A grid fixed to the object, so identical objects ask for identical rays.
             s0 = _runObj.S0;
-            double uc = _runObj.Uc;
-            int j0 = (int)Math.Ceiling((uLo - uc) / BaseSpacing + 1e-6);
-            int j1 = (int)Math.Floor((uHi - uc) / BaseSpacing - 1e-6);
-            for (int j = j0; j <= j1; j++)
-                us.Add(uc + j * BaseSpacing);
-            us.Add(uHi);
+            uc = _runObj.Uc;
         }
+        else if (_anchor.TryGetValue(_runId, out D2 anchor))
+            uc = anchor.Dot(_perp);
+        int j0 = (int)Math.Ceiling((uLo - uc) / BaseSpacing + 1e-6);
+        int j1 = (int)Math.Floor((uHi - uc) / BaseSpacing - 1e-6);
+        for (int j = j0; j <= j1; j++)
+            us.Add(uc + j * BaseSpacing);
+        us.Add(uHi);
         _intervals.Clear();
         _pool.Clear();
         double prevU = us[0];
@@ -1713,21 +1736,31 @@ public partial class LightEngine : RefCounted
         {
             while (_pool.Count <= idx)
                 _pool.Add(null);
-            // [watts, x, y, dx, dy, medium, body, u0]
-            double[] acc = _pool[idx] ??= new double[] { 0, 0, 0, 0, 0, 0, -1, u };
-            acc[0] += watts * refls[k + 4];
-            acc[1] = refls[k];
-            acc[2] = refls[k + 1];
-            acc[3] = refls[k + 2];
-            acc[4] = refls[k + 3];
-            acc[5] = refls[k + 5];
-            acc[6] = refls[k + 6];
-            if (u - acc[7] >= _reflPool && acc[0] >= _minChildW)
+            double w = watts * refls[k + 4];
+            double dx = refls[k + 2], dy = refls[k + 3];
+            int medium = (int)refls[k + 5], body = (int)refls[k + 6];
+            long cell = (long)Math.Floor(u / _reflPool);
+            ReflPool pool = _pool[idx];
+            if (pool != null && pool.Samples.Count > 0)
             {
-                EmitReflection(acc, bin);
-                acc[0] = 0;
-                acc[7] = u;
+                int last = pool.Samples.Count - 5;
+                bool turned = dx * pool.Samples[last + 3] + dy * pool.Samples[last + 4] < ReflSplitCos;
+                if (pool.Cell != cell || turned || pool.Medium != medium || pool.Body != body)
+                    EmitPool(pool, bin);
             }
+            pool ??= _pool[idx] = new ReflPool();
+            if (pool.Samples.Count == 0)
+            {
+                pool.Cell = cell;
+                pool.Medium = medium;
+                pool.Body = body;
+            }
+            pool.Watts += w;
+            pool.Samples.Add(w);
+            pool.Samples.Add(refls[k]);
+            pool.Samples.Add(refls[k + 1]);
+            pool.Samples.Add(dx);
+            pool.Samples.Add(dy);
         }
     }
 
@@ -1750,25 +1783,36 @@ public partial class LightEngine : RefCounted
 
     void FlushReflections(int bin)
     {
-        foreach (var acc in _pool)
-        {
-            if (acc == null)
-                continue;
-            if (acc[0] >= _minRayW)
-                EmitReflection(acc, bin);
-            else
-                AddCulled(acc[0]);
-        }
+        foreach (var pool in _pool)
+            if (pool != null && pool.Samples.Count > 0)
+                EmitPool(pool, bin);
         _pool.Clear();
     }
 
-    /// Traces pooled reflected light as an ordinary ray tree (already counted as emitted).
-    void EmitReflection(double[] acc, int bin)
+    /// Traces a pool's reflected light as an ordinary ray tree (already counted as emitted)
+    /// from its power-weighted median sample, then empties it.
+    void EmitPool(ReflPool pool, int bin)
     {
-        var p = new double[Bins];
-        p[bin] = acc[0];
-        var dir = new D2(acc[3], acc[4]);
-        TraceTree(new D2(acc[1], acc[2]) + dir * Nudge, dir, p, (int)acc[5], (int)acc[6]);
+        if (pool.Watts < _minRayW)
+            AddCulled(pool.Watts);
+        else
+        {
+            var sm = pool.Samples;
+            double half = pool.Watts * 0.5, acc = 0;
+            int m = 0;
+            for (; m + 5 < sm.Count; m += 5)
+            {
+                acc += sm[m];
+                if (acc >= half)
+                    break;
+            }
+            var p = new double[Bins];
+            p[bin] = pool.Watts;
+            var dir = new D2(sm[m + 3], sm[m + 4]);
+            TraceTree(new D2(sm[m + 1], sm[m + 2]) + dir * Nudge, dir, p, pool.Medium, pool.Body);
+        }
+        pool.Watts = 0;
+        pool.Samples.Clear();
     }
 
     // --- Render records (layout in BeamGeometry) ---------------------------------------------

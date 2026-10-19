@@ -33,6 +33,9 @@ func run(cmd: String, a: Dictionary = {}) -> Dictionary:
 		"view": return _view(a)
 		"wavelength": return _wavelength(a)
 		"camera": return _camera(a)
+		"step": return _step(a)
+		"beams": return _beams(a)
+		"fan": return _fan(a)
 	return {"error": "unknown cmd '%s'; try help" % cmd}
 
 
@@ -50,6 +53,9 @@ func _help() -> Dictionary:
 		"remove": "{id}", "time": "{hour}", "pause": "{on: bool}", "speed": "{n: 1|2|4}",
 		"view": "{name: Normal|Light|UV|Infrared|Heat}", "wavelength": "{bin: -1..5}",
 		"camera": "{x, y, zoom}: centre the view on a point (for screenshots)",
+		"step": "{n: 1}: pause, then advance exactly n sim ticks (light passes run within ticks)",
+		"fan": "{x0, y0, x1, y1 start line, n: 400, sun_offset_deg: 0, bin: 2, box: [bx0, by0, bx1, by1], hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the sun (rotated by sun_offset_deg) from the start line; histogram of directions of legs leaving the box, weighted by power",
+		"beams": "{x0, y0, x1, y1}: published beam records and secondary rays overlapping a box: count, watts, and a fingerprint to compare passes",
 	}}
 
 
@@ -334,6 +340,104 @@ func _camera(a: Dictionary) -> Dictionary:
 	if a.has("zoom"):
 		cam.zoom = Vector2.ONE * float(a.zoom)
 	return {"ok": true}
+
+
+func _step(a: Dictionary) -> Dictionary:
+	if not _main.paused:
+		_main.toggle_pause()
+	var w := _main.world
+	var light: LightSystem = w.get_system(&"light")
+	var before := light.trace_version
+	for k in clampi(int(a.get("n", 1)), 1, 2000):
+		w.tick()
+	return {"hour": snappedf(w.time_of_day() * 24.0, 0.0001), "ticks": w.tick_count,
+		"sun_dir_deg": snappedf(rad_to_deg(w.sun_direction.angle()), 0.001),
+		"passes_published": light.trace_version - before}
+
+
+func _fan(a: Dictionary) -> Dictionary:
+	var w := _main.world
+	var light: LightSystem = w.get_system(&"light")
+	var dir := w.sun_direction.rotated(deg_to_rad(float(a.get("sun_offset_deg", 0))))
+	var p0 := Vector2(float(a.get("x0", 0)), float(a.get("y0", 0)))
+	var p1 := Vector2(float(a.get("x1", 0)), float(a.get("y1", 0)))
+	var n := clampi(int(a.get("n", 400)), 2, 20000)
+	var bin := clampi(int(a.get("bin", Spectrum.Bin.GREEN)), 0, Spectrum.BIN_COUNT - 1)
+	var bx: Array = a.get("box", [0, 0, 1e9, 1e9])
+	var box := Rect2(Vector2(bx[0], bx[1]), Vector2(bx[2] - bx[0], bx[3] - bx[1]))
+	var hist_deg := float(a.get("hist_deg", 2.0))
+	var lp := light._preview
+	lp.start(w, light._shown)
+	var e := lp.engine
+	e.Begin()
+	var power := Spectrum.make_zero()
+	power[bin] = 1.0 / n
+	for k in n:
+		e.Trace(p0.lerp(p1, (k + 0.5) / n), dir, power)
+	var from: PackedVector2Array = e.SegFrom()
+	var to: PackedVector2Array = e.SegTo()
+	var pw: PackedFloat32Array = e.SegPower()
+	var hist := {}
+	var out_w := 0.0
+	for k in from.size():
+		if box.has_point(from[k]) and not box.has_point(to[k]):
+			var ang := rad_to_deg((to[k] - from[k]).angle())
+			var key := snappedf(ang, hist_deg)
+			var wk := pw[k * Spectrum.BIN_COUNT + bin]
+			hist[key] = hist.get(key, 0.0) + wk
+			out_w += wk
+	var keys := hist.keys()
+	keys.sort()
+	var rows := []
+	for key in keys:
+		if hist[key] > 0.002:
+			rows.append([key, snappedf(hist[key], 0.0001)])
+	_main._previewed = Vector3(-1, -1, -1)
+	return {"sun_dir_deg": snappedf(rad_to_deg(dir.angle()), 0.001), "leaving_box_w": snappedf(out_w, 0.0001),
+		"histogram_deg_w": rows}
+
+
+## Beam records (BeamGeometry layout) touching a box: how many, their power and a coarse
+## fingerprint (sum of record points), to see whether consecutive passes changed shape.
+func _beams(a: Dictionary) -> Dictionary:
+	var light: LightSystem = _main.world.get_system(&"light")
+	var box := Rect2(Vector2(float(a.get("x0", 0)), float(a.get("y0", 0))), Vector2.ZERO)
+	box = box.expand(Vector2(float(a.get("x1", 1e9)), float(a.get("y1", 1e9))))
+	var buf := light.beam_render
+	var o := 0
+	var n := 0
+	var watts := 0.0
+	var fp := Vector2.ZERO
+	var legs := 0
+	while o < buf.size():
+		var kind := int(buf[o])
+		var w := buf[o + 2]
+		var pts := int(buf[o + 3])
+		var stride := 6 if kind == BeamGeometry.STRIP else 3
+		var start := o + (4 if kind == BeamGeometry.STRIP else 5)
+		var hit := false
+		var sum := Vector2.ZERO
+		for k in pts:
+			var q := start + k * stride
+			var p := Vector2(buf[q], buf[q + 1])
+			sum += p
+			if box.has_point(p):
+				hit = true
+		if hit:
+			n += 1
+			watts += w
+			fp += sum
+			legs += pts
+		o = start + pts * stride
+	var rays := 0
+	var ray_w := 0.0
+	for k in light.ray_from.size():
+		if box.has_point(light.ray_from[k]) or box.has_point(light.ray_to[k]):
+			rays += 1
+			for b in Spectrum.BIN_COUNT:
+				ray_w += light.ray_power[k * Spectrum.BIN_COUNT + b]
+	return {"version": light.trace_version, "records": n, "points": legs, "watts": snappedf(watts, 0.001),
+		"fingerprint": _v(fp), "secondary_rays": rays, "secondary_w": snappedf(ray_w, 0.001)}
 
 
 static func _v(p: Vector2) -> Array:
