@@ -293,7 +293,7 @@ func _cmd_place(a: Dictionary) -> Dictionary:
 		return {"error": "no def '%s'; see defs" % a.get("key")}
 	_main.world.enqueue(PlaceObjectCommand.new(def, Vector2(float(a.get("x", 0)), float(a.get("y", 0))),
 		deg_to_rad(float(a.get("angle", 0))), not bool(a.get("free", false))))
-	return {"ok": true, "id": _main.world.next_object_id}
+	return {"ok": true, "queued": "applies on the next tick (see objects; refused if occupied or no ground)"}
 
 
 func _cmd_move(a: Dictionary) -> Dictionary:
