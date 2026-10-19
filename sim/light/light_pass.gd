@@ -27,6 +27,9 @@ var sheet_to := PackedVector2Array()
 
 var _tasks: Array = []           ## [run, bin]
 var _next := 0
+var _def_index: Dictionary = {}  ## ObjectDef → small int, for cache keys
+var _cacheable: Dictionary = {}  ## Object id → bool, for the surfaces version below
+var _cacheable_version := -1
 
 
 func _init(p_grid: TileGrid, materials: MaterialDB, p_surfaces: SurfaceSet) -> void:
@@ -56,6 +59,7 @@ func start(world: SimWorld) -> void:
 		var t1 := Time.get_ticks_usec()
 		stage_ms.map = (t1 - t0) / 1000.0
 		beams.begin(tracer, map, grid, spectrum)
+		beams.objects = _object_cache_info(world)
 		_direct()
 		stage_ms.direct = (Time.get_ticks_usec() - t1) / 1000.0
 		for run in map.runs:
@@ -79,6 +83,52 @@ func step(max_paths: int) -> bool:
 	ms += spent
 	stage_ms.beams += spent
 	return done
+
+
+## Cache info for the beam tracer's object cache: convex optical bodies whose bounds hold no
+## other object's surfaces (tiles inside a body don't matter: rays inside ignore them).
+func _object_cache_info(world: SimWorld) -> Dictionary:
+	var key := world.objects_version
+	if _cacheable_version != key:
+		_cacheable.clear()
+		var foreign := {}   # Object id → true if another owner's segment shares its tiles
+		var first_piece := {}
+		for s in surfaces.count():
+			var owner := surfaces.owner[s]
+			first_piece[owner] = mini(first_piece.get(owner, 1 << 30), surfaces.piece[s])
+		var w := grid.width
+		for obj: SimObject in world.objects.values():
+			if not obj.def.is_body():
+				continue
+			var ok := true
+			var rect := tracer.body_bounds(obj.id)
+			for y in range(floori(rect.position.y / SimConst.TILE_M), floori(rect.end.y / SimConst.TILE_M) + 1):
+				for x in range(floori(rect.position.x / SimConst.TILE_M), floori(rect.end.x / SimConst.TILE_M) + 1):
+					if not grid.in_bounds(x, y):
+						ok = false
+						continue
+					var i := y * w + x
+					for k in range(surfaces.cell_start[i], surfaces.cell_start[i + 1]):
+						if surfaces.owner[surfaces.cell_items[k]] != obj.id:
+							ok = false
+			if ok:
+				_cacheable[obj.id] = first_piece.get(obj.id, 0)
+		_cacheable_version = key
+	var info := {}
+	if _cacheable.is_empty():
+		return info
+	for id in _cacheable:
+		var obj: SimObject = world.objects[id]
+		if not _def_index.has(obj.def):
+			_def_index[obj.def] = _def_index.size()
+		# Sample rays start before the object's bounding box along the light: everything in
+		# front of an object along its run is empty, so starting earlier is safe.
+		var r := tracer.body_bounds(id)
+		var s_min := minf(minf(r.position.dot(dir), r.end.dot(dir)),
+			minf(Vector2(r.end.x, r.position.y).dot(dir), Vector2(r.position.x, r.end.y).dot(dir)))
+		info[id] = [_def_index[obj.def], roundi(obj.angle * 1e6), _cacheable[id], obj.position,
+			obj.position.dot(map.perp), s_min - 0.02]
+	return info
 
 
 ## Stage 1: lanes that end on opaque faces deposit directly; lanes that hit nothing escape.

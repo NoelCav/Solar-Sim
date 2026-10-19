@@ -13,6 +13,13 @@ extends RefCounted
 ## its path are applied with that weight, so energy is conserved exactly.
 ## Fresnel reflections are pooled across the run (one ray per REFL_POOL_M of wavefront per
 ## reflection along the path) and traced as ordinary rays.
+##
+## Object cache: inside one pass, identical convex objects (same definition and angle) see
+## identical light, so for those runs samples sit on a grid fixed to the object, and the part
+## of each sample ray from just before the object until it transmits back out is traced once,
+## stored relative to the object, and replayed for the others; only the rest of the path is
+## traced per object. Deposits inside the glass are re-placed by position (energy is exact;
+## their tile can differ by part of a tile).
 
 const BASE_SPACING := 0.1      ## Initial sample spacing across a run, m (refinement finds edges)
 const MIN_SPACING := 0.02      ## Narrowest interval worth refining, m (one lane; tiles are 0.25 m)
@@ -30,6 +37,15 @@ var irradiance := PackedFloat32Array()   ## Direct normal irradiance per bin, W/
 ## renderer, only for the bins a view shows.
 var render := PackedFloat32Array()
 
+## Cacheable objects this pass: id → [definition index, angle key, first piece, position,
+## u of its center, s of its sample start line]. Set by LightPass.
+var objects: Dictionary = {}
+var cache_hits := 0
+var cache_misses := 0
+
+var _cache: Dictionary = {}  ## Vector4i(definition, angle, bin, u offset) → local PathRec or null
+var _run_obj: Array = []     ## objects[] entry of the run being traced, or []
+var _run_id := -1
 var _intervals: Array = []   ## [ua, ra, ub, rb, Span, spread] in u order
 var _last_spread: Array = []
 ## Pooled reflections per reflection index along the path: [watts, pos, dir, medium, body, u0].
@@ -42,6 +58,10 @@ func begin(p_tracer: Tracer, p_map: SunMap, p_grid: TileGrid, p_irradiance: Pack
 	grid = p_grid
 	irradiance = p_irradiance
 	render.clear()
+	objects = {}
+	_cache.clear()
+	cache_hits = 0
+	cache_misses = 0
 
 
 ## Traces one run ([first lane, last lane, min depth, key]) in one bin.
@@ -51,14 +71,27 @@ func trace_run(run: Array, bin: int) -> void:
 		return
 	var u_lo := map.u0 + int(run[0]) * map.lane_w
 	var u_hi := map.u0 + (int(run[1]) + 1) * map.lane_w
+	_run_id = int(run[3])
+	_run_obj = objects.get(_run_id, [])
 	var s0: float = run[2] - 0.02
-	var n := maxi(1, ceili((u_hi - u_lo) / BASE_SPACING))
+	var us := PackedFloat64Array([u_lo])
+	if _run_obj.is_empty():
+		var n := maxi(1, ceili((u_hi - u_lo) / BASE_SPACING))
+		for i in range(1, n + 1):
+			us.append(u_lo + (u_hi - u_lo) * i / n)
+	else:
+		# A grid fixed to the object, so identical objects ask for identical rays.
+		s0 = _run_obj[5]
+		var uc: float = _run_obj[4]
+		for j in range(ceili((u_lo - uc) / BASE_SPACING + 1e-6), floori((u_hi - uc) / BASE_SPACING - 1e-6) + 1):
+			us.append(uc + j * BASE_SPACING)
+		us.append(u_hi)
 	_intervals.clear()
 	_refl.clear()
-	var prev_u := u_lo
+	var prev_u := us[0]
 	var prev_r := _trace_at(prev_u, s0, bin)
-	for i in range(1, n + 1):
-		var u := u_lo + (u_hi - u_lo) * i / n
+	for i in range(1, us.size()):
+		var u := us[i]
 		var r := _trace_at(u, s0, bin)
 		_refine(prev_u, prev_r, u, r, s0, bin)
 		prev_u = u
@@ -70,7 +103,83 @@ func trace_run(run: Array, bin: int) -> void:
 
 
 func _trace_at(u: float, s0: float, bin: int) -> Tracer.PathRec:
-	return tracer.trace_primary(map.perp * u + map.dir * s0, map.dir, bin)
+	var origin := map.perp * u + map.dir * s0
+	if _run_obj.is_empty():
+		return tracer.trace_primary(origin, map.dir, bin)
+	var key := Vector4i(_run_obj[0], _run_obj[1], bin, roundi((u - float(_run_obj[4])) * 1e6))
+	if _cache.has(key):
+		var local: Tracer.PathRec = _cache[key]
+		if local != null:
+			cache_hits += 1
+			var rec := _instantiate(local)
+			tracer.ray_count += 1
+			tracer.continue_primary(rec)
+			return rec
+		return tracer.trace_primary(origin, map.dir, bin)
+	cache_misses += 1
+	var rec := tracer.trace_primary(origin, map.dir, bin, _run_id)
+	_cache[key] = _localize(rec) if rec.term == Tracer.Term.PENDING else null
+	if rec.term == Tracer.Term.PENDING:
+		tracer.continue_primary(rec)
+	return rec
+
+
+## Copy of the object part of a path (stopped as it left the object) relative to the object:
+## positions minus its position, its pieces numbered from 0, its id as -2.
+func _localize(rec: Tracer.PathRec) -> Tracer.PathRec:
+	if not rec.probes.is_empty():
+		return null
+	var off: Vector2 = _run_obj[3]
+	var first_piece: int = _run_obj[2]
+	var c := Tracer.PathRec.new()
+	c.bin = rec.bin
+	for pt in rec.pts:
+		c.pts.append(pt - off)
+	c.frac = rec.frac.duplicate()
+	for v in rec.sig:
+		c.sig.append(v - 2 * first_piece if v >= 0 else v)
+	var deps := rec.deps
+	for k in range(0, deps.size(), 5):
+		c.deps.append_array([-1, deps[k + 1], -2 if deps[k + 2] >= 0 else deps[k + 2],
+			deps[k + 3] - off.x, deps[k + 4] - off.y])
+	var refls := rec.refls
+	for k in range(0, refls.size(), 7):
+		c.refls.append_array([refls[k] - off.x, refls[k + 1] - off.y, refls[k + 2], refls[k + 3],
+			refls[k + 4], refls[k + 5], -2 if refls[k + 6] >= 0 else refls[k + 6]])
+	c.term = Tracer.Term.PENDING
+	c.cont_o = rec.cont_o - off
+	c.cont_d = rec.cont_d
+	c.cont_events = rec.cont_events
+	c.remain = rec.remain
+	return c
+
+
+## A cached object part placed on the current run's object, ready to continue.
+func _instantiate(c: Tracer.PathRec) -> Tracer.PathRec:
+	var off: Vector2 = _run_obj[3]
+	var first_piece: int = _run_obj[2]
+	var r := Tracer.PathRec.new()
+	r.bin = c.bin
+	for pt in c.pts:
+		r.pts.append(pt + off)
+	r.frac = c.frac.duplicate()
+	for v in c.sig:
+		r.sig.append(v + 2 * first_piece if v >= 0 else v)
+	var deps := c.deps
+	for k in range(0, deps.size(), 5):
+		var at := Vector2(deps[k + 3] + off.x, deps[k + 4] + off.y)
+		r.deps.append_array([tracer._tile_at(at), deps[k + 1], _run_id if deps[k + 2] == -2 else deps[k + 2],
+			at.x, at.y])
+	var refls := c.refls
+	for k in range(0, refls.size(), 7):
+		r.refls.append_array([refls[k] + off.x, refls[k + 1] + off.y, refls[k + 2], refls[k + 3],
+			refls[k + 4], refls[k + 5], _run_id if refls[k + 6] == -2 else refls[k + 6]])
+	r.term = Tracer.Term.PENDING
+	r.cont_o = c.cont_o + off
+	r.cont_d = c.cont_d
+	r.cont_events = c.cont_events
+	r.remain = c.remain
+	return r
 
 
 func _refine(ua: float, ra: Tracer.PathRec, ub: float, rb: Tracer.PathRec, s0: float, bin: int) -> void:
@@ -185,7 +294,7 @@ func _settle(iv: Array, irr: float, bin: int) -> void:
 ## Applies a path's recorded deposits, probe crossings and reflections for `watts` of input.
 func _apply_path(r: Tracer.PathRec, watts: float, bin: int, u: float) -> void:
 	var deps := r.deps
-	for k in range(0, deps.size(), 3):
+	for k in range(0, deps.size(), 5):
 		tracer.apply_bin(int(deps[k]), bin, watts * deps[k + 1], int(deps[k + 2]))
 	var probes := r.probes
 	for k in range(0, probes.size(), 2):

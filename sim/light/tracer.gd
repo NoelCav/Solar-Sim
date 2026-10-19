@@ -24,7 +24,7 @@ const U_EPS := 1e-6    ## Along-segment tolerance for hits
 const MAX_RENDER_SEGMENTS := 60000
 
 enum Ev { MISS, EXIT, START_OPAQUE, OPAQUE, MEDIA, SURFACE }
-enum Term { ESCAPE, OPAQUE, CULLED }
+enum Term { ESCAPE, OPAQUE, CULLED, PENDING }
 
 ## Result of trace_primary. Fractions are relative to the ray's unit input power.
 class PathRec:
@@ -36,9 +36,13 @@ class PathRec:
 	var term_tile := -1
 	var term_side := -1                    ## Face code of the opaque face hit (see face_code)
 	var remain := 1.0                      ## Power arriving at the end
-	var deps := PackedFloat64Array()       ## Absorption along the path: (tile, fraction, body)…
+	var deps := PackedFloat64Array()       ## Absorption along the path: (tile, fraction, body, x, y)…
 	var probes := PackedFloat64Array()     ## Probes crossed: (owner, power at the crossing)…
 	var refls := PackedFloat64Array()      ## Fresnel reflections: (x, y, dx, dy, fraction, medium, body)…
+	# Where to resume a path stopped as it left an object (Term.PENDING; see trace_primary).
+	var cont_o := Vector2.ZERO
+	var cont_d := Vector2.ZERO
+	var cont_events := 0
 
 var grid: TileGrid
 var surfaces: SurfaceSet
@@ -188,6 +192,11 @@ func build_blocks() -> void:
 			df[i] = v
 
 
+## Bounds of an object's surfaces (grown slightly), or an empty rect.
+func body_bounds(id: int) -> Rect2:
+	return _body_bounds.get(id, Rect2())
+
+
 # --- Deposits ---------------------------------------------------------------------------
 
 ## Adds absorbed power in one bin to a tile (and to an object's tally if body >= 0).
@@ -236,11 +245,11 @@ func add_probe(owner: int, bin: int, watts: float) -> void:
 	object_incident[owner] = acc
 
 
-func _deposit_bin(i: int, bin: int, watts: float, body: int) -> void:
+func _deposit_bin(i: int, bin: int, watts: float, body: int, at := Vector2.ZERO) -> void:
 	if watts <= 0.0:
 		return
 	if _rec != null:
-		_rec.deps.append_array([i, watts, body])
+		_rec.deps.append_array([i, watts, body, at.x, at.y])
 	else:
 		apply_bin(i, bin, watts, body)
 
@@ -310,7 +319,7 @@ func _surface_hit(s: int, u: float, hit: Vector2, d: Vector2, p: PackedFloat32Ar
 			var tile := _tile_at(hit)
 			for b in Spectrum.BIN_COUNT:
 				out[b] = p[b] * refl[b]
-				_deposit_bin(tile, b, p[b] - out[b], owner)
+				_deposit_bin(tile, b, p[b] - out[b], owner, hit)
 			var r := d - 2.0 * d.dot(n) * n
 			_stack.append([hit + r * NUDGE, r, out, medium, body, events + 1])
 		_:
@@ -368,24 +377,40 @@ func _push_child(hit: Vector2, dir: Vector2, p: PackedFloat32Array, medium: int,
 ## Follows one ray of unit power in `bin` along its dominant path: transmission at every
 ## interface (reflection under TIR). Reflected fractions, absorption along the way and probe
 ## crossings are recorded, not applied; the terminal hit is left to the caller.
-func trace_primary(origin: Vector2, dir: Vector2, bin: int) -> PathRec:
+## With `stop_owner` >= 0, a path whose first interaction is entering that (convex) object
+## stops as it transmits back out of it (Term.PENDING); continue_primary() resumes it.
+## That object part depends only on the object, so it can be cached and reused.
+func trace_primary(origin: Vector2, dir: Vector2, bin: int, stop_owner := -1) -> PathRec:
 	ray_count += 1
 	var rec := PathRec.new()
 	rec.bin = bin
-	var p := Spectrum.make_zero()
-	p[bin] = 1.0
-	var o := origin
-	var d := dir.normalized()
-	var medium := -1
-	var body := -1
-	rec.pts.append(o)
+	rec.pts.append(origin)
 	rec.frac.append(1.0)
+	_run_primary(rec, origin, dir.normalized(), -1, -1, 0, stop_owner)
+	return rec
+
+
+## Resumes a path stopped as it left an object (see trace_primary).
+func continue_primary(rec: PathRec) -> void:
+	_run_primary(rec, rec.cont_o, rec.cont_d, -1, -1, rec.cont_events, -1)
+
+
+func _run_primary(rec: PathRec, o: Vector2, d: Vector2, medium: int, body: int, first_event: int,
+		stop_owner: int) -> void:
+	var bin := rec.bin
+	var p := Spectrum.make_zero()
+	p[bin] = rec.remain
+	rec.term = Term.CULLED
 	_rec = rec
-	for events in SimConst.MAX_RAY_EVENTS + 1:
+	for events in range(first_event, SimConst.MAX_RAY_EVENTS + 1):
 		_march(o, d, p, medium, body)
 		medium = _ev_medium
 		body = _ev_body
 		var hit := _ev_o + d * _ev_t
+		var leaving := false
+		if stop_owner >= 0 and events == first_event \
+				and (_ev_kind != Ev.SURFACE or surfaces.owner[_ev_seg] != stop_owner):
+			stop_owner = -1   # Didn't meet the object first: nothing to stop at
 		match _ev_kind:
 			Ev.MISS:
 				rec.term = Term.ESCAPE
@@ -419,7 +444,7 @@ func trace_primary(origin: Vector2, dir: Vector2, bin: int) -> PathRec:
 						rec.probes.append_array([owner, p[bin]])
 					SurfaceSet.Coating.MIRROR:
 						var keep := p[bin] * surfaces.reflectance[s][bin]
-						_deposit_bin(_tile_at(hit), bin, p[bin] - keep, owner)
+						_deposit_bin(_tile_at(hit), bin, p[bin] - keep, owner, hit)
 						p[bin] = keep
 						d = d - 2.0 * d.dot(n) * n
 					_:
@@ -435,17 +460,21 @@ func trace_primary(origin: Vector2, dir: Vector2, bin: int) -> PathRec:
 						else:
 							medium = m2
 							body = owner if from_front else -1
+							leaving = not from_front and owner == stop_owner
 		rec.pts.append(hit)
 		rec.frac.append(p[bin])
 		o = hit + d * NUDGE
 		if p[bin] < 1e-9:
 			rec.term = Term.CULLED
 			break
-		if events == SimConst.MAX_RAY_EVENTS:
-			rec.term = Term.CULLED
+		if leaving:
+			rec.term = Term.PENDING
+			rec.cont_o = o
+			rec.cont_d = d
+			rec.cont_events = events + 1
+			break
 	rec.remain = p[bin]
 	_rec = null
-	return rec
 
 
 ## Interface along a primary path: returns the new direction and scales p[bin] by the
@@ -603,7 +632,7 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 			best_s = s
 			best_u = u
 		if best_s >= 0 and best_t <= t1 + EPS:
-			_absorb_leg(p, medium, best_t - t0, i, body)
+			_absorb_leg(p, medium, best_t - t0, i, body, o + d * (0.5 * (t0 + best_t)))
 			_ev_kind = Ev.SURFACE
 			_ev_t = best_t
 			_ev_seg = best_s
@@ -613,7 +642,7 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 			_ev_body = body
 			return
 
-		_absorb_leg(p, medium, t1 - t0, i, body)
+		_absorb_leg(p, medium, t1 - t0, i, body, o + d * (0.5 * (t0 + t1)))
 		var r := air_dist[i] - 1
 		if body < 0 and r >= 1:
 			# Every tile within r of this one is plain air with no surfaces: jump to where
@@ -653,14 +682,16 @@ func _march(o: Vector2, d: Vector2, p: PackedFloat32Array, medium: int, body: in
 
 
 ## Beer–Lambert absorption over `length` m inside `medium`; heat goes to tile `i`.
-func _absorb_leg(p: PackedFloat32Array, medium: int, length: float, i: int, body: int) -> void:
+## `mid` (the leg's midpoint) is kept with recorded deposits so cached paths can re-place them.
+func _absorb_leg(p: PackedFloat32Array, medium: int, length: float, i: int, body: int,
+		mid: Vector2) -> void:
 	if length <= 0.0 or not _has_bulk[medium]:
 		return
 	var bulk := _bulk[medium]
 	for b in Spectrum.BIN_COUNT:
 		if p[b] > 0.0 and bulk[b] > 0.0:
 			var keep := exp(-bulk[b] * length)
-			_deposit_bin(i, b, p[b] * (1.0 - keep), body)
+			_deposit_bin(i, b, p[b] * (1.0 - keep), body, mid)
 			p[b] *= keep
 
 
