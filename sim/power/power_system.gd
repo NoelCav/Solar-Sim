@@ -119,6 +119,11 @@ func output_w(world: SimWorld, n: int) -> float:
 	return flows(world, n, SimConst.DT).sold_w
 
 
+## What network n buys from the grid now, W (lamps and the like beyond what its cells and batteries give).
+func bought_w(world: SimWorld, n: int) -> float:
+	return flows(world, n, SimConst.DT).bought_w
+
+
 ## What network n can send out, W: the rated power of its cells plus what its batteries can add
 ## (SolarCell.rated_power, ObjectDef.battery_max_w; 0 for no network).
 func rated_w(world: SimWorld, n: int) -> float:

@@ -91,9 +91,18 @@ static func reading(world: SimWorld, obj: SimObject) -> Dictionary:
 				"watts": absf(power.flows(world, n, SimConst.DT).batteries[obj.id]) if n >= 0 else 0.0,
 				"rated": obj.def.battery_max_w, "title": "Battery"}
 		ObjectDef.Kind.GRID_TIE:
-			return {"center": cabinet, "size": CABINET_METER_M, "on": n >= 0 and power.network_grid[n] == 1, "text": "",
-				"watts": power.output_w(world, n), "rated": power.rated_w(world, n), "title": "Grid"}
+			return {"center": cabinet, "size": CABINET_METER_M, "on": n >= 0 and power.network_grid[n] == 1,
+				"watts": maxf(power.output_w(world, n), power.bought_w(world, n)), "rated": power.rated_w(world, n),
+				"title": "Grid", "text": _grid_text(power, world, n)}
 	return {}
+
+
+## The grid meter's LCD: what the network sells, or what it buys (marked).
+static func _grid_text(power: PowerSystem, world: SimWorld, n: int) -> String:
+	if n < 0 or power.network_grid[n] == 0:
+		return ""
+	var bought := power.bought_w(world, n)
+	return "buy " + Readout.power(bought) if bought > 0.0 else Readout.power(power.output_w(world, n))
 
 
 ## Where `obj`'s meter is drawn on the map (m; empty when it has none).

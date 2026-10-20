@@ -99,8 +99,13 @@ func update() -> void:
 	var selling := 0.0
 	_power.sync(world)
 	for n in _power.networks.count:
-		selling += _power.output_w(world, n)
-	_selling.text = "selling %s" % Readout.power(selling) if selling > 0.0 else "selling nothing"
+		selling += _power.output_w(world, n) - _power.bought_w(world, n)
+	if selling > 0.0:
+		_selling.text = "selling %s" % Readout.power(selling)
+	elif selling < 0.0:
+		_selling.text = "buying %s" % Readout.power(-selling)
+	else:
+		_selling.text = "selling nothing"
 	var now := Market.price_per_kwh(world)
 	var soon := Market.price_at_hour(tod + 1.0)
 	var trend := "rising" if soon > now * 1.05 else ("falling" if soon < now * 0.95 else "steady")

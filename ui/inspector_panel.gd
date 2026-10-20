@@ -167,6 +167,10 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 		var n := _power.network_of(world, obj)
 		if n < 0:
 			return s + "\n[color=#8a93a0]not wired: run wire to its foot[/color]"
+		var bought := _power.bought_w(world, n)
+		if bought > 0.0:
+			return s + "\nbuying %s at %.1f ¢/kWh (retail)" % [Readout.power(bought),
+				Market.price_per_kwh(world) * Market.RETAIL_FACTOR * 100.0]
 		return s + "\nselling %s at %.1f ¢/kWh" % [Readout.power(_power.output_w(world, n)),
 			Market.price_per_kwh(world) * 100.0]
 	s += "\nabsorbing %.1f W" % obj.absorbed_w
