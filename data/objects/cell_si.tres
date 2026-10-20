@@ -6,6 +6,7 @@
 script = ExtResource("1_objdef")
 key = &"cell_si"
 display_name = "Silicon Cell Panel"
+category = 1
 kind = 4
 material = &"silicon"
 color = Color(0.16, 0.26, 0.6, 1)

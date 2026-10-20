@@ -63,6 +63,13 @@ static func analyze(def: ObjectDef, spectrum: PackedFloat32Array, temp_k: float,
 	return out
 
 
+## A cell's rated efficiency: plain sunlight (AM1.5, SimConst.REFERENCE_DNI) at 25 °C.
+static func rated_efficiency(def: ObjectDef) -> float:
+	var area := def.size_m * SimConst.DEPTH_M
+	var watts := SimConst.REFERENCE_DNI * area
+	return max_power(def, Spectrum.from_total(watts), T_REF_K, area) / watts
+
+
 ## The front-face light of cell object `obj` now, W per bin: the traced light times
 ## `light_scale` (LightSystem.power_scale); `direct_only` keeps the part straight from the source.
 static func object_light(obj: SimObject, light_scale: float, direct_only := false) -> PackedFloat32Array:

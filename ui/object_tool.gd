@@ -244,7 +244,7 @@ func _press() -> void:
 		_drag_from = obj.position
 		_drag_offset = obj.position - mouse_m()
 	elif mode == Mode.BUILD:
-		world.enqueue(PlaceObjectCommand.new(selected_def(), mouse_m(), ghost_angle, _mounting()))
+		place_selected()
 	else:
 		selected_id = -1
 		_panning = true
@@ -275,6 +275,12 @@ func _mouse_motion(mm: InputEventMouseMotion) -> void:
 		var obj: SimObject = world.objects.get(_drag_id)
 		if obj != null:
 			world.enqueue(TransformObjectCommand.new(_drag_id, mouse_m() + _drag_offset, obj.angle, false))
+
+
+## Places the picked item at the pointer (on its stand unless Alt floats it in creative mode).
+func place_selected() -> void:
+	if selected_def() != null:
+		world.enqueue(PlaceObjectCommand.new(selected_def(), mouse_m(), ghost_angle, _mounting()))
 
 
 ## Whether the next placed object goes on its stand (always, unless Alt in creative mode).

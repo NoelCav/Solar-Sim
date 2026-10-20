@@ -7,11 +7,14 @@ extends Resource
 enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE }
 ## How it stands in the world (Mounting): on a stand, flat on the ground, or floating.
 enum Mount { STAND, GROUND, FREE }
+## Where it is listed in the build catalog.
+enum Category { OPTICS, POWER, MACHINES, TOOLS }
 
 @export var key: StringName
 @export var display_name: String
 @export var kind: Kind = Kind.LENS
 @export var mount: Mount = Mount.STAND
+@export var category: Category = Category.OPTICS
 ## Body material for lenses and prisms (a MaterialDef key).
 @export var material: StringName = &"crown_glass"
 @export var color: Color = Color(0.8, 0.9, 1.0, 0.35)

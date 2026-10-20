@@ -6,6 +6,7 @@
 script = ExtResource("1_objdef")
 key = &"grid_tie"
 display_name = "Grid Connection"
+category = 1
 kind = 5
 mount = 1
 material = &"steel"

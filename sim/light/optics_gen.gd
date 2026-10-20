@@ -29,6 +29,24 @@ static func convex_lens(diameter: float, r_front: float, r_back: float, thicknes
 	]
 
 
+## Focal length of a convex lens built by convex_lens (thick-lens lensmaker's equation; both
+## radii positive for convex faces, 0 for flat), for refractive index n, m. INF if it doesn't focus.
+static func focal_length(diameter: float, r_front: float, r_back: float, thickness: float, n: float) -> float:
+	var half := diameter * 0.5
+	var t := maxf(thickness, _sagitta(r_front, half) + _sagitta(r_back, half) + 0.005)
+	var c1 := 1.0 / r_front if r_front > 0.0 else 0.0
+	var c2 := 1.0 / r_back if r_back > 0.0 else 0.0
+	var power := (n - 1.0) * (c1 + c2 - (n - 1.0) * t * c1 * c2 / n)
+	return 1.0 / power if power > 0.0 else INF
+
+
+## Fraction of light a clear body of index n passes at normal incidence: two faces, each
+## reflecting ((n − 1) / (n + 1))² (Fresnel), no absorption.
+static func normal_transmission(n: float) -> float:
+	var r := pow((n - 1.0) / (n + 1.0), 2.0)
+	return (1.0 - r) * (1.0 - r)
+
+
 ## Isosceles prism: base along local x at y = +height/2 side, apex pointing to -y.
 static func prism(base: float, apex_angle_deg: float) -> Array:
 	var half := base * 0.5

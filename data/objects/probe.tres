@@ -6,6 +6,7 @@
 script = ExtResource("1_objdef")
 key = &"probe"
 display_name = "Irradiance Probe"
+category = 3
 kind = 3
 mount = 2
 material = &"air"

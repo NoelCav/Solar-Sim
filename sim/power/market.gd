@@ -16,7 +16,12 @@ const DUCK_CURVE := [
 
 ## Price paid now for exported energy, $/kWh.
 static func price_per_kwh(world: SimWorld) -> float:
-	var hour := world.time_of_day() * 24.0
+	return price_at_hour(world.time_of_day() * 24.0)
+
+
+## Price at an hour of the day (any real number of hours; wraps at 24), $/kWh.
+static func price_at_hour(hours: float) -> float:
+	var hour := fposmod(hours, 24.0)
 	for k in range(1, DUCK_CURVE.size()):
 		var b: Array = DUCK_CURVE[k]
 		if hour <= b[0]:

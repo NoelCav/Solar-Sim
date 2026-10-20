@@ -6,6 +6,7 @@
 script = ExtResource("1_objdef")
 key = &"cell_si_surface"
 display_name = "Silicon Surface Cell"
+category = 1
 kind = 4
 mount = 1
 material = &"silicon"

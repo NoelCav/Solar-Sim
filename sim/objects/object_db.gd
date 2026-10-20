@@ -1,6 +1,7 @@
 class_name ObjectDB
 extends RefCounted
-## Registry of all ObjectDefs, loaded from data/objects (D11).
+## Registry of all ObjectDefs, loaded from data/objects (D11), in catalog order: by category,
+## then by name (the build catalog and the 1–9 keys follow it).
 
 const OBJECTS_DIR := "res://data/objects"
 
@@ -27,6 +28,8 @@ func load_dir(dir_path: String = OBJECTS_DIR) -> String:
 				return "Duplicate object key '%s'" % res.key
 			defs.append(res)
 			_by_key[res.key] = res
+	defs.sort_custom(func(a: ObjectDef, b: ObjectDef) -> bool:
+		return a.category < b.category or a.category == b.category and a.display_name < b.display_name)
 	return ""
 
 

@@ -19,6 +19,37 @@ static func irradiance(w_m2: float) -> String:
 	return "%.1f µW/m²" % (w_m2 * 1e6)
 
 
+## One line of key numbers for an item in the build catalog.
+static func item_stats(def: ObjectDef, materials: MaterialDB) -> String:
+	var mat := materials.get_by_key(def.material)
+	var n := mat.refractive_index(0.55) if mat != null else 1.0
+	match def.kind:
+		ObjectDef.Kind.LENS:
+			var f := OpticsGen.focal_length(def.size_m, def.radius_front_m, def.radius_back_m, def.thickness_m, n)
+			return "%s wide · focus %s · %.0f %% through" % [length(def.size_m), length(f),
+				OpticsGen.normal_transmission(n) * 100.0]
+		ObjectDef.Kind.MIRROR:
+			return "%s · reflects %.0f %%" % [length(def.size_m), _mean(def.reflectance) * 100.0]
+		ObjectDef.Kind.PRISM:
+			return "%.0f° apex · %s · n %.2f" % [def.apex_angle_deg, mat.display_name if mat else "?", n]
+		ObjectDef.Kind.CELL:
+			return "%s · %.0f %% in plain sun" % [length(def.size_m), SolarCell.rated_efficiency(def) * 100.0]
+		ObjectDef.Kind.PROBE:
+			return "Measures light; blocks nothing"
+		ObjectDef.Kind.GRID_TIE:
+			return "Sells the power of its wire network"
+	return ""
+
+
+## A length, e.g. "1 m", "25 cm", "1.15 m".
+static func length(m: float) -> String:
+	if is_inf(m):
+		return "none"
+	if m < 1.0:
+		return "%.0f cm" % (m * 100.0)
+	return "%.0f m" % m if is_equal_approx(m, roundf(m)) else "%.2f m" % m
+
+
 ## Money, e.g. "$12.34" (cents shown to a hundredth while amounts are small).
 static func money(dollars: float) -> String:
 	return "$%.2f" % dollars if absf(dollars) >= 10.0 else "$%.4f" % dollars
@@ -31,6 +62,13 @@ static func power(watts: float) -> String:
 	if absf(watts) >= 1e3:
 		return "%.2f kW" % (watts / 1e3)
 	return "%.1f W" % watts
+
+
+static func _mean(values: PackedFloat32Array) -> float:
+	var sum := 0.0
+	for v in values:
+		sum += v
+	return sum / maxi(values.size(), 1)
 
 
 ## Irradiance split by Spectrum band, e.g. "UV 4 W/m² · visible 410 W/m² · IR 520 W/m²".
