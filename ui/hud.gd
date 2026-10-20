@@ -514,10 +514,11 @@ func _object_text(obj: SimObject) -> String:
 		if obj.def.kind == ObjectDef.Kind.CELL:
 			s += _cell_text(obj)
 		elif obj.def.kind == ObjectDef.Kind.GRID_TIE:
+			_power.sync(world)
 			var n := _power.network_of(world, obj)
 			if n < 0:
 				return s + "\n[color=#8a93a0]not wired: run wire to its foot[/color]\n"
-			return s + "\nselling %s at %.1f ¢/kWh\n" % [Readout.power(_power.network_power_w[n]),
+			return s + "\nselling %s at %.1f ¢/kWh\n" % [Readout.power(_power.output_w(world, n)),
 				Market.price_per_kwh(world) * 100.0]
 		s += "\nabsorbing %.1f W" % obj.absorbed_w
 		if obj.temperature_k > 0.0:
@@ -525,17 +526,16 @@ func _object_text(obj: SimObject) -> String:
 	return s + "\n"
 
 
-## What a cell makes (wired to a grid connection) or could make, and why not.
+## What a cell makes now (on a network that sells) or could make (not wired to one); read from
+## the light now, so it is right while paused too.
 func _cell_text(obj: SimObject) -> String:
 	var irr := obj.incident_irradiance() * _light.power_scale(world)
-	var area := obj.def.size_m * SimConst.DEPTH_M
-	if obj.power_w > 0.0:
-		return "\nmaking %s  [color=#8a93a0](%.0f%% of %s)[/color]" % [Readout.power(obj.power_w),
-			obj.power_w / (irr * area) * 100.0, Readout.irradiance(irr)]
-	var n := _power.network_of(world, obj)
-	var why := "not wired to a grid connection" if n < 0 or _power.network_grid[n] == 0 else "no light"
-	return "\ncould make %s  [color=#8a93a0](%s)[/color]" % [
-		Readout.power(SolarCell.object_power(obj, _light.power_scale(world))), why]
+	var watts := SolarCell.object_power(obj, _light.power_scale(world))
+	if not _power.sells(world, obj):
+		return "\ncould make %s  [color=#8a93a0](not wired to a grid connection)[/color]" % Readout.power(watts)
+	var eta := watts / (irr * obj.def.size_m * SimConst.DEPTH_M) if irr > 0.0 else 0.0
+	return "\nmaking %s  [color=#8a93a0](%.0f%% of %s)[/color]" % [Readout.power(watts), eta * 100.0,
+		Readout.irradiance(irr)]
 
 
 # --- Helpers --------------------------------------------------------------------------------

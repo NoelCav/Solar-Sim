@@ -344,7 +344,7 @@ func _cmd_power(_a: Dictionary) -> Dictionary:
 	for n in power.networks.count:
 		nets.append({"network": n, "tiles": power.networks.network.count(n), "grid": power.network_grid[n] == 1
 			if n < power.network_grid.size() else false,
-			"sold_w": snappedf(power.network_power_w[n], 0.001) if n < power.network_power_w.size() else 0.0,
+			"sold_w": snappedf(power.output_w(w, n), 0.001),
 			"objects": []})
 	for obj: SimObject in w.objects.values():
 		var n := power.network_of(w, obj)

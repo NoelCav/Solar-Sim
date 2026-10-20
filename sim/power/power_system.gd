@@ -8,7 +8,6 @@ extends SimSystem
 ## circuit and all their light is heat). Runs after the light system and before heat.
 
 var networks := ConduitNetworks.new()
-var network_power_w := PackedFloat32Array()   ## Per network: W delivered (sold) this tick
 var network_grid := PackedByteArray()          ## Per network: 1 if a grid connection is on it
 
 var _cells := []                               ## Per network: ids of the cells on it
@@ -20,16 +19,12 @@ func system_name() -> StringName:
 
 
 func tick(world: SimWorld, dt: float) -> void:
-	var g := world.grid
-	networks.sync(g, g.wire)
-	if _members_key != Vector2i(networks.version, world.objects_version):
-		_rebuild_members(world)
+	sync(world)
 	var light: LightSystem = world.get_system(&"light")
 	var scale := light.power_scale(world)
 	for obj: SimObject in world.objects.values():
 		obj.power_w = 0.0
 	for n in networks.count:
-		network_power_w[n] = 0.0
 		if network_grid[n] == 0:
 			continue
 		var total := 0.0
@@ -38,8 +33,35 @@ func tick(world: SimWorld, dt: float) -> void:
 			obj.power_w = SolarCell.object_power(obj, scale)
 			obj.heat_in -= obj.power_w * dt
 			total += obj.power_w
-		network_power_w[n] = total
 		world.money += Market.earnings(world, total, dt)
+
+
+## What network n delivers now, W (0 without a grid connection). Read from the light now, as
+## the next tick will, so it is right while paused too.
+func output_w(world: SimWorld, n: int) -> float:
+	sync(world)
+	if n < 0 or n >= networks.count or network_grid[n] == 0:
+		return 0.0
+	var light: LightSystem = world.get_system(&"light")
+	var total := 0.0
+	for id: int in _cells[n]:
+		total += SolarCell.object_power(world.objects[id], light.power_scale(world))
+	return total
+
+
+## Brings the networks and who is on them up to date with the wires and objects (also while
+## paused, for the inspector).
+func sync(world: SimWorld) -> void:
+	networks.sync(world.grid, world.grid.wire)
+	if _members_key != Vector2i(networks.version, world.objects_version):
+		_rebuild_members(world)
+
+
+## Whether `obj` is on a network with a grid connection (a cell there delivers what it makes).
+func sells(world: SimWorld, obj: SimObject) -> bool:
+	sync(world)
+	var n := network_of(world, obj)
+	return n >= 0 and network_grid[n] == 1
 
 
 ## The network object `obj` is connected to, or -1.
@@ -55,7 +77,6 @@ func _rebuild_members(world: SimWorld) -> void:
 	_cells.clear()
 	for n in networks.count:
 		_cells.append([])
-	network_power_w.resize(networks.count)
 	network_grid.resize(networks.count)
 	network_grid.fill(0)
 	for obj: SimObject in world.objects.values():

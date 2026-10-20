@@ -129,6 +129,11 @@ func test_wired_cell_sells_power() -> void:
 			"grid connection rests on the ground")
 		var light: LightSystem = world.get_system(&"light")
 		var could := SolarCell.object_power(cell, light.power_scale(world))   # Power runs before heat
+		# Before any tick (as while paused) the power system already knows who sells what.
+		var power: PowerSystem = world.get_system(&"power")
+		check_eq(power.sells(world, cell), wired, "sells before a tick")
+		check_near(power.output_w(world, power.network_of(world, tie)), could if wired else 0.0, 1e-3,
+			"network output before a tick")
 		world.tick()
 		if wired:
 			check(cell.power_w > 30.0, "wired cell delivers %.1f W" % cell.power_w)
