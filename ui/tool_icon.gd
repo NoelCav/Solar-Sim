@@ -40,6 +40,19 @@ func _draw() -> void:
 			draw_polyline(_scaled(PackedVector2Array([Vector2(8, 4), Vector2(3, 9), Vector2(8, 14)]), s), color, w, true)
 			draw_arc(Vector2(12, 14) * s, 5.0 * s.x, -PI * 0.5, PI * 0.5, 12, color, w, true)
 			draw_line(Vector2(3, 9) * s, Vector2(12, 9) * s, color, w, true)
+		&"view_normal":   # An eye
+			draw_arc(Vector2(11, 20) * s, 12.0 * s.x, -2.3, -0.84, 14, color, w, true)
+			draw_arc(Vector2(11, 2) * s, 12.0 * s.x, 0.84, 2.3, 14, color, w, true)
+			draw_circle(Vector2(11, 11) * s, 3.2 * s.x, color)
+		&"view_light":   # A sun
+			draw_arc(Vector2(11, 11) * s, 4.0 * s.x, 0.0, TAU, 16, Color(1.0, 0.85, 0.45), w, true)
+			for k in 8:
+				var d := Vector2.from_angle(k * TAU / 8.0)
+				draw_line((Vector2(11, 11) + d * 6.5) * s, (Vector2(11, 11) + d * 9.5) * s, Color(1.0, 0.85, 0.45), w, true)
+		&"view_heat":   # A thermometer
+			draw_line(Vector2(11, 3) * s, Vector2(11, 14) * s, UiStyle.WARM, w + 2.0, true)
+			draw_circle(Vector2(11, 16) * s, 3.6 * s.x, UiStyle.WARM)
+			draw_arc(Vector2(11, 6) * s, 2.5 * s.x, PI, TAU, 8, color, w, true)
 		&"menu":
 			for y in [6.0, 11.0, 16.0]:
 				draw_line(Vector2(4, y) * s, Vector2(18, y) * s, color, w + 0.4, true)

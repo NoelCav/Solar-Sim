@@ -206,9 +206,12 @@ func _view_controls() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 4)
 	var group := ButtonGroup.new()
+	var glyphs := [&"view_normal", &"view_light", &"view_heat"]
 	for v in ViewMode.NAMES.size():
-		var b := UiStyle.toggle(ViewMode.NAMES[v], ViewMode.HINTS[v] + "  (H cycles)", runner.set_view.bind(v), group)
-		b.custom_minimum_size.x = 64
+		var b := UiStyle.icon_button(glyphs[v], ViewMode.NAMES[v], ViewMode.HINTS[v] + "  (H cycles)",
+			runner.set_view.bind(v))
+		b.toggle_mode = true
+		b.button_group = group
 		row.add_child(b)
 		_views.append(b)
 	_wave = OptionButton.new()

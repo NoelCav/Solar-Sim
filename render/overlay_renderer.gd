@@ -3,7 +3,10 @@ extends Sprite2D
 ## Per-tile data layer under the beams (design doc §16), one texel per tile:
 ## - Normal view: lit surfaces glow (additively) with absorbed light, log scale, so it is
 ##   obvious where light lands and how concentrated it is.
-## - Light / UV / Infrared views: absorbed irradiance in that band, log scale.
+## - Light view (all wavelengths): the light arriving on each surface strip, drawn as the surface
+##   skin along the faces it lands on (like the heat view's skin), log scale; glass and water, which
+##   take light inside them, are tinted tile by tile. A single wavelength shows absorbed irradiance
+##   in that band, tile by tile (strips don't carry bands).
 ## - Heat view: every tile colored by its temperature (absolute °C): solids fully, air fainter;
 ##   the surface skin (D18) drawn over solids' faces in its own temperature, so a focal spot
 ##   shows on a cool block (heat_overlay.gdshader, strips as in surface_strips.gdshaderinc).
@@ -23,11 +26,12 @@ var view := ViewMode.NORMAL:
 	set(value):
 		view = value
 		_timer = 0.0
-		material = _add_mat if view == ViewMode.NORMAL else (_heat_mat if view == ViewMode.HEAT else null)
+		_apply_material()
 var wavelength := -1:   ## Single bin to show, or -1 for all; tiles show that bin's band
 	set(value):
 		wavelength = value
 		_timer = 0.0
+		_apply_material()
 
 ## Peak of the current layer: tile index (-1 if none) and value (W/m² or K).
 var peak_tile := -1
@@ -48,6 +52,8 @@ var _skin_bytes := PackedByteArray()
 var _heat_lut := PackedByteArray()
 var _light_lut := PackedByteArray()
 var _solid_lut := PackedByteArray()   ## 1 per material id that is not a gas
+var _opaque_lut := PackedByteArray()  ## 1 per material id that blocks light (its faces carry the light)
+var _strip_irr := PackedFloat32Array()   ## Scratch: light on each strip, as drawn
 
 
 func setup(p_world: SimWorld) -> void:
@@ -82,6 +88,20 @@ func setup(p_world: SimWorld) -> void:
 	_light_lut = _lut(light_gradient)
 
 
+## Light view with all wavelengths draws skins; every other view of the overlay draws tiles.
+func _skins_in_light_view() -> bool:
+	return ViewMode.overlay(view) == ViewMode.Overlay.ABSORBED and ViewMode.overlay_band(wavelength) < 0
+
+
+func _apply_material() -> void:
+	if view == ViewMode.NORMAL:
+		material = _add_mat
+	elif view == ViewMode.HEAT or _skins_in_light_view():
+		material = _heat_mat
+	else:
+		material = null
+
+
 ## Legend for the current view: {title, gradient, lo, hi}, or {} when there is none.
 func legend() -> Dictionary:
 	match ViewMode.overlay(view):
@@ -108,7 +128,11 @@ func _process(delta: float) -> void:
 		ViewMode.Overlay.TEMPERATURE:
 			_fill_heat()
 		ViewMode.Overlay.ABSORBED:
-			_fill_light(ViewMode.overlay_band(wavelength), false)
+			if _skins_in_light_view():
+				_fill_light(-1, false, true)
+				_fill_light_skins()
+			else:
+				_fill_light(ViewMode.overlay_band(wavelength), false)
 		_:
 			_fill_light(ViewMode.overlay_band(wavelength), true)
 	_image.set_data(world.grid.width, world.grid.height, false, Image.FORMAT_RGBA8, _bytes)
@@ -186,9 +210,15 @@ static func heat_c(x: float) -> float:
 	return HEAT_WARM_C + exp((x - 0.5) / 0.5 * log(1.0 + HEAT_HOT_C - HEAT_WARM_C)) - 1.0
 
 
-## Absorbed light from the published lit tiles only; `band` -1 = all light.
-func _fill_light(band: int, glow: bool) -> void:
+## Absorbed light from the published lit tiles only; `band` -1 = all light. With `media_only`,
+## tiles that block light are left out (their faces are drawn as skins instead).
+func _fill_light(band: int, glow: bool, media_only := false) -> void:
 	_bytes.fill(0)
+	if media_only and _opaque_lut.size() != world.materials.count():
+		_opaque_lut.resize(world.materials.count())
+		for def in world.materials.placeable():
+			_opaque_lut[def.id] = 0 if def.transparent else 1
+	var mat := world.grid.material
 	if _light.sky.tile_power.size() != world.grid.size():
 		return
 	var log_lo := log(IRR_MIN)
@@ -205,6 +235,8 @@ func _fill_light(band: int, glow: bool) -> void:
 		var scale := layer.irradiance_scale(world)
 		var gain := DisplayLight.exposure(world) if layer.lamp_id < 0 else DisplayLight.lamp_exposure(world)
 		for i in layer.shown_lit:
+			if media_only and _opaque_lut[mat[i]] == 1:
+				continue
 			var w := tp[i] if band < 0 else bp[i * Spectrum.BAND_COUNT + band]
 			physical[i] = physical.get(i, 0.0) + w * scale
 			shown[i] = shown.get(i, 0.0) + w * scale * gain
@@ -224,6 +256,43 @@ func _fill_light(band: int, glow: bool) -> void:
 			_bytes[o + 3] = 255
 		elif irr >= IRR_MIN:
 			_put(_light_lut, o, (log(irr) - log_lo) / log_span)
+
+
+## The light on each surface strip, from every layer at its exposure, as skin colors on the light
+## scale (alpha 0 where nothing lands); the brightest strip counts for the peak marker.
+func _fill_light_skins() -> void:
+	var g := world.grid
+	var n := SimConst.SKIN_STRIPS
+	var row := g.width * n
+	_strip_irr.resize(g.size() * 4 * n)
+	_strip_irr.fill(0.0)
+	var physical := PackedFloat32Array()
+	physical.resize(_strip_irr.size())
+	physical.fill(0.0)
+	for layer in _light.layers():
+		var gain := DisplayLight.exposure(world) if layer.lamp_id < 0 else DisplayLight.lamp_exposure(world)
+		var scale := layer.irradiance_scale(world) * n
+		var ids := layer.strip_ids
+		var arriving := layer.strip_arriving
+		for k in ids.size():
+			var face := ids[k] / n
+			var tile := face / 4
+			var at := ((tile / g.width) * 4 + face % 4) * row + (tile % g.width) * n + ids[k] % n
+			physical[at] += arriving[k] * scale
+			_strip_irr[at] += arriving[k] * scale * gain
+	_skin_bytes.fill(0)
+	var log_lo := log(IRR_MIN)
+	var log_span := log(IRR_MAX) - log_lo
+	for at in _strip_irr.size():
+		if physical[at] > peak_value:
+			peak_value = physical[at]
+			var face := (at / row) % 4
+			var column := at % row / n
+			peak_tile = (at / row / 4) * g.width + column
+		if _strip_irr[at] >= IRR_MIN:
+			_put_at(_skin_bytes, _light_lut, at * 4, (log(_strip_irr[at]) - log_lo) / log_span)
+	_skin_image.set_data(row, g.height * 4, false, Image.FORMAT_RGBA8, _skin_bytes)
+	_skin_texture.update(_skin_image)
 
 
 func _put(lut: PackedByteArray, o: int, x: float) -> void:
