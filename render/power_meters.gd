@@ -31,19 +31,27 @@ const LAMP_OVER := Color(1.0, 0.65, 0.2)
 const LAMP_OFF := Color(0.3, 0.3, 0.3)
 
 
-## Draws the meter of every cell, battery and grid connection on `ci`; `base` is the canvas item's
-## screen-unit transform (restored afterwards), `px` screen units per meter. Read from the
-## light now, so the meters are right while paused too. A meter on a surface cell is drawn only
-## while that cell is `focus` (hovered or selected): a row of them would overlap into a pile.
-static func draw_all(ci: CanvasItem, world: SimWorld, base: Transform2D, px: float, focus: Array = []) -> void:
+## Draws the meter of every cell set, battery and grid connection on `ci`; `base` is the canvas
+## item's screen-unit transform (restored afterwards), `px` screen units per meter. Read from the
+## light now, so the meters are right while paused too.
+static func draw_all(ci: CanvasItem, world: SimWorld, base: Transform2D, px: float) -> void:
 	for obj: SimObject in world.objects.values():
 		var r := reading(world, obj)
-		if r.is_empty() or (obj.def.mount == ObjectDef.Mount.GROUND and obj.def.kind == ObjectDef.Kind.CELL
-				and obj.id not in focus):
+		if r.is_empty() or not _shows_meter(world, obj):
 			continue
 		_draw_meter(ci, base * Transform2D(obj.angle if obj.def.is_machine() else 0.0, r.center * px),
 			r.size * px, r.watts, r.rated, r.on, r.text)
 	ci.draw_set_transform_matrix(base)
+
+
+## Whether `obj` carries its group's meter: a surface cell shares one with the cells it touches,
+## which sits by the rightmost.
+static func _shows_meter(world: SimWorld, obj: SimObject) -> bool:
+	if not (obj.def.kind == ObjectDef.Kind.CELL and obj.def.mount == ObjectDef.Mount.GROUND):
+		return true
+	var power: PowerSystem = world.get_system(&"power")
+	power.sync(world)
+	return power.sets[power.set_of[obj.id]].back() == obj.id
 
 
 ## What `obj`'s meter shows now: {center (m), size (m), watts, rated, on, text}; empty for objects
@@ -56,9 +64,19 @@ static func reading(world: SimWorld, obj: SimObject) -> Dictionary:
 	match obj.def.kind:
 		ObjectDef.Kind.CELL:
 			var sells := power.delivers(world, obj)
-			return {"center": _cell_meter_m(world, obj), "size": CELL_METER_M, "on": sells, "text": "",
-				"watts": power.flows(world, n, SimConst.DT).cells[obj.id] if sells else 0.0,
-				"rated": SolarCell.rated_power(obj.def)}
+			var members := [obj.id]
+			var shown := obj
+			if obj.def.mount == ObjectDef.Mount.GROUND:
+				members = power.sets[power.set_of[obj.id]]
+				shown = world.objects[members.back()]
+			var watts := 0.0
+			var rated := 0.0
+			var flows: Dictionary = power.flows(world, n, SimConst.DT) if sells else {}
+			for id: int in members:
+				watts += flows.cells[id] if sells else 0.0
+				rated += SolarCell.rated_power(world.objects[id].def)
+			return {"center": _cell_meter_m(world, shown), "size": CELL_METER_M, "on": sells, "text": "",
+				"watts": watts, "rated": rated}
 		ObjectDef.Kind.BATTERY:
 			var charge := obj.stored_j / (obj.def.battery_capacity_kwh * Market.J_PER_KWH)
 			return {"center": cabinet, "size": CABINET_METER_M, "on": n >= 0, "text": "%.0f %%" % (charge * 100.0),
@@ -70,16 +88,18 @@ static func reading(world: SimWorld, obj: SimObject) -> Dictionary:
 	return {}
 
 
-## Where `obj`'s meter is drawn on the map (m; empty when it has none or it is not shown: a surface
-## cell's meter is shown only while the cell is focused, so it can't be picked before then).
+## Where `obj`'s meter is drawn on the map (m; empty when it has none).
 static func meter_rect(world: SimWorld, obj: SimObject) -> Rect2:
 	var size := CELL_METER_M
 	var center := Vector2.ZERO
 	match obj.def.kind:
 		ObjectDef.Kind.CELL:
+			var shown := obj
 			if obj.def.mount == ObjectDef.Mount.GROUND:
-				return Rect2()
-			center = _cell_meter_m(world, obj)
+				var power: PowerSystem = world.get_system(&"power")
+				power.sync(world)
+				shown = world.objects[power.sets[power.set_of[obj.id]].back()]
+			center = _cell_meter_m(world, shown)
 		ObjectDef.Kind.BATTERY, ObjectDef.Kind.GRID_TIE:
 			size = CABINET_METER_M
 			center = obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)

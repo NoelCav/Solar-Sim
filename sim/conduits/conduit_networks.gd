@@ -6,12 +6,15 @@ extends RefCounted
 
 var network := PackedInt32Array()   ## Per tile: its network, or -1 where the layer is empty
 var count := 0                      ## Number of networks
-var version := -1                   ## conduit_version the networks were built for
+var version := -1                   ## The key the networks were built for
 
 
-## Rebuilds the networks of `layer` (one byte per tile, nonzero = present) if it changed.
-func sync(grid: TileGrid, layer: PackedByteArray) -> void:
-	if version == grid.conduit_version:
+## Rebuilds the networks of `layer` (one byte per tile, nonzero = present) if it changed: when
+## `key` (by default the grid's conduit_version) differs from the one they were built for.
+func sync(grid: TileGrid, layer: PackedByteArray, key := -1) -> void:
+	if key < 0:
+		key = grid.conduit_version
+	if version == key:
 		return
 	var w := grid.width
 	var n := grid.size()
@@ -34,7 +37,7 @@ func sync(grid: TileGrid, layer: PackedByteArray) -> void:
 					network[nb] = count
 					stack.append(nb)
 		count += 1
-	version = grid.conduit_version
+	version = key
 
 
 ## The network at tile i, or -1.

@@ -11,12 +11,19 @@ extends SimSystem
 ## system (a lamp's brightness is what its network gave it the tick before) and before heat.
 
 var networks := ConduitNetworks.new()
+## What conducts: the wire layer, and the foot of every surface cell (a cell is a piece of wire,
+## so a row of them is one network without any laid between them).
+var conducts := PackedByteArray()
+## Surface cell sets: cells whose feet touch, left to right, as lists of object ids; one meter each.
+var sets := []
+var set_of := {}                               ## Object id -> index in `sets`
 var network_grid := PackedByteArray()          ## Per network: 1 if a grid connection is on it
 
 var _cells := []                               ## Per network: ids of the cells on it
 var _batteries := []                           ## Per network: ids of the batteries on it
 var _lamps := []                               ## Per network: ids of the lamps on it
-var _members_key := Vector2i(-1, -1)           ## (networks.version, objects_version) of _cells
+var _members_key := Vector2i(-1, -1)           ## (conduit_version, objects_version) of _cells
+var _conducts_key := Vector2i(-1, -1)          ## (conduit_version, objects_version) of `conducts`
 
 
 func system_name() -> StringName:
@@ -129,8 +136,8 @@ func rated_w(world: SimWorld, n: int) -> float:
 ## Brings the networks and who is on them up to date with the wires and objects (also while
 ## paused, for the inspector).
 func sync(world: SimWorld) -> void:
-	networks.sync(world.grid, world.grid.wire)
-	if _members_key != Vector2i(networks.version, world.objects_version):
+	_sync_networks(world)
+	if _members_key != Vector2i(world.grid.conduit_version, world.objects_version):
 		_rebuild_members(world)
 
 
@@ -144,11 +151,72 @@ func delivers(world: SimWorld, obj: SimObject) -> bool:
 
 ## The network object `obj` is connected to, or -1.
 func network_of(world: SimWorld, obj: SimObject) -> int:
-	networks.sync(world.grid, world.grid.wire)
+	_sync_networks(world)
 	for i in Mounting.port_tiles(world, obj):
 		if networks.at(i) >= 0:
 			return networks.at(i)
 	return -1
+
+
+## Brings `conducts` and the networks up to date with the wires and the surface cells.
+func _sync_networks(world: SimWorld) -> void:
+	var g := world.grid
+	var key := Vector2i(g.conduit_version, world.objects_version)
+	if key != _conducts_key:
+		conducts = g.wire.duplicate()
+		for obj: SimObject in world.objects.values():
+			if _is_surface_cell(obj):
+				for i in Mounting.port_tiles(world, obj):
+					conducts[i] = 1
+		_build_sets(world)
+		_conducts_key = key
+	networks.sync(g, conducts, g.conduit_version * 1048576 + world.objects_version)
+
+
+static func _is_surface_cell(obj: SimObject) -> bool:
+	return obj.def.kind == ObjectDef.Kind.CELL and obj.def.mount == ObjectDef.Mount.GROUND
+
+
+## Groups surface cells whose feet touch (a tile of one beside a tile of the other).
+func _build_sets(world: SimWorld) -> void:
+	sets.clear()
+	set_of.clear()
+	var at := {}   # Tile -> the cell whose foot is there
+	var cells := []
+	for obj: SimObject in world.objects.values():
+		if _is_surface_cell(obj):
+			cells.append(obj)
+			for i in Mounting.port_tiles(world, obj):
+				at[i] = obj.id
+	var parent := {}
+	for obj: SimObject in cells:
+		parent[obj.id] = obj.id
+	var w := world.grid.width
+	for obj: SimObject in cells:
+		for i in Mounting.port_tiles(world, obj):
+			for nb: int in [i - 1, i + 1, i - w, i + w]:
+				if at.has(nb):
+					parent[_root(parent, at[nb])] = _root(parent, obj.id)
+	var groups := {}
+	for obj: SimObject in cells:
+		var r := _root(parent, obj.id)
+		if not groups.has(r):
+			groups[r] = []
+		groups[r].append(obj)
+	for group: Array in groups.values():
+		group.sort_custom(func(a: SimObject, b: SimObject) -> bool: return a.position.x < b.position.x)
+		var ids := []
+		for obj: SimObject in group:
+			set_of[obj.id] = sets.size()
+			ids.append(obj.id)
+		sets.append(ids)
+
+
+static func _root(parent: Dictionary, id: int) -> int:
+	while parent[id] != id:
+		parent[id] = parent[parent[id]]
+		id = parent[id]
+	return id
 
 
 func _rebuild_members(world: SimWorld) -> void:
@@ -174,4 +242,4 @@ func _rebuild_members(world: SimWorld) -> void:
 				_lamps[n].append(obj.id)
 			ObjectDef.Kind.GRID_TIE:
 				network_grid[n] = 1
-	_members_key = Vector2i(networks.version, world.objects_version)
+	_members_key = Vector2i(world.grid.conduit_version, world.objects_version)

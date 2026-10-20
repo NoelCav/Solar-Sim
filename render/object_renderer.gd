@@ -74,8 +74,7 @@ func _draw() -> void:
 				var b: Vector2 = pieces[0][0][1] * px
 				draw_line(a, b, Color(0, 0, 0, 0.6), 5.0 if hl else 4.0, true)
 				draw_dashed_line(a, b, def.color, 3.0 if hl else 2.5, 6.0)
-	PowerMeters.draw_all(self, world, Transform2D.IDENTITY.scaled(Vector2.ONE / zoom), px,
-		[highlighted_id, selected_id])
+	PowerMeters.draw_all(self, world, Transform2D.IDENTITY.scaled(Vector2.ONE / zoom), px)
 
 
 ## Draws a stand on `ci` (screen units, `px` pixels per meter): a pole from the object center
