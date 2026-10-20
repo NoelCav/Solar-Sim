@@ -424,6 +424,28 @@ Built (run 01 group 4): the screen is the map with fixed panels around it (`Hud`
 - Built: paint tiles, place anything free (Alt floats it off its stand), set the time, undo (D6).
 - Planned: area fill, paint temperature / add heat; spawn liquid, smoke, steam (once those layers ship); freeze sun, weather, latitude; redo; toggle sim layers on/off for debugging.
 
+### 16.2 UI overhaul (proposal, 2026-10-20; the user's notes after playing the lamp build)
+
+What was said, grouped. Nothing here is a locked rule: layout, icons and flows are open until the user is happy.
+
+**Building (quick to do, quick to read)**
+- Dragging places many surface cells in a row (click and drag; one undo step). Neighbouring surface cells are one *set*: they conduct to each other (a cell acts as wire), need one connection to the network between them, and show one meter.
+- A wire visibly meets the foot of a device (today the wire stops at the tile above, so it doesn't look connected).
+- Wire is drawn as a line like roads and pipes in Cities: Skylines: press, drag, release draws the whole run (straight or one bend, with a preview); one undo takes the whole gesture (done for brush strokes: `SimCommand.group`). Connections to devices snap to their feet.
+- Several wire colours so wires can cross: a tile holds up to four channels (like Terraria's coloured wire); a network is one channel; a device joins the channel of the wire at its foot (chosen in its inspector when more than one is there).
+- The grid connection both sells and supplies (lamps already draw from it at retail): its meter and inspector show import and export.
+- Panning while the buy menu is open: right-drag or middle-drag pans in every tool (a plain right-click still drops the held item); left-drag paints only for items that are laid in runs (surface cells, wire, terrain).
+- Only things that can turn show a tilt ring and tilt buttons (done).
+
+**Layout (the part to decide)**
+- Proposal: a bottom toolbar, like Cities: Skylines and the hotbars of editing tools: category buttons with real icons (power, optics, machines, wires, terrain, tools) that open a shelf of every item in the category; a catalog of *everything* buyable with section buttons that jump down to each section; the clock, pause, speed and money in a slim top strip; the inspector as a floating card by the thing it describes (or docked, toggleable) instead of a fixed box; the help line becomes a menu with the controls, and a performance readout that can be toggled off sits in a corner.
+- The meters get redrawn as proper instruments (the enlarged one in the inspector most of all).
+- Light view draws *skins* (the lit strips along surfaces) instead of tinting whole blocks, with a gradient legend that reads like Skylines' overlays.
+- Icons: one set drawn in code from the item's shape, so every buyable has one (the download symbol goes).
+
+**Lighting (display, §6.8)**
+- Light stays on surfaces: it doesn't pass through the ground (the sim doesn't either; the display light field is shadowed the same way). Lit stands, lens rims, meters and wires come from the light at a point (a layer can say how bright it is anywhere, shadows included), and parallax backdrop layers get lit by the same field.
+
 ## 17. Project structure (Godot 4, latest stable)
 
 ```
