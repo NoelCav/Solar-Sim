@@ -217,9 +217,6 @@ public partial class LightEngine : RefCounted
     int _evTile, _evMat, _evPrevMat, _evSeg, _evMedium, _evBody;
 
     // --- Beam pass state ---------------------------------------------------------------------
-    readonly double[] _irr = new double[Bins];
-    double _u0, _laneW;
-    D2 _perp, _dir;
     readonly Dictionary<int, ObjInfo> _objects = new();
     readonly Dictionary<(int, long, int, long), PathRec> _cache = new();
     readonly List<Task> _tasks = new();

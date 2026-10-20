@@ -9,16 +9,17 @@ public partial class LightEngine
 {
     PathRec TraceAt(double u, double s0, int bin)
     {
-        D2 origin = _perp * u + _dir * s0;
-        if (_runObj == null || !CacheEnabled)
-            return TracePrimary(origin, _dir, bin);
+        D2 origin = _src.Origin(u, s0);
+        D2 dir = _src.Direction(u);
+        if (_runObj == null || !CacheEnabled || !_src.Parallel)
+            return TracePrimary(origin, dir, bin);
         var key = (_runObj.DefIdx, _runObj.AngleQ, bin, (long)Math.Round((u - _runObj.Uc) * 1e6));
         if (_cache.TryGetValue(key, out PathRec local))
         {
             // The cached part is only valid if this ray reaches this object where the cached one
             // reached its own: another object or tile in the way (e.g. a lens above this one)
             // changes everything after.
-            if (local != null && EntersAt(origin, bin, local.Pts[1] + _runObj.Pos))
+            if (local != null && EntersAt(origin, dir, bin, local.Pts[1] + _runObj.Pos))
             {
                 _cacheHits++;
                 PathRec rec = Instantiate(local);
@@ -27,13 +28,13 @@ public partial class LightEngine
                 ContinuePrimary(rec);
                 return rec;
             }
-            PathRec own = TracePrimary(origin, _dir, bin, _runId);
+            PathRec own = TracePrimary(origin, dir, bin, _runId);
             if (own.Term == Term.Pending)
                 ContinuePrimary(own);
             return own;
         }
         _cacheMisses++;
-        PathRec fresh = TracePrimary(origin, _dir, bin, _runId);
+        PathRec fresh = TracePrimary(origin, dir, bin, _runId);
         _cache[key] = fresh.Term == Term.Pending ? Localize(fresh) : null;
         if (fresh.Term == Term.Pending)
             ContinuePrimary(fresh);
@@ -43,19 +44,19 @@ public partial class LightEngine
     readonly PathRec _scratch = new();
     readonly double[] _scratchP = new double[Bins];
 
-    /// Whether a sun ray from `origin` first meets the run's object at `entry`.
-    bool EntersAt(D2 origin, int bin, D2 entry)
+    /// Whether a ray from `origin` first meets the run's object at `entry`.
+    bool EntersAt(D2 origin, D2 dir, int bin, D2 entry)
     {
         PathRec saved = _rec;
         _rec = _scratch;   // Nothing on the way should deposit; anything that does is dropped
         Array.Clear(_scratchP);
         _scratchP[bin] = 1.0;
-        March(origin, _dir, _scratchP, -1, -1);
+        March(origin, dir, _scratchP, -1, -1);
         _rec = saved;
         _scratch.Deps.Clear();
         if (_evKind != Ev.Surface || _owner[_evSeg] != _runId)
             return false;
-        D2 hit = _evO + _dir * _evT;
+        D2 hit = _evO + dir * _evT;
         D2 off = hit - entry;
         return off.X * off.X + off.Y * off.Y < 1e-12;
     }

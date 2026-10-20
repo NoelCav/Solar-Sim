@@ -21,12 +21,9 @@ public partial class LightEngine
     public void StartBeams(int[] runs, double[] sMins, float[] irradiance, double u0, double laneW, Vector2 perp,
         Vector2 dir, Godot.Collections.Dictionary objects, LightEngine prev, float[] areas, bool reuse)
     {
+        _src = new Source { U0 = u0, LaneW = laneW, Perp = D2.From(perp), Dir = D2.From(dir) };
         for (int b = 0; b < Bins; b++)
-            _irr[b] = irradiance[b];
-        _u0 = u0;
-        _laneW = laneW;
-        _perp = D2.From(perp);
-        _dir = D2.From(dir);
+            _src.Irradiance[b] = irradiance[b];
         _objects.Clear();
         foreach (var kv in objects)
         {
@@ -47,7 +44,7 @@ public partial class LightEngine
             int k0 = runs[r * 3], k1 = runs[r * 3 + 1], key = runs[r * 3 + 2];
             for (int b = 0; b < Bins; b++)
             {
-                if (_irr[b] <= 0)
+                if (_src.Irradiance[b] <= 0)
                     continue;
                 TaskLog old = null;
                 if (reuse && prev != null && prev._logs.TryGetValue((k0, k1, key, b), out TaskLog l)
@@ -159,8 +156,7 @@ public partial class LightEngine
     TaskLog TraceRun(Task task)
     {
         int bin = task.Bin;
-        double irr = _irr[bin];
-        if (irr <= 0)
+        if (_src.Irradiance[bin] <= 0)
             return null;
         var log = new TaskLog { K0 = task.K0, K1 = task.K1, Key = task.Key, Bin = bin, SMin = task.SMin };
         _log = log;
@@ -168,8 +164,8 @@ public partial class LightEngine
         int seg0 = _segFrom.Count;
         int render0 = _render.Count;
         _bboxEmpty = true;
-        double uLo = _u0 + task.K0 * _laneW;
-        double uHi = _u0 + (task.K1 + 1) * _laneW;
+        double uLo = _src.Edge(task.K0);
+        double uHi = _src.Edge(task.K1 + 1);
         _runId = task.Key;
         _runObj = _objects.TryGetValue(_runId, out ObjInfo info) ? info : null;
         double s0 = task.SMin - 0.02;
@@ -185,7 +181,7 @@ public partial class LightEngine
             uc = _runObj.Uc;
         }
         else if (_anchor.TryGetValue(_runId, out D2 anchor))
-            uc = anchor.Dot(_perp);
+            uc = _src.Coordinate(anchor);
         int j0 = (int)Math.Ceiling((uLo - uc) / BaseSpacing + 1e-6);
         int j1 = (int)Math.Floor((uHi - uc) / BaseSpacing - 1e-6);
         for (int j = j0; j <= j1; j++)
@@ -204,7 +200,7 @@ public partial class LightEngine
             prevR = r;
         }
         foreach (var iv in _intervals)
-            Settle(iv, irr, bin);
+            Settle(iv, bin);
         FlushReflections(bin);
         _intervals.Clear();
         _log = null;
@@ -346,10 +342,10 @@ public partial class LightEngine
         }
     }
 
-    void Settle(Interval iv, double irr, int bin)
+    void Settle(Interval iv, int bin)
     {
         PathRec ra = iv.Ra, rb = iv.Rb;
-        double half = irr * (iv.Ub - iv.Ua) * _depth * 0.5;   // W each ray carries for this interval
+        double half = _src.Watts(bin, iv.Ua, iv.Ub, _depth) * 0.5;   // W each ray carries for this interval
         foreach (var p in ra.Pts)
             Grow(p);
         foreach (var p in rb.Pts)
