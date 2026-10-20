@@ -39,7 +39,7 @@ static func probe_text(world: SimWorld, obj: SimObject) -> String:
 ## Where a probe's tag sits, in zoomed canvas units (world pixels × zoom): just past the
 ## probe's end point.
 static func probe_tag_rect(world: SimWorld, obj: SimObject, zoom: float) -> Rect2:
-	var end: Vector2 = obj.world_pieces()[0][0][1] * SimConst.TILE_PX / SimConst.TILE_M * zoom
+	var end: Vector2 = obj.world_pieces()[0][0][1] * SimConst.PX_PER_M * zoom
 	var size := ThemeDB.fallback_font.get_string_size(probe_text(world, obj), HORIZONTAL_ALIGNMENT_LEFT, -1, TAG_FONT)
 	return Rect2(end + Vector2(8, -size.y * 0.5), size).grow_individual(TAG_PAD.x, TAG_PAD.y, TAG_PAD.x, TAG_PAD.y)
 

@@ -88,7 +88,7 @@ func selected_object() -> SimObject:
 ## Pointer position in meters, from the last mouse event (so it follows the camera too).
 func mouse_m() -> Vector2:
 	var world_px := get_viewport().get_canvas_transform().affine_inverse() * _pointer
-	return world_px / (SimConst.TILE_PX / SimConst.TILE_M)
+	return world_px / (SimConst.PX_PER_M)
 
 
 func _input(event: InputEvent) -> void:
@@ -123,12 +123,12 @@ func hovered_object() -> int:
 		return -1
 	var m := mouse_m()
 	var zoom := _zoom()
-	var at := m * SimConst.TILE_PX / SimConst.TILE_M * zoom   # Zoomed canvas units, as tags
+	var at := m * SimConst.PX_PER_M * zoom   # Zoomed canvas units, as tags
 	for obj: SimObject in world.objects.values():
 		if obj.def.kind == ObjectDef.Kind.PROBE and MapMarkers.probe_tag_rect(world, obj, zoom).has_point(at):
 			return obj.id
 	var best := -1
-	var best_d := PICK_PX / (SimConst.TILE_PX / SimConst.TILE_M * _zoom())
+	var best_d := PICK_PX / (SimConst.PX_PER_M * _zoom())
 	for obj: SimObject in world.objects.values():
 		var pieces := obj.world_pieces()
 		if obj.def.is_closed() and Geometry2D.is_point_in_polygon(m, OpticsGen.outline(pieces)):
@@ -161,7 +161,7 @@ func _over_handle() -> bool:
 	var obj := selected_object()
 	if obj == null:
 		return false
-	var px := SimConst.TILE_PX / SimConst.TILE_M
+	var px := SimConst.PX_PER_M
 	var screen_px := mouse_m().distance_to(handle_m(obj)) * px * _zoom()
 	return screen_px <= HANDLE_PX * 1.8
 
@@ -336,7 +336,7 @@ func _draw() -> void:
 	# Screen units (scaled back by 1/zoom), so lines and text stay crisp at any zoom.
 	var zoom := _zoom()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
-	var px := SimConst.TILE_PX / SimConst.TILE_M * zoom
+	var px := SimConst.PX_PER_M * zoom
 	var obj := selected_object()
 	if obj != null and not uses_brush():
 		# Tilt ring: a faint circle, a line along the object's axis and a handle to drag.

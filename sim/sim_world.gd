@@ -102,10 +102,6 @@ func undo_last() -> void:
 		_history.pop_back().undo(self)
 
 
-func can_undo() -> bool:
-	return not _history.is_empty()
-
-
 ## Advances the simulation by one fixed tick.
 func tick() -> void:
 	flush_commands()

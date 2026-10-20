@@ -30,8 +30,7 @@ func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> voi
 	world = p_world
 	tool = p_tool
 	brush = p_brush
-	add_theme_stylebox_override(&"panel", UiStyle.box(UiStyle.PANEL_BG, 0, 12, UiStyle.PANEL_EDGE))
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiStyle.style_panel(self, 0, 12)
 	set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
 	offset_left = UiStyle.RAIL_W
 	offset_top = UiStyle.TOP_BAR_H
@@ -86,9 +85,7 @@ func _rebuild() -> void:
 func _build_catalog(search: String) -> void:
 	var head := HBoxContainer.new()
 	head.add_child(UiStyle.label("Build", 16))
-	var fill := Control.new()
-	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(fill)
+	head.add_child(UiStyle.spacer())
 	head.add_child(UiStyle.small_label("Creative: free" if world.creative else ""))
 	_content.add_child(head)
 	_search = LineEdit.new()
@@ -242,10 +239,8 @@ func _add_brush_size() -> void:
 
 
 func _add_hint(text: String) -> void:
-	var fill := Control.new()
-	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL if tool.mode != ObjectTool.Mode.BUILD else 0
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_content.add_child(fill)
+	if tool.mode != ObjectTool.Mode.BUILD:   # Pins the hint to the bottom (the catalog fills Build)
+		_content.add_child(UiStyle.spacer(true))
 	var l := UiStyle.small_label(text)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_content.add_child(l)

@@ -6,7 +6,6 @@ extends RefCounted
 ## radiates to the surroundings when hot. Probes have no mass to speak of and stay at air
 ## temperature. Later systems (cells, lens slices in M7) refine this node, not replace it.
 
-const SIGMA := 5.670374e-8
 const SHEET_THICKNESS_M := 0.003   ## Mirrors and cells: a thin sheet of their material
 const CONTACT_STEP_M := 0.05       ## Outline sampling for the tiles an object touches
 
@@ -43,7 +42,7 @@ func step(world: SimWorld, dt: float) -> void:
 		var t := obj.temperature_k
 		var conv := SimConst.CONVECTION_H * area * (t - air)
 		var t_env := world.ambient_k
-		var rad := float(info[2]) * SIGMA * area * (t * t * t * t - t_env * t_env * t_env * t_env)
+		var rad := float(info[2]) * SimConst.STEFAN_BOLTZMANN * area * (t * t * t * t - t_env * t_env * t_env * t_env)
 		var t_new := t + (obj.heat_in - (conv + rad) * dt) / capacity
 		# Losses alone can't take it past what it is cooling toward (guards tiny objects).
 		var floor_k := minf(air, t_env)

@@ -30,8 +30,7 @@ func setup(p_world: SimWorld, p_runner: Main) -> void:
 	world = p_world
 	runner = p_runner
 	_power = world.get_system(&"power")
-	add_theme_stylebox_override(&"panel", UiStyle.box(UiStyle.PANEL_BG, 0, 8, UiStyle.PANEL_EDGE))
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiStyle.style_panel(self, 0, 8)
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	custom_minimum_size.y = UiStyle.TOP_BAR_H
 	var row := HBoxContainer.new()
@@ -46,10 +45,7 @@ func setup(p_world: SimWorld, p_runner: Main) -> void:
 	_sky = UiStyle.small_label()
 	when.add_child(_sky)
 	row.add_child(_time_controls())
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(spacer)
+	row.add_child(UiStyle.spacer())
 	var money := VBoxContainer.new()
 	money.add_theme_constant_override(&"separation", 0)
 	row.add_child(money)
@@ -141,9 +137,7 @@ func _set_time_popup() -> PopupPanel:
 	popup.add_child(col)
 	var head := HBoxContainer.new()
 	head.add_child(UiStyle.label("Set time", 14))
-	var fill := Control.new()
-	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(fill)
+	head.add_child(UiStyle.spacer())
 	_hour_label = UiStyle.label("", 16, UiStyle.ACCENT)
 	head.add_child(_hour_label)
 	col.add_child(head)

@@ -44,7 +44,7 @@ func world_pieces() -> Array:
 ## Light arriving on the active face (probe, cell front) per spectral bin, W/m² across it.
 func incident_spectrum() -> PackedFloat32Array:
 	var s := incident.duplicate()
-	var area := def.size_m * SimConst.DEPTH_M
+	var area := def.face_area_m2()
 	for b in Spectrum.BIN_COUNT:
 		s[b] /= area
 	return s

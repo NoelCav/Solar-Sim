@@ -14,8 +14,7 @@ var _tip: Label
 
 func setup(p_overlay: OverlayRenderer) -> void:
 	overlay = p_overlay
-	add_theme_stylebox_override(&"panel", UiStyle.box(UiStyle.PANEL_BG, 8, 10, UiStyle.PANEL_EDGE))
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiStyle.style_panel(self, 8, 10)
 	set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
 	grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	grow_vertical = Control.GROW_DIRECTION_BEGIN

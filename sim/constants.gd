@@ -6,6 +6,7 @@ extends RefCounted
 # --- World scale ---
 const TILE_PX := 16                 ## Pixels per tile (rendering only)
 const TILE_M := 0.25                ## Meters per tile edge
+const PX_PER_M := TILE_PX / TILE_M  ## Rendering: world pixels per meter
 const DEPTH_M := 0.25               ## Depth of the 2D slice
 const TILE_VOLUME_M3 := TILE_M * TILE_M * DEPTH_M
 
@@ -13,6 +14,8 @@ const TILE_VOLUME_M3 := TILE_M * TILE_M * DEPTH_M
 const TICK_RATE := 20               ## Sim ticks per second at 1x (D7)
 const DT := 1.0 / TICK_RATE         ## Seconds per tick
 const DAY_LENGTH_S := 720.0         ## One full day at 1x (12 real minutes)
+## Real seconds one game second stands for: a game day is 24 h (heat capacity, energy sold).
+const DAY_COMPRESSION := 86400.0 / DAY_LENGTH_S
 const START_TIME_OF_DAY := 0.30     ## 0 = midnight, 0.5 = noon
 const MAX_TICKS_PER_FRAME := 8      ## Catch-up cap so a slow frame can't spiral
 
@@ -46,8 +49,8 @@ const RESTART_ANGLE_DEG := 3.0      ## Abandon a pass in progress if the sun jum
 const HEAT_BANDS := 6               ## Heat updates one of N row bands per tick, with dt × N
 const SKIN_STRIPS := 10             ## Surface skin strips per tile face (D18): 2.5 cm each
 ## Gameplay heat-capacity dial per phase (formulas stay real, things heat on game timescales).
-const HEAT_CAPACITY_SCALE_SOLID := DAY_LENGTH_S / 86400.0
-const HEAT_CAPACITY_SCALE_LIQUID := DAY_LENGTH_S / 86400.0
+const HEAT_CAPACITY_SCALE_SOLID := 1.0 / DAY_COMPRESSION
+const HEAT_CAPACITY_SCALE_LIQUID := 1.0 / DAY_COMPRESSION
 const HEAT_CAPACITY_SCALE_GAS := 1.0
 const CONVECTION_H := 10.0          ## W/(m²·K), solid/liquid surface ↔ air
 const AIR_EDDY_K := 1.0             ## W/(m·K), effective air↔air conductivity (mixing)
@@ -59,7 +62,3 @@ const RAY_PATHS_PER_TICK := 1000    ## Ray paths (with children) per tick, ~3 ms
 
 static func k_to_c(kelvin: float) -> float:
 	return kelvin - KELVIN_OFFSET
-
-
-static func c_to_k(celsius: float) -> float:
-	return celsius + KELVIN_OFFSET

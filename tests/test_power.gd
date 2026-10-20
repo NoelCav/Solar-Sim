@@ -46,7 +46,7 @@ func test_cell_reads_the_sun_on_its_front() -> void:
 		var light: LightSystem = world.get_system(&"light")
 		light.retrace(world)
 		var obj: SimObject = world.objects[world.next_object_id - 1]
-		var area := cell.size_m * SimConst.DEPTH_M
+		var area := cell.face_area_m2()
 		var arriving := world.light_dni * absf(world.light_direction.y) * area
 		var reflected := 0.0
 		for b in Spectrum.BIN_COUNT:

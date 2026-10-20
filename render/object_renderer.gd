@@ -33,7 +33,7 @@ func _draw() -> void:
 	# text stay one screen pixel sharp at any zoom instead of being magnified.
 	var zoom := get_viewport().get_canvas_transform().get_scale().x
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
-	var px := SimConst.TILE_PX / SimConst.TILE_M * zoom
+	var px := SimConst.PX_PER_M * zoom
 	var heat := view == ViewMode.HEAT and overlay != null
 	for obj: SimObject in world.objects.values():
 		if obj.mounted and obj.def.mount == ObjectDef.Mount.STAND:

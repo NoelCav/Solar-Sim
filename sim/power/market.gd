@@ -3,9 +3,8 @@ extends RefCounted
 ## The grid market (design doc §10): the price paid for exported energy follows a duck curve
 ## over the day, cheap at midday when every roof makes solar power and dear in the evening
 ## peak. Energy is counted in real time: a game day (SimConst.DAY_LENGTH_S) stands for 24 h,
-## so a watt for one game second earns what a watt earns in REAL_S_PER_GAME_S seconds.
+## so a watt for one game second earns what a watt earns in SimConst.DAY_COMPRESSION seconds.
 
-const REAL_S_PER_GAME_S := 86400.0 / SimConst.DAY_LENGTH_S
 const J_PER_KWH := 3.6e6
 ## Price per kWh through the day: [hour, $/kWh], linear between, wrapping at 24 h.
 const DUCK_CURVE := [
@@ -32,4 +31,4 @@ static func price_at_hour(hours: float) -> float:
 
 ## Money earned by exporting `watts` for `dt` game seconds at the current price, $.
 static func earnings(world: SimWorld, watts: float, dt: float) -> float:
-	return watts * dt * REAL_S_PER_GAME_S / J_PER_KWH * price_per_kwh(world)
+	return watts * dt * SimConst.DAY_COMPRESSION / J_PER_KWH * price_per_kwh(world)

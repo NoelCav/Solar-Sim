@@ -108,7 +108,7 @@ func _object_info(obj: SimObject) -> Dictionary:
 		d["could_make_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(_main.world)), 0.001)
 		d["delivering_w"] = snappedf(obj.power_w, 0.001)
 		d["front_direct_w_m2"] = snappedf(Spectrum.total(obj.incident_direct) * light.power_scale(_main.world)
-			/ (obj.def.size_m * SimConst.DEPTH_M), 0.01)
+			/ (obj.def.face_area_m2()), 0.01)
 	return d
 
 
@@ -404,7 +404,7 @@ func _cmd_wavelength(a: Dictionary) -> Dictionary:
 
 func _cmd_camera(a: Dictionary) -> Dictionary:
 	var cam := _main.get_node("Camera") as Camera2D
-	var px := SimConst.TILE_PX / SimConst.TILE_M
+	var px := SimConst.PX_PER_M
 	cam.position = Vector2(float(a.get("x", cam.position.x / px)), float(a.get("y", cam.position.y / px))) * px
 	if a.has("zoom"):
 		cam.zoom = Vector2.ONE * float(a.zoom)

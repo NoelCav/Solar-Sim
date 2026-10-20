@@ -33,8 +33,6 @@ var conduit_version: int = 0        ## Bumped when a conduit layer (wire) change
 
 var _sky_tiles := PackedInt32Array()
 var _sky_version := -1
-var _top_row := 0
-var _top_version := -1
 
 
 func _init(w: int, h: int, ambient_k: float = SimConst.DEFAULT_AMBIENT_K) -> void:
@@ -80,17 +78,6 @@ func coords(i: int) -> Vector2i:
 	return Vector2i(i % width, i / width)
 
 
-func get_material(x: int, y: int) -> int:
-	return material[idx(x, y)]
-
-
-## Low-level setter; callers outside the sim should go through commands (D6).
-func set_material(i: int, mat_id: int) -> void:
-	material[i] = mat_id
-	integrity[i] = 1.0
-	structure_version += 1
-
-
 func mark_structure_changed() -> void:
 	structure_version += 1
 
@@ -108,18 +95,6 @@ func sky_tiles(is_gas: PackedByteArray) -> PackedInt32Array:
 					break
 		_sky_version = structure_version
 	return _sky_tiles
-
-
-## Topmost row containing any non-air tile, or `height` if the grid is empty.
-func top_nonair_row() -> int:
-	if _top_version != structure_version:
-		_top_row = height
-		for i in size():
-			if material[i] != MaterialDB.AIR_ID:
-				_top_row = i / width
-				break
-		_top_version = structure_version
-	return _top_row
 
 
 ## Content hash over all persistent layers, used by determinism tests and desync checks.

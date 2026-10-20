@@ -18,8 +18,7 @@ var _buttons: Array[Button] = []
 
 func setup(p_tool: ObjectTool, toggle_help: Callable) -> void:
 	tool = p_tool
-	add_theme_stylebox_override(&"panel", UiStyle.box(UiStyle.PANEL_BG, 0, 8, UiStyle.PANEL_EDGE))
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiStyle.style_panel(self, 0, 8)
 	set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
 	offset_top = UiStyle.TOP_BAR_H
 	custom_minimum_size.x = UiStyle.RAIL_W
@@ -36,10 +35,7 @@ func setup(p_tool: ObjectTool, toggle_help: Callable) -> void:
 	col.add_child(HSeparator.new())
 	col.add_child(_rail_button(&"undo", "", "Undo (Ctrl+Z)",
 		func() -> void: tool.world.enqueue(UndoCommand.new())))
-	var fill := Control.new()
-	fill.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(fill)
+	col.add_child(UiStyle.spacer(true))
 	col.add_child(_rail_button(&"help", "F1", "Show or hide the help line", toggle_help))
 
 

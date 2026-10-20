@@ -110,7 +110,7 @@ static func _shown_share(colors: Array[Color]) -> float:
 func rebuild() -> void:
 	_seen_version = _light.trace_version
 	_balance()
-	var px := SimConst.TILE_PX / SimConst.TILE_M
+	var px := SimConst.PX_PER_M
 	var verts := PackedVector2Array()
 	var cols := PackedColorArray()
 	_build_sheet(verts, cols, px)

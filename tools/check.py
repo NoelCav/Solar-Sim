@@ -18,7 +18,7 @@ CODE_DIRS = ["sim", "render", "ui", "debug", "scenes", "tests"]
 PRESENTATION_DIRS = ["render", "ui", "scenes", "debug"]
 
 # One home per formula (style.md "One source of truth"): a pattern that may only appear in its
-# home file. Add an entry whenever a formula is centralized, so copies can't creep back.
+# home file (or a tuple of homes: one per language, when C# can't read the GDScript constant). Add an entry whenever a formula is centralized, so copies can't creep back.
 ONE_HOME = [
     (r"surface_absorptivity\[\w+\]\s*\*\s*Spectrum\.AM15_SHARE", "sim/material_db.gd",
      "sun-weighted absorptivity: use MaterialDB.sun_absorptivity"),
@@ -29,6 +29,12 @@ ONE_HOME = [
     (r"MOON_FULL_RATIO\s*(?:if|\))", "render/display_light.gd",
      "night exposure: use DisplayLight.exposure"),
     (r"\"UV %s · visible %s · IR %s\"", "ui/readout.gd", "band readout: use Readout.bands"),
+    (r"TILE_PX\s*/\s*(?:SimConst\.)?TILE_M", "sim/constants.gd", "pixels per meter: use SimConst.PX_PER_M"),
+    (r"size_m\s*\*\s*SimConst\.DEPTH_M", "sim/objects/object_def.gd", "face area: use ObjectDef.face_area_m2"),
+    (r"86400\.0\s*/\s*(?:SimConst\.)?DAY_LENGTH_S|DAY_LENGTH_S\s*/\s*86400", "sim/constants.gd",
+     "game day to real time: use SimConst.DAY_COMPRESSION"),
+    (r"5\.670\d*e-8", ("sim/constants.gd", "sim/thermal/HeatKernel.cs"),
+     "Stefan–Boltzmann: use SimConst.STEFAN_BOLTZMANN (C#: HeatKernel.StefanBoltzmann)"),
 ]
 
 
@@ -110,7 +116,7 @@ def check_one_home(findings):
     for p in code_files((".gd", ".cs", ".gdshader")):
         text = read(p)
         for pattern, home, why in ONE_HOME:
-            if rel(p) == home:
+            if rel(p) in (home if isinstance(home, tuple) else (home,)):
                 continue
             for n, line in enumerate(text.splitlines(), 1):
                 if re.search(pattern, line):

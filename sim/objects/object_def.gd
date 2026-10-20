@@ -66,6 +66,11 @@ func build_pieces() -> Array:
 			return OpticsGen.flat_strip(size_m)
 
 
+## Area of the active face (cell, probe, mirror): its width times the slice depth, m².
+func face_area_m2() -> float:
+	return size_m * SimConst.DEPTH_M
+
+
 ## True for objects whose pieces enclose an optical body of `material`.
 func is_body() -> bool:
 	return kind == Kind.LENS or kind == Kind.PRISM

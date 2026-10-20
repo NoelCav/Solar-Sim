@@ -13,8 +13,6 @@ namespace SolarSim;
 [GlobalClass]
 public partial class SkinKernel : RefCounted
 {
-    const double Sigma = 5.670374419e-8;
-
     int _strips;
     int[] _faceTile = System.Array.Empty<int>(), _faceNext = System.Array.Empty<int>();
     int[] _runStart = System.Array.Empty<int>();
@@ -71,7 +69,7 @@ public partial class SkinKernel : RefCounted
                 double tTile = tileTemp[_faceTile[f]], tNext = tileTemp[_faceNext[f]];
                 double tEnv = _faceSky[f] == 1 ? skyK : tNext;
                 double ts = skinTemp[i];
-                double gr = radiation ? _emissivity[i] * Sigma * _area * (ts * ts + tEnv * tEnv) * (ts + tEnv) : 0.0;
+                double gr = radiation ? _emissivity[i] * HeatKernel.StefanBoltzmann * _area * (ts * ts + tEnv * tEnv) * (ts + tEnv) : 0.0;
                 double left = i > i0 ? _gLat[i - 1] : 0.0;
                 double right = i + 1 < i1 ? _gLat[i] : 0.0;
                 _a[i] = -left;

@@ -11,6 +11,9 @@ namespace SolarSim;
 [GlobalClass]
 public partial class HeatKernel : RefCounted
 {
+    /// <summary>Stefan–Boltzmann constant, W/(m²·K⁴): the C# home of SimConst.STEFAN_BOLTZMANN.</summary>
+    public const double StefanBoltzmann = 5.670374419e-8;
+
     const float FlatEpsK = 1e-4f;   // Temperature differences below this count as none
 
     int _w, _h;
@@ -137,14 +140,13 @@ public partial class HeatKernel : RefCounted
     {
         double sky4 = skyK * skyK * skyK * skyK;
         double area = _skyArea;
-        const double sigma = 5.670374419e-8;
         for (int k = 0; k < _sky.Length; k++)
         {
             int i = _sky[k];
             if (i < i0 || i >= i1)
                 continue;
             double t = temp[i];
-            double p = _skyEmissivity[k] * sigma * (t * t * t * t - sky4) * area;
+            double p = _skyEmissivity[k] * StefanBoltzmann * (t * t * t * t - sky4) * area;
             double dt = p * h * _invC[i];
             temp[i] = (float)(System.Math.Abs(dt) < System.Math.Abs(t - skyK) ? t - dt : skyK);
         }

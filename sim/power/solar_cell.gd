@@ -66,13 +66,13 @@ static func analyze(def: ObjectDef, spectrum: PackedFloat32Array, temp_k: float,
 ## A cell's rated power, W: what it makes face-on to plain sunlight (AM1.5,
 ## SimConst.REFERENCE_DNI) at 25 °C, like a panel's nameplate watts.
 static func rated_power(def: ObjectDef) -> float:
-	var area := def.size_m * SimConst.DEPTH_M
+	var area := def.face_area_m2()
 	return max_power(def, Spectrum.from_total(SimConst.REFERENCE_DNI * area), T_REF_K, area)
 
 
 ## A cell's rated efficiency: rated_power over the plain sunlight on its face.
 static func rated_efficiency(def: ObjectDef) -> float:
-	return rated_power(def) / (SimConst.REFERENCE_DNI * def.size_m * SimConst.DEPTH_M)
+	return rated_power(def) / (SimConst.REFERENCE_DNI * def.face_area_m2())
 
 
 ## The front-face light of cell object `obj` now, W per bin: the traced light times
@@ -89,10 +89,14 @@ static func object_temperature(obj: SimObject) -> float:
 	return obj.temperature_k if obj.temperature_k > 0.0 else T_REF_K
 
 
+## analyze() for cell object `obj` now: its front light (object_light), temperature and face.
+static func object_analysis(obj: SimObject, light_scale: float) -> Dictionary:
+	return analyze(obj.def, object_light(obj, light_scale), object_temperature(obj), obj.def.face_area_m2())
+
+
 ## What cell object `obj` could deliver now, W.
 static func object_power(obj: SimObject, light_scale: float) -> float:
-	return max_power(obj.def, object_light(obj, light_scale), object_temperature(obj),
-		obj.def.size_m * SimConst.DEPTH_M)
+	return object_analysis(obj, light_scale)["power_w"]
 
 
 ## η_voltage at concentration c (clamped below at a thousandth of a sun).

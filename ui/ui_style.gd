@@ -34,9 +34,25 @@ static func box(bg: Color, radius := 6, margin := 8, border := Color.TRANSPARENT
 ## A panel that stops clicks from reaching the world.
 static func panel(radius := 6, margin := 8) -> PanelContainer:
 	var p := PanelContainer.new()
+	style_panel(p, radius, margin)
+	return p
+
+
+## Gives `p` the panel look and makes it stop clicks from reaching the world.
+static func style_panel(p: PanelContainer, radius := 6, margin := 8) -> void:
 	p.add_theme_stylebox_override(&"panel", box(PANEL_BG, radius, margin, PANEL_EDGE))
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
-	return p
+
+
+## An invisible filler that takes the spare room in a box row (or column when `vertical`).
+static func spacer(vertical := false) -> Control:
+	var c := Control.new()
+	if vertical:
+		c.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	else:
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
 
 
 static func button(text: String, tip: String, action: Callable) -> Button:

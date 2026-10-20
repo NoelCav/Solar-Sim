@@ -32,7 +32,6 @@ var ay := PackedFloat64Array()
 var ex := PackedFloat64Array()
 var ey := PackedFloat64Array()
 var _width := 0
-var _height := 0
 
 
 func clear() -> void:
@@ -72,16 +71,9 @@ func add_polyline(points: PackedVector2Array, normals: PackedVector2Array, p_fro
 	piece_count += 1
 
 
-## Shading normal at parameter u along segment s, on the same side as the geometric normal.
-func shading_normal(s: int, u: float) -> Vector2:
-	var n := normal_a[s].lerp(normal_b[s], u).normalized()
-	return n if n.dot(normal[s]) > 0.0 else normal[s]
-
-
 ## Buckets segments into every tile their bounding box touches.
 func build_buckets(width: int, height: int) -> void:
 	_width = width
-	_height = height
 	var count_s := count()
 	for arr in [ax, ay, ex, ey]:
 		arr.resize(count_s)
@@ -120,12 +112,3 @@ func build_buckets(width: int, height: int) -> void:
 				var i := y * width + x
 				cell_items[fill[i]] = s
 				fill[i] += 1
-
-
-## Tile rows covered by any segment: the topmost one, or `height` if there are none.
-func top_row() -> int:
-	var top := _height
-	var inv := 1.0 / SimConst.TILE_M
-	for s in count():
-		top = mini(top, floori(minf(a[s].y, b[s].y) * inv))
-	return maxi(top, 0)

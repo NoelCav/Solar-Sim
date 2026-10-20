@@ -37,8 +37,7 @@ func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> voi
 	brush = p_brush
 	_light = world.get_system(&"light")
 	_power = world.get_system(&"power")
-	add_theme_stylebox_override(&"panel", UiStyle.box(UiStyle.PANEL_BG, 8, 12, UiStyle.PANEL_EDGE))
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	UiStyle.style_panel(self, 8, 12)
 	set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	offset_left = -WIDTH - UiStyle.GAP
 	offset_right = -UiStyle.GAP
@@ -170,7 +169,7 @@ func _cell_text(obj: SimObject, full: bool) -> String:
 	var irr := obj.incident_irradiance() * _light.power_scale(world)
 	var watts := SolarCell.object_power(obj, _light.power_scale(world))
 	var rated := SolarCell.rated_power(obj.def)
-	var eta := watts / (irr * obj.def.size_m * SimConst.DEPTH_M) if irr > 0.0 else 0.0
+	var eta := watts / (irr * obj.def.face_area_m2()) if irr > 0.0 else 0.0
 	var s := "\nmaking %s" % Readout.power(watts) if _power.sells(world, obj) \
 		else "\ncould make %s  [color=#8a93a0](not wired to a grid connection)[/color]" % Readout.power(watts)
 	if not full:
@@ -189,8 +188,7 @@ func _cell_text(obj: SimObject, full: bool) -> String:
 
 ## The selected cell's bars: where its light goes, and its power by color.
 func _show_cell_bars(obj: SimObject) -> void:
-	var a := SolarCell.analyze(obj.def, SolarCell.object_light(obj, _light.power_scale(world)),
-		SolarCell.object_temperature(obj), obj.def.size_m * SimConst.DEPTH_M)
+	var a := SolarCell.object_analysis(obj, _light.power_scale(world))
 	var light := 0.0
 	for k: String in ["power_w", "reflected_w", "below_gap_w", "excess_w"] + ELECTRICAL_KEYS:
 		light += a[k]
