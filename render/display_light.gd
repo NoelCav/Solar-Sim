@@ -10,7 +10,8 @@ extends RefCounted
 
 const MOON_EXPOSURE := 0.35                  ## A full moon draws at this fraction of daylight
 const MOON_TINT := Vector3(0.62, 0.74, 1.0)  ## Night vision: moonlight reads pale blue
-const LAMP_EXPOSURE := 100.0                ## At night a lamp's light is drawn this many times brighter than traced
+## At night a lamp's light is drawn this many times brighter than traced (1 W/m² reads as full).
+const LAMP_EXPOSURE := 1000.0
 const NIGHT_AMBIENT := 0.002                 ## Brightness of unlit things at night (linear; ~4 % on screen)
 
 

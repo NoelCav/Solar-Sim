@@ -68,17 +68,25 @@ func _process(delta: float) -> void:
 		item.modulate = Color(v, v, v, item.modulate.a)
 
 
-## Per surface strip (D18), how lit it is by the light arriving on it: irradiance at the
-## view's exposure, relative to plain sunlight, 0..1. One texel per strip: x = tile x ·
-## strips + strip, y = tile y · 4 + face.
 func _rebuild_light() -> void:
 	_light_seen = _light.trace_version
 	_light_timer = LIGHT_REFRESH_S
-	_light_bytes.fill(0)
+	var g := world.grid
+	_light_bytes = light_bytes(world, _light)
+	_light_image.set_data(g.width * SimConst.SKIN_STRIPS, g.height * 4, false, Image.FORMAT_R8, _light_bytes)
+	_light_texture.update(_light_image)
+
+
+## Per surface strip (D18), how lit it is by the light arriving on it from every layer:
+## irradiance at the layer's exposure, relative to plain sunlight, 0..255. One byte per strip:
+## x = tile x · strips + strip, y = tile y · 4 + face.
+static func light_bytes(world: SimWorld, light: LightSystem) -> PackedByteArray:
 	var g := world.grid
 	var n := SimConst.SKIN_STRIPS
 	var row := g.width * n
-	for layer in _light.layers():
+	var bytes := PackedByteArray()
+	bytes.resize(g.size() * 4 * n)
+	for layer in light.layers():
 		var exposure := DisplayLight.exposure(world) if layer.lamp_id < 0 else DisplayLight.lamp_exposure(world)
 		var scale := layer.irradiance_scale(world) * n * exposure / SimConst.REFERENCE_DNI
 		var ids := layer.strip_ids
@@ -87,9 +95,8 @@ func _rebuild_light() -> void:
 			var face := ids[k] / n            # tile * 4 + side
 			var tile := face / 4
 			var at := ((tile / g.width) * 4 + face % 4) * row + (tile % g.width) * n + ids[k] % n
-			_light_bytes[at] = mini(_light_bytes[at] + int(clampf(arriving[k] * scale, 0.0, 1.0) * 255.0), 255)
-	_light_image.set_data(row, g.height * 4, false, Image.FORMAT_R8, _light_bytes)
-	_light_texture.update(_light_image)
+			bytes[at] = mini(bytes[at] + int(clampf(arriving[k] * scale, 0.0, 1.0) * 255.0), 255)
+	return bytes
 
 
 func _build_palette() -> void:

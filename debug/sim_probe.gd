@@ -40,6 +40,7 @@ const COMMANDS := {
 		+ "the player's site",
 	"power": "money, grid price, and each wire network: tiles, grid connection, W sold, batteries' stance, "
 		+ "objects on it",
+	"shown": "how lit the surfaces are drawn (TileRenderer.light_bytes): lit strips, brightest, ambient, lamp exposure",
 	"charge": "{id, fraction}: sets a battery's charge (0 to 1) directly, for setting up a case",
 	"wire": "{x0, y0, x1, y1, remove: false}: lay (or remove) wire along an L from (x0, y0) across, then "
 		+ "down/up to (x1, y1)",
@@ -421,6 +422,23 @@ func _cmd_site(a: Dictionary) -> Dictionary:
 			_main.load_site.call_deferred("")
 			return {"ok": true, "note": "the player's site on the next frame"}
 	return {"error": "op is save, reset, scenario or load"}
+
+
+func _cmd_shown(_a: Dictionary) -> Dictionary:
+	var light: LightSystem = world.get_system(&"light")
+	var bytes := TileRenderer.light_bytes(world, light)
+	var lit := 0
+	var best := 0
+	for v in bytes:
+		if v > 0:
+			lit += 1
+			best = maxi(best, v)
+	var layers := []
+	for l in light.layers():
+		layers.append({"lamp": l.lamp_id, "strips": l.strip_ids.size(), "scale": snappedf(l.irradiance_scale(world), 0.001),
+			"trace_version": l.trace_version})
+	return {"lit_strips": lit, "brightest_of_255": best, "ambient": DisplayLight.ambient(world),
+		"lamp_exposure": DisplayLight.lamp_exposure(world), "layers": layers}
 
 
 func _cmd_charge(a: Dictionary) -> Dictionary:
