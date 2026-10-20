@@ -3,9 +3,11 @@ extends Node2D
 ## Pointer tools (creative mode). All edits are commands (D6).
 ## - Select (default, Esc / 0): click an object to select it, drag it to move, drag the ring
 ##   handle to tilt (Ctrl snaps to 15°); dragging empty space pans the view.
-## - Build (B, 1–9): pick an item from the list, LMB places it (R / F tilt the ghost first);
-##   existing objects can still be dragged. RMB goes back to Select. Objects go on stands
-##   (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
+## - Build (B): drag an item from the catalog (ToolPanel) onto the map; or pick one with 1–9
+##   and click to place it (R / F tilt the ghost first; RMB drops the pick). With nothing
+##   picked the mouse works as in Select. Objects go on stands (Mounting) that snap to tile
+##   columns and heights; in creative mode Alt floats them.
+## The map ignores the pointer while it is over a panel (Hud.covers): no ghost, no hover.
 ## - Paint (T): the tile brush (CreativeBrush) owns the mouse.
 ## - Wire (V): the same brush lays wire (LMB) and removes it (RMB).
 ## In any mode R / F rotate the selected or hovered object (Shift for fine steps), as does
@@ -24,6 +26,7 @@ const HANDLE_PX := 7.0          ## Screen radius of the tilt handle
 const RING_MARGIN_M := 0.15     ## Gap between an object and its tilt ring
 
 var world: SimWorld
+var hud: Hud                     ## Set by Main after setup: which screen areas are panels
 var brush: CreativeBrush
 var renderer: ObjectRenderer
 var defs: Array[ObjectDef] = []
@@ -56,8 +59,8 @@ func setup(p_world: SimWorld, object_db: ObjectDB, p_brush: CreativeBrush, p_ren
 
 func set_mode(m: Mode) -> void:
 	mode = m
-	if mode == Mode.BUILD and (selected < 0 or selected >= defs.size()):
-		selected = 0
+	if mode != Mode.BUILD:
+		selected = -1
 	brush.enabled = uses_brush()
 	brush.wire = mode == Mode.WIRE
 	_end_gestures()
@@ -116,6 +119,8 @@ func _target_id() -> int:
 
 ## The object under the cursor (a probe's reading tag, inside a body, or near a line), or -1.
 func hovered_object() -> int:
+	if _over_ui():
+		return -1
 	var m := mouse_m()
 	var zoom := _zoom()
 	var at := m * SimConst.TILE_PX / SimConst.TILE_M * zoom   # Zoomed canvas units, as tags
@@ -222,7 +227,9 @@ func _mouse_button(mb: InputEventMouseButton) -> void:
 			_release()
 		get_viewport().set_input_as_handled()
 	elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
-		if mode == Mode.BUILD:
+		if selected_def() != null:
+			selected = -1   # Drop the picked item first
+		elif mode == Mode.BUILD:
 			set_mode(Mode.SELECT)
 		else:
 			selected_id = -1
@@ -243,7 +250,7 @@ func _press() -> void:
 		_drag_id = id
 		_drag_from = obj.position
 		_drag_offset = obj.position - mouse_m()
-	elif mode == Mode.BUILD:
+	elif selected_def() != null:
 		place_selected()
 	else:
 		selected_id = -1
@@ -283,6 +290,11 @@ func place_selected() -> void:
 		world.enqueue(PlaceObjectCommand.new(selected_def(), mouse_m(), ghost_angle, _mounting()))
 
 
+## Whether the pointer is over a panel (the map underneath ignores it).
+func _over_ui() -> bool:
+	return hud != null and hud.covers(_pointer)
+
+
 ## Whether the next placed object goes on its stand (always, unless Alt in creative mode).
 func _mounting() -> bool:
 	return not (world.creative and Input.is_key_pressed(KEY_ALT))
@@ -301,9 +313,10 @@ func _process(_delta: float) -> void:
 	if selected_id >= 0 and not world.objects.has(selected_id):
 		selected_id = -1
 	hovered_id = hovered_object() if not uses_brush() else -1
+	brush.on_map = not _over_ui()
 	renderer.highlighted_id = _drag_id if _drag_id >= 0 else hovered_id
 	renderer.selected_id = selected_id
-	if mode == Mode.SELECT or mode == Mode.BUILD:
+	if (mode == Mode.SELECT or mode == Mode.BUILD) and not _over_ui():
 		var shape := Input.CURSOR_ARROW
 		if _panning:
 			shape = Input.CURSOR_DRAG
@@ -341,7 +354,7 @@ func _draw() -> void:
 			Color(0, 0, 0, 0.7))
 		draw_string(_font, h + Vector2(12, -10), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.9, 0.6))
 	var def := selected_def()
-	if def == null or _drag_id >= 0 or hovered_id >= 0:
+	if def == null or _drag_id >= 0 or hovered_id >= 0 or _over_ui():
 		return
 	# Placement ghost where the object will go (snapped to its stand, Mounting), red where the
 	# space is occupied (Placement) or there is no ground.

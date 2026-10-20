@@ -1,11 +1,12 @@
 class_name TopBar
 extends PanelContainer
-## The strip along the top of the screen: the clock and sky on the left; pause, speed and
-## time jumps; money, what the site is selling and the grid price on the right; then the
-## view and wavelength. Actions go to Main.
+## The strip along the top of the screen: the clock and sky on the left; pause, speed (− / +
+## steps through Main.SPEEDS), time jumps and Set time; money, what the site is selling and
+## the grid price on the right; then the view and wavelength. Actions go to Main.
 
-const JUMPS := [[-6.0, "−6 h  (Shift+,)"], [-1.0, "−1 h  (,)"], [-0.5, "−30 min"], [0.5, "+30 min"],
-	[1.0, "+1 h  (.)"], [6.0, "+6 h  (Shift+.)"]]
+## Clock jumps: [hours, label, tooltip]. They move the sun without simulating the time between.
+const JUMPS := [[-1.0, "−1 h", "Back an hour (,)"], [0.5, "+30 m", "Forward half an hour"],
+	[1.0, "+1 h", "Forward an hour (.)"], [6.0, "+6 h", "Forward six hours (Shift+.)"]]
 
 var world: SimWorld
 var runner: Main
@@ -14,7 +15,10 @@ var _power: PowerSystem
 var _clock: Label
 var _sky: Label
 var _pause: Button
-var _speeds: Array[Button] = []
+var _speed: Label
+var _set_time: PopupPanel
+var _hour: HSlider
+var _hour_label: Label
 var _money: Label
 var _selling: Label
 var _price: Label
@@ -67,7 +71,7 @@ func setup(p_world: SimWorld, p_runner: Main) -> void:
 
 func update() -> void:
 	var tod := world.time_of_day() * 24.0
-	_clock.text = "Day %d · %02d:%02d" % [world.day_number() + 1, int(tod), int(fmod(tod, 1.0) * 60.0)]
+	_clock.text = "Day %d · %s" % [world.day_number() + 1, Readout.clock(tod)]
 	var air := "air %.1f °C" % SimConst.k_to_c(world.ambient_k)
 	if world.sun_is_up:
 		_sky.text = "Sun %.0f° · %.0f W/m² · %s" % [rad_to_deg(world.sun_elevation), world.sun_dni, air]
@@ -77,8 +81,8 @@ func update() -> void:
 	else:
 		_sky.text = "Night · moon set · %s" % air
 	_pause.text = "Play" if runner.paused else "Pause"
-	for k in _speeds.size():
-		_speeds[k].set_pressed_no_signal(not runner.paused and Main.SPEEDS[k] == runner.speed)
+	_speed.text = "%d×" % runner.speed
+	_speed.modulate.a = 0.45 if runner.paused else 1.0
 	_money.text = Readout.money(world.money)
 	var selling := 0.0
 	_power.sync(world)
@@ -104,22 +108,70 @@ func _time_controls() -> Control:
 	_pause = UiStyle.button("Pause", "Pause or resume (Space)", runner.toggle_pause)
 	_pause.custom_minimum_size.x = 64
 	row.add_child(_pause)
-	var group := ButtonGroup.new()
-	for n in Main.SPEEDS:
-		var b := UiStyle.toggle("%d×" % n, "Run at %d× speed (Tab cycles)" % n, runner.set_speed.bind(n), group)
-		b.custom_minimum_size.x = 38
-		row.add_child(b)
-		_speeds.append(b)
-	var jump := MenuButton.new()
-	jump.text = "Jump time ▾"
-	jump.flat = false
-	jump.focus_mode = Control.FOCUS_NONE
-	jump.tooltip_text = "Move the clock (and the sun) without simulating the time between"
-	for k in JUMPS.size():
-		jump.get_popup().add_item(JUMPS[k][1], k)
-	jump.get_popup().id_pressed.connect(func(id: int) -> void: runner.skip_hours(JUMPS[id][0]))
-	row.add_child(jump)
+	row.add_child(UiStyle.button("−", "Slower", _step_speed.bind(-1)))
+	_speed = UiStyle.label("1×", 14, UiStyle.ACCENT)
+	_speed.custom_minimum_size.x = 34
+	_speed.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_speed.tooltip_text = "Simulation speed (Tab cycles)"
+	_speed.mouse_filter = Control.MOUSE_FILTER_PASS
+	row.add_child(_speed)
+	row.add_child(UiStyle.button("+", "Faster", _step_speed.bind(1)))
+	row.add_child(VSeparator.new())
+	for j: Array in JUMPS:
+		row.add_child(UiStyle.button(j[1], j[2] + ": moves the sun without simulating the time between",
+			runner.skip_hours.bind(j[0])))
+	var set_button := UiStyle.button("Set time…", "Jump to an hour of the day", _open_set_time)
+	row.add_child(set_button)
+	_set_time = _set_time_popup()
+	add_child(_set_time)
 	return row
+
+
+## One step up or down Main.SPEEDS (and running again if paused).
+func _step_speed(step: int) -> void:
+	var k := clampi(Main.SPEEDS.find(runner.speed) + step, 0, Main.SPEEDS.size() - 1)
+	runner.set_speed(Main.SPEEDS[k])
+
+
+func _set_time_popup() -> PopupPanel:
+	var popup := PopupPanel.new()
+	popup.add_theme_stylebox_override(&"panel", UiStyle.box(UiStyle.PANEL_BG, 8, 12, UiStyle.PANEL_EDGE))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override(&"separation", 8)
+	popup.add_child(col)
+	var head := HBoxContainer.new()
+	head.add_child(UiStyle.label("Set time", 14))
+	var fill := Control.new()
+	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(fill)
+	_hour_label = UiStyle.label("", 16, UiStyle.ACCENT)
+	head.add_child(_hour_label)
+	col.add_child(head)
+	_hour = HSlider.new()
+	_hour.min_value = 0.0
+	_hour.max_value = 23.75
+	_hour.step = 0.25
+	_hour.custom_minimum_size.x = 260
+	_hour.focus_mode = Control.FOCUS_NONE
+	_hour.value_changed.connect(func(h: float) -> void: _hour_label.text = Readout.clock(h))
+	col.add_child(_hour)
+	var ticks := HBoxContainer.new()
+	for t: String in ["00:00", "06:00", "12:00", "18:00", "24:00"]:
+		var l := UiStyle.small_label(t)
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ticks.add_child(l)
+	col.add_child(ticks)
+	col.add_child(UiStyle.button("Set", "Move the clock to this hour of the day", func() -> void:
+		runner.set_hour(_hour.value)
+		_set_time.hide()))
+	return popup
+
+
+func _open_set_time() -> void:
+	_hour.value = snappedf(world.time_of_day() * 24.0, 0.25)
+	_hour_label.text = Readout.clock(_hour.value)
+	var at := get_viewport().get_mouse_position()
+	_set_time.popup(Rect2i(Vector2i(int(at.x) - 140, int(UiStyle.TOP_BAR_H) + 4), Vector2i.ZERO))
 
 
 func _view_controls() -> Control:

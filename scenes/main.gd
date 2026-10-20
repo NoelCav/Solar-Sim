@@ -81,6 +81,7 @@ func _ready() -> void:
 	_tool.setup(world, object_db, _brush, _objects)
 	_markers.setup(world, _overlay)
 	_hud.setup(world, self, _brush, _tool, _overlay)
+	_tool.hud = _hud
 	_camera.position = Vector2(WORLD_WIDTH * 0.5, WORLD_HEIGHT * WorldGen.SURFACE_FRACTION - 8.0) * SimConst.TILE_PX
 	_camera.zoom = Vector2.ONE * 1.5
 
@@ -184,6 +185,12 @@ func set_speed(n: int) -> void:
 	speed = n
 	if paused:
 		toggle_pause()
+
+
+## Moves the clock to `hours` (0–24) of the current day (the sun follows even while paused).
+func set_hour(hours: float) -> void:
+	var day_start := floorf(world.time_s / SimConst.DAY_LENGTH_S) * SimConst.DAY_LENGTH_S
+	world.enqueue(SetTimeCommand.new(day_start + hours / 24.0 * SimConst.DAY_LENGTH_S))
 
 
 ## Moves the clock by whole hours (the sun follows even while paused).

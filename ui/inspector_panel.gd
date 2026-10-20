@@ -38,6 +38,7 @@ func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> voi
 	_text.scroll_active = false
 	_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_text.add_theme_font_size_override(&"normal_font_size", 13)
+	_text.custom_minimum_size.x = WIDTH - 24.0   # A width to wrap at; without it each word wraps
 	col.add_child(_text)
 	_chart = SpectrumChart.new()
 	col.add_child(_chart)

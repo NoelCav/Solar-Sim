@@ -372,9 +372,7 @@ func _cmd_remove(a: Dictionary) -> Dictionary:
 
 
 func _cmd_time(a: Dictionary) -> Dictionary:
-	var w := _main.world
-	var day_start := floorf(w.time_s / SimConst.DAY_LENGTH_S) * SimConst.DAY_LENGTH_S
-	w.enqueue(SetTimeCommand.new(day_start + float(a.get("hour", 12)) / 24.0 * SimConst.DAY_LENGTH_S))
+	_main.set_hour(float(a.get("hour", 12)))
 	return {"ok": true}
 
 

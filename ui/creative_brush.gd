@@ -11,6 +11,7 @@ var brush_radius := 0
 var enabled := false     ## True while the Paint or Wire tool is active
 var wire := false        ## Paints the wire layer instead of materials
 var pointer := Vector2(-1e6, -1e6)   ## Last pointer position, viewport pixels (set by ObjectTool)
+var on_map := true                   ## False while the pointer is over a panel (set by ObjectTool)
 
 var palette: Array[MaterialDef] = []
 var _painting_button := MOUSE_BUTTON_NONE
@@ -88,7 +89,7 @@ func _paint_at(cell: Vector2i) -> void:
 
 
 func _draw() -> void:
-	if world == null or not enabled:
+	if world == null or not enabled or not on_map:
 		return
 	var cell := hovered_cell()
 	var r := brush_radius

@@ -50,6 +50,12 @@ static func length(m: float) -> String:
 	return "%.0f m" % m if is_equal_approx(m, roundf(m)) else "%.2f m" % m
 
 
+## A time of day from hours, e.g. "13:45".
+static func clock(hours: float) -> String:
+	var minutes := int(roundf(fposmod(hours, 24.0) * 60.0)) % (24 * 60)
+	return "%02d:%02d" % [minutes / 60, minutes % 60]
+
+
 ## Money, e.g. "$12.34" (cents shown to a hundredth while amounts are small).
 static func money(dollars: float) -> String:
 	return "$%.2f" % dollars if absf(dollars) >= 10.0 else "$%.4f" % dollars

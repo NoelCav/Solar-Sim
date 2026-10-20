@@ -2,8 +2,8 @@ class_name ToolPanel
 extends PanelContainer
 ## The side panel next to the tool rail, holding the current tool's options:
 ## - Build: the catalog, with search and category tabs; each item is a card with its price
-##   and key numbers (Readout.item_stats). Click a card, then click the map to place; or drag
-##   a card onto the map and let go where it should stand.
+##   and key numbers (Readout.item_stats). Drag a card onto the map and let go where it
+##   should stand (R / F tilt it on the way).
 ## - Paint: material swatches and brush size. Wire: brush size and how wiring works.
 ## Hidden for Select.
 
@@ -117,7 +117,8 @@ func _build_catalog(search: String) -> void:
 	_cards.add_theme_constant_override(&"separation", 6)
 	scroll.add_child(_cards)
 	_fill_cards()
-	_add_hint("Click an item, then the map · or drag it onto the map\nR / F tilt · Alt floats it · RMB back")
+	_add_hint("Drag an item onto the map · R / F tilt it on the way · Alt floats it\n1–9 pick an item to "
+		+ "click-place · RMB drops it")
 
 
 ## The cards for the current category, or for the search across all categories.
@@ -178,7 +179,8 @@ func _card(k: int) -> Button:
 	return b
 
 
-## Press picks the item (the ghost follows the pointer); letting go over the map places it.
+## Press picks the item up (its ghost follows the pointer over the map); letting go over the
+## map places it there, letting go over the panel puts it back.
 func _on_card_input(event: InputEvent, k: int) -> void:
 	var mb := event as InputEventMouseButton
 	if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
@@ -190,6 +192,7 @@ func _on_card_input(event: InputEvent, k: int) -> void:
 		_dragging = false
 		if not get_global_rect().has_point(mb.global_position):
 			tool.place_selected()
+		tool.selected = -1
 
 
 # --- Paint and wire -------------------------------------------------------------------------
