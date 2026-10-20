@@ -28,10 +28,12 @@ var face_of := PackedInt32Array()       ## Per tile face (tile * 4 + side): its 
 var run_start := PackedInt32Array()     ## First face of each run, plus `faces` at the end
 var temperature := PackedFloat32Array() ## Per strip, K
 var face_energy_in := PackedFloat32Array()  ## Per face, J spread evenly over its strips (diffuse light)
-## Traced light absorbed per strip, W at the traced DNI, and the factor to the light now: the
+## Traced sky light absorbed per strip, W at the traced DNI, and the factor to the light now: the
 ## light system writes the rate when a pass publishes and the factor every tick.
 var light_w := PackedFloat32Array()
 var light_scale := 0.0
+## Light absorbed per strip from lamps, W now (the light system rewrites it every tick).
+var extra_w := PackedFloat32Array()
 var version := -1                       ## Grid structure_version the faces were built for
 
 
@@ -78,6 +80,8 @@ func sync(world: SimWorld) -> void:
 	face_energy_in.fill(0.0)
 	light_w.resize(faces * strips)
 	light_w.fill(0.0)
+	extra_w.resize(faces * strips)
+	extra_w.fill(0.0)
 	for f in faces:
 		var key := face_tile[f] * 4 + face_side[f]
 		var old := old_of[key] if key < old_of.size() else -1

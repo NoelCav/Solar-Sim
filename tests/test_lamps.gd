@@ -5,7 +5,7 @@ extends "res://tests/optics_fixtures.gd"
 ## A complete pass over `world` for one lamp, on a pass of its own (the sky is not involved).
 func _lamp_pass(world: SimWorld, lamp: LightSource) -> LightPass:
 	var p := LightPass.new(world.grid, world.materials)
-	p.start(world, null, false, lamp)
+	p.start(world, lamp)
 	p.step(-1)
 	return p
 

@@ -45,10 +45,22 @@ func cull_scale() -> float:
 	return minf(sample_w / (SimConst.REFERENCE_DNI * SimConst.BEAM_SPACING_M * SimConst.DEPTH_M), 1.0)
 
 
+## How much light it gives: a parallel source's irradiance across the light, W/m² (DNI); a lamp's
+## total intensity, W/rad.
+func strength() -> float:
+	return dni if kind == Kind.PARALLEL else Spectrum.total(spectrum)
+
+
+## Whether another source sends its rays the same way (only its strength may differ).
+func same_light(other: LightSource) -> bool:
+	return other != null and other.kind == kind and direction.is_equal_approx(other.direction) \
+		and position.is_equal_approx(other.position) and is_equal_approx(angle_min, other.angle_min) \
+		and is_equal_approx(angle_max, other.angle_max)
+
+
 ## Whether another source would trace the same light (an incremental pass may then reuse this one).
 func same_as(other: LightSource) -> bool:
-	if other == null or other.kind != kind or not position.is_equal_approx(other.position) \
-			or not is_equal_approx(angle_min, other.angle_min) or not is_equal_approx(angle_max, other.angle_max):
+	if not same_light(other):
 		return false
 	for b in Spectrum.BIN_COUNT:
 		if absf(spectrum[b] - other.spectrum[b]) > 1e-6 * maxf(spectrum[b], 1.0):

@@ -80,7 +80,8 @@ func step_skin(world: SimWorld, h: float) -> void:
 		return
 	var g := world.grid
 	var out: Array = _skin_kernel.Solve(g.temperature, g.energy_in, skin.light_w, skin.light_scale,
-		skin.face_energy_in, skin.temperature, h, world.ambient_k - SimConst.SKY_DEPRESSION_K, radiation_enabled)
+		skin.extra_w, skin.face_energy_in, skin.temperature, h, world.ambient_k - SimConst.SKY_DEPRESSION_K,
+		radiation_enabled)
 	skin.temperature = out[0]
 	g.energy_in = out[1]
 	skin.face_energy_in = out[2]

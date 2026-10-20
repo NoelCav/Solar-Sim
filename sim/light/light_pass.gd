@@ -24,9 +24,7 @@ var material := PackedInt32Array()     ## Tile materials as of this pass's geome
 var structure_version := -1            ## Geometry this pass traces
 var objects_version := -1
 
-var source: LightSource         ## What this pass traced (null: nothing was up)
-var dir := Vector2.ZERO          ## Sky pass: sun direction this pass traced (ZERO = sun down)
-var dni := 0.0
+var source: LightSource         ## What this pass traced (null: no light)
 var done := true
 var incremental := false         ## This pass reuses the previous one (geometry-only pass)
 var ms := 0.0                    ## CPU time spent on this pass so far
@@ -76,12 +74,10 @@ func _init(p_grid: TileGrid, materials: MaterialDB) -> void:
 		index, bulk, surf, SimConst.SKIN_STRIPS)
 
 
-## Begins a pass over the world as it is now, for the sky (sun or moon) or, with `lamp`, for
-## that source. With `prev` (the last completed pass), tasks the edits since then can't have
-## affected are replayed from it instead of traced. An `edit_only` sky pass keeps prev's sun
-## even if the sun has since drifted a little further (up to RESTART_ANGLE_DEG), so edits show
-## quickly; a later pass catches up with the sun.
-func start(world: SimWorld, prev: LightPass = null, edit_only := false, lamp: LightSource = null) -> void:
+## Begins a pass over the world as it is now, tracing `src` (null: no light). With `prev` (the
+## last completed pass), tasks the edits since then can't have affected are replayed from it
+## instead of traced, when it traced the same light.
+func start(world: SimWorld, src: LightSource, prev: LightPass = null) -> void:
 	var t0 := Time.get_ticks_usec()
 	structure_version = world.grid.structure_version
 	if objects_version != world.objects_version:
@@ -96,28 +92,10 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false, lamp: Li
 	sheet_to.clear()
 	done = false
 	stage_ms = {"map": 0.0, "direct": 0.0, "beams": 0.0}
-	dir = Vector2.ZERO
-	dni = 0.0
-	source = null
+	source = src
 	var objects_now := _object_states(world)
-	var reuse := false
-	if lamp != null:
-		source = lamp
-		reuse = prev != null and lamp.same_as(prev.source)
-	elif world.light_is_up and world.light_dni > 0.0 and world.light_direction.y > 1e-3:
-		var max_drift := SimConst.RESTART_ANGLE_DEG if edit_only else SimConst.RETRACE_ANGLE_DEG
-		reuse = prev != null and prev.dir != Vector2.ZERO \
-			and absf(world.light_direction.angle_to(prev.dir)) < deg_to_rad(max_drift) \
-			and absf(world.light_dni / prev.dni - 1.0) < (0.25 if edit_only else 0.1)
-		if reuse:
-			# A geometry-only pass keeps the sun the previous pass traced, so unaffected tasks
-			# can be replayed exactly; the next sun-triggered pass catches up.
-			source = prev.source
-		else:
-			source = LightSource.parallel(world.light_direction, world.light_spectrum, world.light_dni)
-		dir = source.direction
-		dni = source.dni
 	if source != null:
+		var reuse := prev != null and source.same_as(prev.source)
 		incremental = reuse
 		engine.SetCullScale(source.cull_scale())
 		map.build(grid, opaque, surfaces, source)
@@ -305,8 +283,8 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 		# Sample rays start before the object's bounding box along the light: everything in
 		# front of an object along its run is empty, so starting earlier is safe.
 		var r := engine.BodyBounds(id)
-		var s_min := minf(minf(r.position.dot(dir), r.end.dot(dir)),
-			minf(Vector2(r.end.x, r.position.y).dot(dir), Vector2(r.position.x, r.end.y).dot(dir)))
+		var s_min := minf(minf(r.position.dot(map.dir), r.end.dot(map.dir)),
+			minf(Vector2(r.end.x, r.position.y).dot(map.dir), Vector2(r.position.x, r.end.y).dot(map.dir)))
 		info[id] = [_def_index[obj.def], roundi(obj.angle * 1e6), _cacheable[id], obj.position,
 			obj.position.dot(map.perp), s_min - 0.02]
 	return info

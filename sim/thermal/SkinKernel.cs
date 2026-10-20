@@ -51,12 +51,12 @@ public partial class SkinKernel : RefCounted
     }
 
     /// <summary>
-    /// Solves the skin for a step of dt seconds: absorbed light lightW × lightScale (W) per strip,
+    /// Solves the skin for a step of dt seconds: absorbed light lightW × lightScale + extraW (W) per strip,
     /// plus energy (J) in faceEnergy per face (spread evenly over its strips); tile temperatures
     /// fixed. Returns [skin temperature, tile energy_in, face energy (cleared)].
     /// </summary>
     public Godot.Collections.Array Solve(float[] tileTemp, float[] tileEnergy, float[] lightW, double lightScale,
-        float[] faceEnergy, float[] skinTemp, double dt, double skyK, bool radiation)
+        float[] extraW, float[] faceEnergy, float[] skinTemp, double dt, double skyK, bool radiation)
     {
         int s = _strips;
         double inv = dt > 0 ? 1.0 / dt : 0.0;
@@ -75,7 +75,7 @@ public partial class SkinKernel : RefCounted
                 _a[i] = -left;
                 _c[i] = -right;
                 _b[i] = _gBody[i] + _gNext[i] + gr + left + right;
-                double light = lightW[i] * lightScale + faceEnergy[f] / s * inv;
+                double light = lightW[i] * lightScale + extraW[i] + faceEnergy[f] / s * inv;
                 _d[i] = light + _gBody[i] * tTile + _gNext[i] * tNext + gr * tEnv;
                 _gRad[i] = gr;
                 _tEnv[i] = tEnv;
