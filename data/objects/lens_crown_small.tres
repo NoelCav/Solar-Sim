@@ -11,5 +11,5 @@ material = &"crown_glass"
 color = Color(0.75, 0.9, 0.95, 0.35)
 size_m = 0.25
 thickness_m = 0.06
-radius_front_m = 0.3
-radius_back_m = 0.3
+radius_front_m = 0.38
+radius_back_m = 0.38

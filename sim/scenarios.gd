@@ -21,6 +21,9 @@ const LIST := {
 	"lamp_lab": {"hour": 22.0, "bench": [22.0, 12.0],
 		"about": "Lamps: one in the open, one over a cell panel, a spot lamp at a lens's focus over a surface cell "
 			+ "(a collimated beam), a spot lamp aimed along the ground, all wired to a grid connection"},
+	"optics_lab": {"hour": 12.0, "bench": [12.0, 9.0],
+		"about": "Real setups: a beam splitter feeding two cells, a hot mirror sorting infrared from visible, a "
+			+ "telescope that compresses a beam onto a cell, three color filters over three cells"},
 	"night": {"hour": -1.0, "bench": [],
 		"about": "The demo by moonlight: the dimmest light the engine traces (start hour: brightest moon)"},
 	"dug_terrain": {"hour": 9.0, "bench": [9.0],
@@ -64,6 +67,8 @@ static func build(world: SimWorld, objects: ObjectDB, name: String) -> String:
 			_optics_mix(world, objects)
 		"lamp_lab":
 			_lamp_lab(world, objects)
+		"optics_lab":
+			_optics_lab(world, objects)
 		"night":
 			_demo(world, objects)
 		"dug_terrain":
@@ -125,6 +130,34 @@ static func _lamp_lab(world: SimWorld, objects: ObjectDB) -> void:
 	_put(world, objects, &"lamp_spot", 8.0, 0.75, 90.0)
 	_put(world, objects, &"grid_tie", 14.0, 0.0)
 	_wire(world, -12.0, 14.0)
+
+
+## Setups built from the optical parts (design §6.9), at noon: (1) a 50/50 splitter: half the light
+## goes on down to a cell, half is sent sideways to a mirror that drops it onto a second cell; (2) a hot
+## mirror: infrared is reflected to a probe, visible light goes on to a cell; (3) a Keplerian telescope
+## (a long-focus objective and a small eyepiece a sum of focal lengths apart) that squeezes the beam
+## onto a cell; (4) red, green and blue filters over three cells.
+static func _optics_lab(world: SimWorld, objects: ObjectDB) -> void:
+	_put(world, objects, &"splitter_half", -16.0, 3.0, 45.0)
+	_put(world, objects, &"cell_si_surface", -16.0, 0.0)
+	_put(world, objects, &"mirror_aluminum", -12.0, 3.0, 45.0)
+	_put(world, objects, &"cell_si_surface", -12.0, 0.0)
+	_put(world, objects, &"dichroic_hot", -6.0, 3.0, 45.0)
+	_put(world, objects, &"cell_si_surface", -6.0, 0.0)
+	_put(world, objects, &"probe", -2.0, 3.0, 90.0)
+	var long := objects.get_by_key(&"lens_crown_long")
+	var small := objects.get_by_key(&"lens_crown_small")
+	var glass := world.materials.get_by_key(long.material)
+	var f1 := OpticsGen.focal_length(long.size_m, long.radius_front_m, long.radius_back_m, long.thickness_m,
+		glass.refractive_index(0.55))
+	var f2 := OpticsGen.focal_length(small.size_m, small.radius_front_m, small.radius_back_m, small.thickness_m,
+		glass.refractive_index(0.55))
+	_put(world, objects, &"lens_crown_long", 6.0, 5.75)
+	_put(world, objects, &"lens_crown_small", 6.0, 5.75 - (f1 + f2))
+	_put(world, objects, &"cell_si_surface", 6.0, 0.0)
+	for k in 3:
+		_put(world, objects, [&"plate_red", &"plate_green", &"plate_blue"][k], 14.0 + k * 1.0, 1.0)
+		_put(world, objects, &"cell_si_surface", 14.0 + k * 1.0, 0.0)
 
 
 static func _optics_mix(world: SimWorld, objects: ObjectDB) -> void:

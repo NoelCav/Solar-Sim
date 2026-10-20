@@ -246,7 +246,7 @@ A display-only lighting pass that gives everything depth and makes light feel re
 
 Self-lit things (meter LCDs and lamps, glowing hot tiles) are emissive and stay visible at night. Stage 1 can come any time; stage 2 comes with the first lamp, stage 3 with gases. It replaces the per-face lighting in the current tile shader (one lighting path, not two). References: Noita (per-pixel light and glow), Dead Cells (normal-mapped sprites).
 
-### 6.9 Optical components (planned, decided 2026-10-20)
+### 6.9 Optical components (decided 2026-10-20; part A and the lenses built 2026-10-21)
 
 Real parts that make interesting rigs, in the order to build them. Each lands with a scenario rig and a benchmark check against its textbook behaviour (§18.13).
 
@@ -264,6 +264,8 @@ Real parts that make interesting rigs, in the order to build them. Each lands wi
 **C. Later, only if gameplay asks for it:**
 8. **Polarizers:** light carries no polarization (Fresnel reflection uses the average). Adding it doubles the state per bin (s and p) and splits Fresnel per component; it would bring Brewster windows, polarizing splitters and shutters.
 9. **Diffusers / frosted glass:** scatter light into many directions; needs scattered light to be traced (§6.10 level 2).
+
+**Built.** *Lenses:* `OpticsGen.lens` takes signed radii (positive convex, negative concave, 0 flat), so the catalog has a small (25 cm), a large (2 m), a long-focus, a plano-convex, a fused-silica and a flint lens and a biconcave one (negative focal length); concave lenses stay out of the object cache (`ObjectDef.is_convex_body`). *Filters:* six filter glasses (red, green, blue, heat-absorbing, UV-blocking, smoked; per-bin absorption in `bulk_absorption`) and a clear one, as 1 cm plates (a lens with flat faces). *Splitters (`Kind.SPLITTER`, `reflectance` and `transmittance` per bin; the rest heats the plate):* a 50/50 beam splitter and hot, cold and red/blue dichroic mirrors. The fork: at a splitter a run is traced once per combination of branches (`Task.Mask`: bit j set = reflect at the j-th splitter met, at most `MaxForks` = 5, so 32 variants); each variant carries its share, records only what comes after its last reflection (what came before belongs to the variants that took the other branches), and a variant that asks for a splitter a ray never met is `Invalid` and carries nothing. Replay logs are keyed by the mask. Tests: `test_optics_parts.gd` (every lens focuses where the lensmaker's equation says, concave diverges, each filter passes each color as its glass does), `test_splitters.gd` (a 50/50 plate passes 45 % and reflects 50 % and heats on 5 %, dichroics sort by color, two in series, energy accounted for). Scenario `optics_lab`: a splitter feeding two cells, a hot mirror sorting infrared from visible, a Keplerian telescope (it concentrates only ~3×: chromatic aberration of single crown lenses blurs the focus, which an achromat, B6, will fix), three filters over three cells.
 
 **Real setups to test with them (`optics_lab` scenario):** today's parts: Keplerian telescope / beam expander (parallel in → parallel out, width × f₂/f₁), periscope (two 45° mirrors: shifted, same direction), corner reflector (two mirrors at 90°: light returns antiparallel), prism at minimum deviation (closed form), two opposed prisms (rainbow recombines to white), right-angle prism (TIR mirror). With B: Galilean telescope, Newtonian telescope, solar furnace, achromat (all colours to one focus).
 

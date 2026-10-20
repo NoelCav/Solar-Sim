@@ -1,6 +1,6 @@
 {
 	"engine": "4.7.2-stable (official)",
-	"recorded": "2026-10-20T05:22:13",
+	"recorded": "2026-10-20T05:52:52",
 	"results": {
 		"demo": {
 			"a": {
@@ -39,18 +39,18 @@
 				"truth_ratio": 1.00100978059845
 			},
 			"t": {
-				"beams_ms": 4.705,
-				"direct_ms": 2.648,
-				"drag_tick_ms": 13.68325,
-				"drag_worst_ms": 20.668,
-				"heat_band_ms": 0.248003333333334,
-				"map_ms": 0.748,
-				"mesh_ms": 2.197,
-				"pass_ms": 8.146,
-				"skin_ms": 0.269166666666667,
-				"tick_ms": 1.75306000500917,
-				"tick_p95_ms": 10.1020002365112,
-				"tick_worst_ms": 15.7709999084473
+				"beams_ms": 8.202,
+				"direct_ms": 4.081,
+				"drag_tick_ms": 35.3946166666667,
+				"drag_worst_ms": 59.068,
+				"heat_band_ms": 0.383446666666667,
+				"map_ms": 1.4,
+				"mesh_ms": 3.454,
+				"pass_ms": 13.79,
+				"skin_ms": 0.421516666666667,
+				"tick_ms": 2.96939999659856,
+				"tick_p95_ms": 18.0960006713867,
+				"tick_worst_ms": 23.5200004577637
 			},
 			"w": {
 				"beam_floats": 15126,
@@ -93,18 +93,18 @@
 				"truth_ratio": 1.00047296909317
 			},
 			"t": {
-				"beams_ms": 1.83,
-				"direct_ms": 2.075,
-				"drag_tick_ms": 12.2034166666667,
-				"drag_worst_ms": 15.171,
-				"heat_band_ms": 0.2435,
-				"map_ms": 0.687,
-				"mesh_ms": 1.523,
-				"pass_ms": 4.655,
-				"skin_ms": 0.255813333333333,
-				"tick_ms": 1.47743667085965,
-				"tick_p95_ms": 8.25699996948242,
-				"tick_worst_ms": 10.1770000457764
+				"beams_ms": 3.658,
+				"direct_ms": 3.647,
+				"drag_tick_ms": 30.8048333333333,
+				"drag_worst_ms": 49.02,
+				"heat_band_ms": 0.465573333333333,
+				"map_ms": 1.218,
+				"mesh_ms": 3.999,
+				"pass_ms": 8.606,
+				"skin_ms": 0.49039,
+				"tick_ms": 3.07361332972844,
+				"tick_p95_ms": 17.6119995117188,
+				"tick_worst_ms": 22.2080001831055
 			},
 			"w": {
 				"beam_floats": 8826,
@@ -154,18 +154,18 @@
 				"truth_ratio": 1.00241895425379
 			},
 			"t": {
-				"beams_ms": 14.381,
-				"direct_ms": 1.917,
-				"drag_tick_ms": 15.2772166666667,
-				"drag_worst_ms": 19.596,
-				"heat_band_ms": 0.190066666666667,
-				"map_ms": 0.959,
-				"mesh_ms": 6.85,
-				"pass_ms": 17.325,
-				"skin_ms": 0.391993333333334,
-				"tick_ms": 3.2864566630125,
-				"tick_p95_ms": 9.27299976348877,
-				"tick_worst_ms": 17.3579998016357
+				"beams_ms": 27.89,
+				"direct_ms": 3.602,
+				"drag_tick_ms": 37.0097166666667,
+				"drag_worst_ms": 62.729,
+				"heat_band_ms": 0.442226666666666,
+				"map_ms": 1.727,
+				"mesh_ms": 13.994,
+				"pass_ms": 33.358,
+				"skin_ms": 0.922553333333333,
+				"tick_ms": 8.2046166942517,
+				"tick_p95_ms": 24.253999710083,
+				"tick_worst_ms": 54.609001159668
 			},
 			"w": {
 				"beam_floats": 66049,
@@ -216,18 +216,18 @@
 				"truth_ratio": 1.00227334160646
 			},
 			"t": {
-				"beams_ms": 14.958,
-				"direct_ms": 1.882,
-				"drag_tick_ms": 14.4127166666667,
-				"drag_worst_ms": 19.141,
-				"heat_band_ms": 0.187886666666667,
-				"map_ms": 0.818,
-				"mesh_ms": 4.015,
-				"pass_ms": 17.727,
-				"skin_ms": 0.20723,
-				"tick_ms": 3.06486999551455,
-				"tick_p95_ms": 9.70100021362305,
-				"tick_worst_ms": 15.9569997787476
+				"beams_ms": 45.267,
+				"direct_ms": 7.664,
+				"drag_tick_ms": 36.0797,
+				"drag_worst_ms": 57.711,
+				"heat_band_ms": 0.365703333333333,
+				"map_ms": 3.013,
+				"mesh_ms": 11.395,
+				"pass_ms": 56.222,
+				"skin_ms": 0.476816666666667,
+				"tick_ms": 7.1725900075833,
+				"tick_p95_ms": 22.636999130249,
+				"tick_worst_ms": 35.9269981384277
 			},
 			"w": {
 				"beam_floats": 39343,
@@ -265,18 +265,18 @@
 				"truth_ratio": 1.00114766712855
 			},
 			"t": {
-				"beams_ms": 8.929,
-				"direct_ms": 2.141,
-				"drag_tick_ms": 13.88695,
-				"drag_worst_ms": 17.037,
-				"heat_band_ms": 0.192243333333334,
-				"map_ms": 0.961,
-				"mesh_ms": 3.766,
-				"pass_ms": 12.107,
-				"skin_ms": 0.220186666666667,
-				"tick_ms": 2.34919332613548,
-				"tick_p95_ms": 7.64699983596802,
-				"tick_worst_ms": 20.0130004882813
+				"beams_ms": 18.698,
+				"direct_ms": 4.029,
+				"drag_tick_ms": 34.2131,
+				"drag_worst_ms": 47.821,
+				"heat_band_ms": 0.480513333333333,
+				"map_ms": 2.176,
+				"mesh_ms": 8.003,
+				"pass_ms": 25.06,
+				"skin_ms": 0.583966666666667,
+				"tick_ms": 6.00120001157125,
+				"tick_p95_ms": 20.7679996490479,
+				"tick_worst_ms": 35.2680015563965
 			},
 			"w": {
 				"beam_floats": 25900,
@@ -333,18 +333,18 @@
 				"truth_ratio": 1.00003049926259
 			},
 			"t": {
-				"beams_ms": 0.957,
-				"direct_ms": 1.96,
-				"drag_tick_ms": 29.8687,
-				"drag_worst_ms": 34.88,
-				"heat_band_ms": 0.21251,
-				"map_ms": 0.679,
-				"mesh_ms": 3.131,
-				"pass_ms": 3.622,
-				"skin_ms": 0.236383333333333,
-				"tick_ms": 2.25325999855995,
-				"tick_p95_ms": 7.93499994277954,
-				"tick_worst_ms": 11.4700002670288
+				"beams_ms": 1.947,
+				"direct_ms": 3.823,
+				"drag_tick_ms": 73.2362333333333,
+				"drag_worst_ms": 92.661,
+				"heat_band_ms": 0.42106,
+				"map_ms": 1.071,
+				"mesh_ms": 7.481,
+				"pass_ms": 6.933,
+				"skin_ms": 0.569873333333333,
+				"tick_ms": 5.20346000353495,
+				"tick_p95_ms": 18.6270008087158,
+				"tick_worst_ms": 27.2569999694824
 			},
 			"w": {
 				"beam_floats": 4446,
@@ -390,18 +390,18 @@
 				"truth_ratio": 1.00054843287415
 			},
 			"t": {
-				"beams_ms": 1.297,
-				"direct_ms": 1.898,
-				"drag_tick_ms": 29.2266666666667,
-				"drag_worst_ms": 35.942,
-				"heat_band_ms": 0.243673333333333,
-				"map_ms": 0.715,
-				"mesh_ms": 3.747,
-				"pass_ms": 3.943,
-				"skin_ms": 0.287386666666666,
-				"tick_ms": 2.30079333504041,
-				"tick_p95_ms": 8.36499977111816,
-				"tick_worst_ms": 11.0860004425049
+				"beams_ms": 1.858,
+				"direct_ms": 3.674,
+				"drag_tick_ms": 72.3217333333334,
+				"drag_worst_ms": 112.86,
+				"heat_band_ms": 0.440353333333333,
+				"map_ms": 1.333,
+				"mesh_ms": 8.199,
+				"pass_ms": 6.952,
+				"skin_ms": 0.550493333333333,
+				"tick_ms": 4.80876667261124,
+				"tick_p95_ms": 17.07200050354,
+				"tick_worst_ms": 25.6809997558594
 			},
 			"w": {
 				"beam_floats": 5579,
@@ -452,18 +452,18 @@
 				"truth_ratio": 1.00977693209923
 			},
 			"t": {
-				"beams_ms": 47.478,
-				"direct_ms": 1.959,
-				"drag_tick_ms": 9.87700000000001,
-				"drag_worst_ms": 20.12,
-				"heat_band_ms": 0.16794,
-				"map_ms": 1.286,
-				"mesh_ms": 19.284,
-				"pass_ms": 50.882,
-				"skin_ms": 0.209623333333333,
-				"tick_ms": 5.20343999822934,
-				"tick_p95_ms": 8.39500045776367,
-				"tick_worst_ms": 15.1450004577637
+				"beams_ms": 103.239,
+				"direct_ms": 4.916,
+				"drag_tick_ms": 25.7390333333333,
+				"drag_worst_ms": 54.644,
+				"heat_band_ms": 0.34683,
+				"map_ms": 2.713,
+				"mesh_ms": 33.105,
+				"pass_ms": 111.33,
+				"skin_ms": 0.48545,
+				"tick_ms": 12.5772733364503,
+				"tick_p95_ms": 22.2770004272461,
+				"tick_worst_ms": 34.0950012207031
 			},
 			"w": {
 				"beam_floats": 191863,
@@ -501,18 +501,18 @@
 				"truth_ratio": 1.00019372217383
 			},
 			"t": {
-				"beams_ms": 19.102,
-				"direct_ms": 2.062,
-				"drag_tick_ms": 10.6773166666667,
-				"drag_worst_ms": 18.582,
-				"heat_band_ms": 0.171696666666667,
-				"map_ms": 1.422,
-				"mesh_ms": 11.032,
-				"pass_ms": 22.776,
-				"skin_ms": 0.22981,
-				"tick_ms": 3.20542999595404,
-				"tick_p95_ms": 6.38399982452393,
-				"tick_worst_ms": 15.9989995956421
+				"beams_ms": 36.794,
+				"direct_ms": 4.71,
+				"drag_tick_ms": 27.4976333333333,
+				"drag_worst_ms": 61.111,
+				"heat_band_ms": 0.38107,
+				"map_ms": 2.252,
+				"mesh_ms": 21.669,
+				"pass_ms": 44.075,
+				"skin_ms": 0.541263333333333,
+				"tick_ms": 8.54922332584858,
+				"tick_p95_ms": 16.9069995880127,
+				"tick_worst_ms": 30.2369995117188
 			},
 			"w": {
 				"beam_floats": 47565,
@@ -567,18 +567,18 @@
 				"truth_ratio": 1.00042495477383
 			},
 			"t": {
-				"beams_ms": 2.274,
-				"direct_ms": 2.489,
-				"drag_tick_ms": 13.3316666666667,
-				"drag_worst_ms": 17.932,
-				"heat_band_ms": 0.23515,
-				"map_ms": 0.872,
-				"mesh_ms": 1.423,
-				"pass_ms": 5.676,
-				"skin_ms": 0.25053,
-				"tick_ms": 1.3350633413593,
-				"tick_p95_ms": 8.25,
-				"tick_worst_ms": 10.9580001831055
+				"beams_ms": 3.561,
+				"direct_ms": 5.13,
+				"drag_tick_ms": 29.9542166666667,
+				"drag_worst_ms": 38.721,
+				"heat_band_ms": 0.399396666666667,
+				"map_ms": 3.372,
+				"mesh_ms": 4.477,
+				"pass_ms": 12.213,
+				"skin_ms": 0.440893333333333,
+				"tick_ms": 2.73581000238657,
+				"tick_p95_ms": 17.5639991760254,
+				"tick_worst_ms": 22.7000007629395
 			},
 			"w": {
 				"beam_floats": 10633,
@@ -594,6 +594,126 @@
 				"secondary_rays": 527,
 				"skin_faces": 350,
 				"truth_ray_paths": 25431
+			}
+		},
+		"optics_lab": {
+			"a": {
+				"replay_worst_w": 0.0000057220458984375
+			},
+			"f": {
+				"state_hash": 261414442.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 27
+			}
+		},
+		"optics_lab@09:00": {
+			"a": {
+				"steady_kink": 0.0940246277635937,
+				"truth_l1": 0.0142675623422275
+			},
+			"f": {
+				"absorbed_w": 11000.2085648275,
+				"cell_health_min": 1.0,
+				"cell_max_k": 318.72560619639,
+				"emitted_w": 16446.5131015301,
+				"light_strips": 10677.0140047732,
+				"light_tiles": 487980.945747718,
+				"money": 0.0,
+				"object_absorbed_w": 323.194713700556,
+				"object_incident_w": 276.688056122512,
+				"object_max_k": 318.72560619639,
+				"peak_concentration": 0.639558847427368,
+				"skin_max_k": 347.487091064453,
+				"sold_w": 0.0,
+				"stored_j": 0.0,
+				"tile_max_k": 308.778930664063,
+				"tile_mean_k": 292.434794915941,
+				"truth_ratio": 1.00146290404539
+			},
+			"t": {
+				"beams_ms": 7.826,
+				"direct_ms": 7.039,
+				"drag_tick_ms": 30.62045,
+				"drag_worst_ms": 55.993,
+				"heat_band_ms": 0.49765,
+				"map_ms": 1.364,
+				"mesh_ms": 2.934,
+				"pass_ms": 16.433,
+				"skin_ms": 0.583956666666666,
+				"tick_ms": 4.19063000500202,
+				"tick_p95_ms": 17.3889999389648,
+				"tick_worst_ms": 32.1910018920898
+			},
+			"w": {
+				"beam_floats": 15855,
+				"cache_misses": 462,
+				"drag_passes": 51,
+				"heat_subcycles": 300,
+				"lanes": 3713,
+				"lit_strips": 3322,
+				"lit_tiles": 321,
+				"mesh_vertices": 30528,
+				"passes": 34,
+				"paths": 1121,
+				"secondary_rays": 526,
+				"skin_faces": 350,
+				"truth_ray_paths": 25146
+			}
+		},
+		"optics_lab@12:00": {
+			"a": {
+				"steady_kink": 0.133359330524284,
+				"truth_l1": 0.0071813396441023
+			},
+			"f": {
+				"absorbed_w": 15169.1591135383,
+				"cell_health_min": 1.0,
+				"cell_max_k": 326.279627801432,
+				"emitted_w": 18163.569688797,
+				"light_strips": 14604.3813170511,
+				"light_tiles": 671926.642035127,
+				"money": 0.0,
+				"object_absorbed_w": 564.777175645757,
+				"object_incident_w": 454.087515267543,
+				"object_max_k": 326.279627801432,
+				"peak_concentration": 3.08116400146484,
+				"skin_max_k": 347.462951660156,
+				"sold_w": 0.0,
+				"stored_j": 0.0,
+				"tile_max_k": 307.022247314453,
+				"tile_mean_k": 293.968463227166,
+				"truth_ratio": 1.00030929707444
+			},
+			"t": {
+				"beams_ms": 10.498,
+				"direct_ms": 3.282,
+				"drag_tick_ms": 36.0125833333333,
+				"drag_worst_ms": 54.906,
+				"heat_band_ms": 0.402363333333333,
+				"map_ms": 1.658,
+				"mesh_ms": 5.168,
+				"pass_ms": 15.531,
+				"skin_ms": 0.498496666666667,
+				"tick_ms": 4.20354001144568,
+				"tick_p95_ms": 14.6219997406006,
+				"tick_worst_ms": 38.4710006713867
+			},
+			"w": {
+				"beam_floats": 28823,
+				"cache_misses": 455,
+				"drag_passes": 53,
+				"heat_subcycles": 300,
+				"lanes": 3750,
+				"lit_strips": 2934,
+				"lit_tiles": 293,
+				"mesh_vertices": 39780,
+				"passes": 33,
+				"paths": 2273,
+				"secondary_rays": 1080,
+				"skin_faces": 350,
+				"truth_ray_paths": 32390
 			}
 		},
 		"optics_mix": {
@@ -628,18 +748,18 @@
 				"truth_ratio": 1.00047228703412
 			},
 			"t": {
-				"beams_ms": 6.64,
-				"direct_ms": 2.136,
-				"drag_tick_ms": 12.712,
-				"drag_worst_ms": 18.859,
-				"heat_band_ms": 0.226356666666666,
-				"map_ms": 0.768,
-				"mesh_ms": 1.759,
-				"pass_ms": 9.619,
-				"skin_ms": 0.26404,
-				"tick_ms": 2.15717333217462,
-				"tick_p95_ms": 10.7349996566772,
-				"tick_worst_ms": 19.05299949646
+				"beams_ms": 12.638,
+				"direct_ms": 5.02,
+				"drag_tick_ms": 28.7293333333333,
+				"drag_worst_ms": 43.773,
+				"heat_band_ms": 0.48278,
+				"map_ms": 1.298,
+				"mesh_ms": 3.521,
+				"pass_ms": 19.095,
+				"skin_ms": 0.489396666666667,
+				"tick_ms": 4.74620666762193,
+				"tick_p95_ms": 24.9540004730225,
+				"tick_worst_ms": 42.7900009155273
 			},
 			"w": {
 				"beam_floats": 15776,
@@ -677,18 +797,18 @@
 				"truth_ratio": 1.00118880482584
 			},
 			"t": {
-				"beams_ms": 8.842,
-				"direct_ms": 2.104,
-				"drag_tick_ms": 14.1303666666667,
-				"drag_worst_ms": 19.237,
-				"heat_band_ms": 0.19534,
-				"map_ms": 0.78,
-				"mesh_ms": 2.016,
-				"pass_ms": 11.779,
-				"skin_ms": 0.246123333333333,
-				"tick_ms": 2.32767333805561,
-				"tick_p95_ms": 12.9390001296997,
-				"tick_worst_ms": 19.7770004272461
+				"beams_ms": 19.486,
+				"direct_ms": 5.229,
+				"drag_tick_ms": 34.0241333333333,
+				"drag_worst_ms": 61.476,
+				"heat_band_ms": 0.409586666666666,
+				"map_ms": 1.877,
+				"mesh_ms": 2.892,
+				"pass_ms": 26.854,
+				"skin_ms": 0.50584,
+				"tick_ms": 5.41715665966272,
+				"tick_p95_ms": 30.511999130249,
+				"tick_worst_ms": 48.0849990844727
 			},
 			"w": {
 				"beam_floats": 18850,
@@ -743,18 +863,18 @@
 				"truth_ratio": 1.00078500438901
 			},
 			"t": {
-				"beams_ms": 5.153,
-				"direct_ms": 2.215,
-				"drag_tick_ms": 12.9181166666667,
-				"drag_worst_ms": 16.343,
-				"heat_band_ms": 0.19904,
-				"map_ms": 1.0,
-				"mesh_ms": 3.45,
-				"pass_ms": 8.452,
-				"skin_ms": 0.235726666666667,
-				"tick_ms": 2.13250332991282,
-				"tick_p95_ms": 6.53900003433228,
-				"tick_worst_ms": 14.16100025177
+				"beams_ms": 12.064,
+				"direct_ms": 6.225,
+				"drag_tick_ms": 36.7900833333333,
+				"drag_worst_ms": 65.574,
+				"heat_band_ms": 0.484863333333333,
+				"map_ms": 4.395,
+				"mesh_ms": 6.451,
+				"pass_ms": 23.024,
+				"skin_ms": 0.62531,
+				"tick_ms": 5.60152667125066,
+				"tick_p95_ms": 16.5020008087158,
+				"tick_worst_ms": 45.5839996337891
 			},
 			"w": {
 				"beam_floats": 30519,
@@ -795,18 +915,18 @@
 				"tile_mean_k": 293.937234730191
 			},
 			"t": {
-				"beams_ms": 4.317,
-				"direct_ms": 1.108,
-				"drag_tick_ms": 9.42578333333334,
-				"drag_worst_ms": 16.066,
-				"heat_band_ms": 0.201843333333333,
-				"map_ms": 0.594,
-				"mesh_ms": 1.637,
-				"pass_ms": 6.075,
-				"skin_ms": 0.24866,
-				"tick_ms": 1.75671000222365,
-				"tick_p95_ms": 6.39400005340576,
-				"tick_worst_ms": 14.6719999313354
+				"beams_ms": 10.788,
+				"direct_ms": 2.285,
+				"drag_tick_ms": 21.3802833333333,
+				"drag_worst_ms": 37.673,
+				"heat_band_ms": 0.528706666666666,
+				"map_ms": 1.504,
+				"mesh_ms": 2.894,
+				"pass_ms": 14.738,
+				"skin_ms": 0.538606666666667,
+				"tick_ms": 4.403106670777,
+				"tick_p95_ms": 16.0380001068115,
+				"tick_worst_ms": 31.6189994812012
 			},
 			"w": {
 				"beam_floats": 20924,
