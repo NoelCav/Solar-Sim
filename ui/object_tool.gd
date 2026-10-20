@@ -5,8 +5,9 @@ extends Node2D
 ##   handle to tilt (Ctrl snaps to 15°); dragging empty space pans the view.
 ## - Build (B): pick an item in the catalog (ToolPanel) or with 1–9 and click the map to place
 ##   it, as often as you like; or drag a card onto the map to place one (R / F tilt the ghost
-##   first; RMB drops the pick). With nothing picked the mouse works as in Select. Objects go
-##   on stands (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
+##   first; a right-click drops the pick). Items that lie on the ground (surface cells) are laid
+##   in a run by dragging, one undo for the run. Right- or middle-drag pans in Select and Build. With nothing picked the
+##   mouse works as in Select. Objects go on stands (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
 ## The map ignores the pointer while it is over a panel (Hud.covers): no ghost, no hover.
 ## - Paint (T): the tile brush (CreativeBrush) owns the mouse.
 ## - Wire (V): the same brush lays wire (LMB) and removes it (RMB).
@@ -18,6 +19,7 @@ enum Mode { SELECT, BUILD, PAINT, WIRE }
 const TOOL_ACTIONS := {&"tool_select": Mode.SELECT, &"tool_build": Mode.BUILD, &"tool_paint": Mode.PAINT,
 	&"tool_wire": Mode.WIRE}
 
+const CLICK_PX := 4.0           ## A press that moves less than this is a click, not a drag
 const PICK_PX := 6.0            ## How close (screen pixels) the pointer must be to a line
 const ROTATE_STEP_DEG := 5.0
 const FINE_STEP_DEG := 1.0
@@ -43,6 +45,10 @@ var _rotating := false
 var _rotate_grab := 0.0          ## Object angle minus pointer angle when the handle was grabbed
 var _from_angle := 0.0
 var _panning := false
+var _stroke := 0                  ## Undo group of the run being laid (0: none)
+var _stroke_col := -1               ## Last column a run placed in
+var _right_down := false            ## RMB held: a click drops the pick, a drag pans
+var _right_moved := 0.0
 var _pointer := Vector2(-1e6, -1e6)   ## Last pointer position, viewport pixels
 var _font: Font
 
@@ -175,6 +181,8 @@ func _zoom() -> float:
 
 
 func _end_gestures() -> void:
+	_stroke = 0
+	_right_down = false
 	_drag_id = -1
 	_rotating = false
 	_panning = false
@@ -230,14 +238,25 @@ func _mouse_button(mb: InputEventMouseButton) -> void:
 		else:
 			_release()
 		get_viewport().set_input_as_handled()
-	elif mb.button_index == MOUSE_BUTTON_RIGHT and mb.pressed:
-		if selected_def() != null:
-			selected = -1   # Drop the picked item first
-		elif mode == Mode.BUILD:
-			set_mode(Mode.SELECT)
-		else:
-			selected_id = -1
+	elif mb.button_index == MOUSE_BUTTON_RIGHT:
+		if mb.pressed:
+			_right_down = true
+			_right_moved = 0.0
+		elif _right_down:
+			_right_down = false
+			if _right_moved < CLICK_PX:
+				_drop()
 		get_viewport().set_input_as_handled()
+
+
+## What a right-click does: drop the picked item, else leave Build, else deselect.
+func _drop() -> void:
+	if selected_def() != null:
+		selected = -1
+	elif mode == Mode.BUILD:
+		set_mode(Mode.SELECT)
+	else:
+		selected_id = -1
 
 
 func _press() -> void:
@@ -255,7 +274,12 @@ func _press() -> void:
 		_drag_from = obj.position
 		_drag_offset = obj.position - mouse_m()
 	elif selected_def() != null:
-		place_selected()
+		if selected_def().mount == ObjectDef.Mount.GROUND:
+			_stroke = SimCommand.new_group()   # A run: more are laid as the pointer moves
+			_stroke_col = -1
+			_lay_run()
+		else:
+			place_selected()
 	else:
 		selected_id = -1
 		_panning = true
@@ -274,7 +298,15 @@ func _release() -> void:
 
 
 func _mouse_motion(mm: InputEventMouseMotion) -> void:
-	if _panning:
+	if _right_down:
+		_right_moved += mm.relative.length()
+		if _right_moved >= CLICK_PX:
+			var cam := get_viewport().get_camera_2d()
+			if cam != null:
+				cam.position -= mm.relative / cam.zoom.x
+	elif _stroke != 0:
+		_lay_run()
+	elif _panning:
 		var cam := get_viewport().get_camera_2d()
 		if cam != null:
 			cam.position -= mm.relative / cam.zoom.x
@@ -286,6 +318,23 @@ func _mouse_motion(mm: InputEventMouseMotion) -> void:
 		var obj: SimObject = world.objects.get(_drag_id)
 		if obj != null:
 			world.enqueue(TransformObjectCommand.new(_drag_id, mouse_m() + _drag_offset, obj.angle, false))
+
+
+## Lays the picked ground item in every column from the last one placed to the pointer's.
+func _lay_run() -> void:
+	var def := selected_def()
+	if def == null:
+		return
+	var col := floori(mouse_m().x / SimConst.TILE_M)
+	var from := col if _stroke_col < 0 else _stroke_col
+	var step := 1 if col >= from else -1
+	for c in range(from, col + step, step):
+		if c == _stroke_col:
+			continue
+		var cmd := PlaceObjectCommand.new(def, Vector2((c + 0.5) * SimConst.TILE_M, mouse_m().y), 0.0, _mounting())
+		cmd.group = _stroke
+		world.enqueue(cmd)
+	_stroke_col = col
 
 
 ## Places the picked item at the pointer (on its stand unless Alt floats it in creative mode).
