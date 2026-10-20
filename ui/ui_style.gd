@@ -1,8 +1,8 @@
 class_name UiStyle
 extends RefCounted
 ## The interface's look in one place: colors, sizes of the fixed bars, and factories for the
-## panels, buttons and labels every UI part builds with (top bar, tool rail, side panel,
-## inspector, legend).
+## panels, buttons and labels every UI part builds with (top bar, tool dock, catalog,
+## inspector, legend). UiTheme is the Theme underneath.
 
 const PANEL_BG := Color(0.05, 0.07, 0.10, 0.94)
 const PANEL_EDGE := Color(0.16, 0.19, 0.23)
@@ -14,7 +14,7 @@ const ACCENT_BG := Color(0.23, 0.20, 0.13)
 const POWER := Color(0.56, 0.78, 1.0)     ## Electricity
 const WARM := Color(1.0, 0.70, 0.48)      ## Prices, heat
 const TOP_BAR_H := 56.0
-const RAIL_W := 64.0
+const DOCK_H := 84.0
 const SIDE_W := 320.0
 const GAP := 10.0
 
@@ -61,6 +61,23 @@ static func button(text: String, tip: String, action: Callable) -> Button:
 	b.tooltip_text = tip
 	b.focus_mode = Control.FOCUS_NONE
 	b.pressed.connect(action)
+	return b
+
+
+## A button showing a drawn glyph (ToolIcon) and a label.
+static func icon_button(glyph: StringName, text: String, tip: String, action: Callable) -> Button:
+	var b := button("", tip, action)
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override(&"separation", 6)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var icon := ToolIcon.new(glyph, Vector2(18, 18))
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(icon)
+	row.add_child(label(text, 13))
+	b.add_child(row)
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+	b.custom_minimum_size = Vector2(46.0 + text.length() * 7.5, 32)
 	return b
 
 

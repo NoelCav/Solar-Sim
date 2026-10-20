@@ -6,6 +6,7 @@ extends Node2D
 ## at night. A probe's tag also picks the probe (ObjectTool uses probe_tag_rect). Power
 ## readings are meters on the devices themselves (PowerMeters).
 
+const MIN_NIGHT_W_M2 := 1.0       ## Dimmer than this at night isn't worth a marker
 const MIN_SUNS := 2.0   ## Normal view: only mark light concentrated at least this much
 const TAG_FONT := 14
 const TAG_BG := Color(0.05, 0.07, 0.1, 0.85)
@@ -75,10 +76,17 @@ func _draw_peak(zoom: float) -> void:
 		ViewMode.Overlay.ABSORBED:
 			text = "peak %s" % Readout.irradiance(overlay.peak_value)
 		_:
+			# A multiple of the sun is a useful number by day; at night the light is the moon's or a
+			# lamp's, and a multiple of the moon means nothing, so the plain irradiance is shown.
 			var suns := Readout.times_light(world, overlay.peak_value)
-			if suns < MIN_SUNS:
+			if world.light_is_moon or not world.sun_is_up:
+				if overlay.peak_value < MIN_NIGHT_W_M2:
+					return
+				text = "peak %s" % Readout.irradiance(overlay.peak_value)
+			elif suns >= MIN_SUNS:
+				text = "≈%.0f× sun" % suns
+			else:
 				return
-			text = "≈%.0f× %s" % [suns, Readout.light_name(world)]
 	var c := world.grid.coords(overlay.peak_tile)
 	var center := (Vector2(c) + Vector2(0.5, 0.5)) * SimConst.TILE_PX * zoom
 	var r := 10.0

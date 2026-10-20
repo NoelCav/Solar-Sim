@@ -25,6 +25,7 @@ var _selling: Label
 var _price: Label
 var _views: Array[Button] = []
 var _wave: OptionButton
+var _perf: Label
 
 
 func setup(p_world: SimWorld, p_runner: Main) -> void:
@@ -62,9 +63,22 @@ func setup(p_world: SimWorld, p_runner: Main) -> void:
 		+ "dear in the evening"
 	_price.mouse_filter = Control.MOUSE_FILTER_PASS
 	row.add_child(_price)
+	_perf = UiStyle.small_label()
+	_perf.visible = false
+	row.add_child(_perf)
 	row.add_child(VSeparator.new())
 	row.add_child(_view_controls())
 	row.add_child(_site_menu())
+
+
+## Shows or hides the performance numbers.
+func show_perf(shown: bool) -> void:
+	_perf.visible = shown
+
+
+func set_perf_text(text: String) -> void:
+	if _perf.visible:
+		_perf.text = text
 
 
 func update() -> void:

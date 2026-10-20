@@ -33,6 +33,7 @@ func _process(_delta: float) -> void:
 
 
 func _draw() -> void:
+	_power.sync(world)
 	var g := world.grid
 	var px := float(SimConst.TILE_PX)
 	var width := WIDTH_TILES * px
