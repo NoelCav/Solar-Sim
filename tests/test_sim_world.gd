@@ -220,3 +220,36 @@ func test_site_save_round_trip() -> void:
 		check_eq([b.def.key, b.position, b.angle, b.mounted], [a.def.key, a.position, a.angle, a.mounted], "object %d" % id)
 	var small := SimWorld.new(load_materials(), 16, 16, 1)
 	check(SiteSave.restore(small, data, db) != "", "other site size refused")
+
+
+## A gesture undoes as one: the wire laid by a whole stroke goes with one undo, while commands
+## outside any group undo one at a time.
+func test_undo_takes_a_whole_stroke() -> void:
+	var world := SimWorld.new(load_materials(), 16, 8, 1)
+	var g := world.grid
+	var stroke := SimCommand.new_group()
+	for x in [2, 3, 4]:
+		var cmd := PaintWiresCommand.new(PackedInt32Array([g.idx(x, 2)]))
+		cmd.group = stroke
+		world.enqueue(cmd)
+	world.enqueue(PaintWiresCommand.new(PackedInt32Array([g.idx(8, 2)])))
+	world.flush_commands()
+	world.enqueue(UndoCommand.new())
+	world.flush_commands()
+	check_eq(g.wire[g.idx(8, 2)], 0, "the ungrouped tile went with one undo")
+	check_eq(g.wire[g.idx(3, 2)], 1, "the stroke is still there")
+	world.enqueue(UndoCommand.new())
+	world.flush_commands()
+	check_eq(g.wire[g.idx(2, 2)] + g.wire[g.idx(3, 2)] + g.wire[g.idx(4, 2)], 0, "one undo takes the whole stroke")
+
+
+## What can't turn stays level: surface cells, batteries and grid connections; lamps, lenses and
+## panels turn.
+func test_only_some_objects_rotate() -> void:
+	var db := ObjectDB.new()
+	db.load_dir()
+	for key in [&"cell_si_surface", &"battery", &"grid_tie"]:
+		check(not db.get_by_key(key).can_rotate(), "%s stays level" % key)
+		check_eq(Mounting.snap_angle(db.get_by_key(key), 0.7), 0.0, "%s snaps level" % key)
+	for key in [&"lamp_led", &"lens_crown", &"cell_si", &"mirror_aluminum"]:
+		check(db.get_by_key(key).can_rotate(), "%s turns" % key)

@@ -30,6 +30,7 @@ var _chart: SpectrumChart
 var _losses: StackBar
 var _colors: StackBar
 var _actions: HBoxContainer
+var _turn_buttons: Array[Button] = []   ## Tilt and Level: only for objects that can turn
 
 
 func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> void:
@@ -64,9 +65,13 @@ func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> voi
 	col.add_child(_colors)
 	_actions = HBoxContainer.new()
 	_actions.add_theme_constant_override(&"separation", 4)
-	_actions.add_child(UiStyle.button("Tilt −5°", "Rotate counterclockwise (R, Shift for 1°)", tool.rotate_by.bind(-5.0)))
-	_actions.add_child(UiStyle.button("Tilt +5°", "Rotate clockwise (F, Shift for 1°)", tool.rotate_by.bind(5.0)))
-	_actions.add_child(UiStyle.button("Level", "Reset the tilt to 0°", _level))
+	_turn_buttons = [
+		UiStyle.button("Tilt −5°", "Rotate counterclockwise (R, Shift for 1°)", tool.rotate_by.bind(-5.0)),
+		UiStyle.button("Tilt +5°", "Rotate clockwise (F, Shift for 1°)", tool.rotate_by.bind(5.0)),
+		UiStyle.button("Level", "Reset the tilt to 0°", _level),
+	]
+	for b in _turn_buttons:
+		_actions.add_child(b)
 	_actions.add_child(UiStyle.button("Delete", "Remove the object (X / Delete)", tool.delete_target))
 	col.add_child(_actions)
 
@@ -86,6 +91,8 @@ func update() -> void:
 		return
 	_text.text = "\n".join(lines)
 	_actions.visible = selected != null
+	for b in _turn_buttons:
+		b.visible = selected != null and selected.def.can_rotate()
 	_meter.show_meter(world, obj)
 	_chart.visible = obj != null and obj.def.kind == ObjectDef.Kind.PROBE and obj.incident_irradiance() > 0.0
 	if _chart.visible:
@@ -126,7 +133,7 @@ func _light_text(i: int) -> String:
 	var irr := _light.tile_irradiance(i, world)
 	if irr <= 0.0:
 		return "[color=#8a93a0]in shadow[/color]" if world.light_is_up or not _light.lamps.is_empty() else ""
-	var suns := Readout.times_light(world, _light.strip_irradiance_max(i, world))
+	var suns := Readout.times_light(world, _light.sky.strip_irradiance_max(i, world))   # The sky's light, not a lamp's
 	var bands := _light.tile_band_irradiance(i, world)
 	var source := Readout.light_name(world) if _light.sky.tile_power[i] > 0.0 else "lamp"
 	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, source] if suns >= 1.5 \

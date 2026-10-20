@@ -93,8 +93,13 @@ func flush_commands() -> void:
 				_history.pop_front()
 
 
+## Undoes the last command, and with it the rest of its gesture (commands of the same group).
 func undo_last() -> void:
-	if not _history.is_empty():
+	if _history.is_empty():
+		return
+	var cmd: SimCommand = _history.pop_back()
+	cmd.undo(self)
+	while cmd.group != 0 and not _history.is_empty() and _history.back().group == cmd.group:
 		_history.pop_back().undo(self)
 
 

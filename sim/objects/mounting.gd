@@ -32,9 +32,9 @@ static func snap_position(world: SimWorld, def: ObjectDef, wanted: Vector2) -> V
 	return Vector2(x, ground - height)
 
 
-## The angle an object of `def` takes: ground cells lie flat; everything else tilts freely.
+## The angle an object of `def` takes: what can't turn stays level; everything else tilts freely.
 static func snap_angle(def: ObjectDef, angle: float) -> float:
-	return 0.0 if def.mount == ObjectDef.Mount.GROUND else angle
+	return angle if def.can_rotate() else 0.0
 
 
 ## Top of the ground in column `col` under height `y` (m): the first solid tile at or below

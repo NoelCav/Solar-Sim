@@ -16,6 +16,7 @@ var on_map := true                   ## False while the pointer is over a panel 
 var palette: Array[MaterialDef] = []
 var _painting_button := MOUSE_BUTTON_NONE
 var _last_cell := Vector2i(-1, -1)
+var _stroke := 0                    ## Undo group of the stroke in progress
 
 
 func setup(p_world: SimWorld) -> void:
@@ -55,6 +56,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if mb.pressed:
 				_painting_button = mb.button_index
 				_last_cell = Vector2i(-1, -1)
+				_stroke = SimCommand.new_group()
 				_paint_at(hovered_cell())
 			elif mb.button_index == _painting_button:
 				_painting_button = MOUSE_BUTTON_NONE
@@ -82,10 +84,13 @@ func _paint_at(cell: Vector2i) -> void:
 				cells.append(g.idx(c.x, c.y))
 	if cells.is_empty():
 		return
+	var cmd: SimCommand
 	if wire:
-		world.enqueue(PaintWiresCommand.new(cells, 0 if erase else 1))
+		cmd = PaintWiresCommand.new(cells, 0 if erase else 1)
 	else:
-		world.enqueue(PaintTilesCommand.new(cells, MaterialDB.AIR_ID if erase else selected().id))
+		cmd = PaintTilesCommand.new(cells, MaterialDB.AIR_ID if erase else selected().id)
+	cmd.group = _stroke
+	world.enqueue(cmd)
 
 
 func _draw() -> void:

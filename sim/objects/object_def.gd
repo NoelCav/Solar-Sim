@@ -97,6 +97,12 @@ func face_area_m2() -> float:
 	return size_m * SimConst.DEPTH_M
 
 
+## Whether the object can be turned: not surface cells (flat on the ground), batteries or grid
+## connections (boxes).
+func can_rotate() -> bool:
+	return mount != Mount.GROUND and kind != Kind.BATTERY and kind != Kind.GRID_TIE
+
+
 ## True for objects whose pieces enclose an optical body of `material`.
 func is_body() -> bool:
 	return kind == Kind.LENS or kind == Kind.PRISM

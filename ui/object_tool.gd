@@ -100,7 +100,7 @@ func _input(event: InputEvent) -> void:
 ## Rotates the selected (else hovered) object by `deg`.
 func rotate_by(deg: float) -> void:
 	var obj: SimObject = world.objects.get(_target_id())
-	if obj != null:
+	if obj != null and obj.def.can_rotate():
 		world.enqueue(TransformObjectCommand.new(obj.id, obj.position, obj.angle + deg_to_rad(deg)))
 
 
@@ -163,7 +163,7 @@ static func handle_m(obj: SimObject) -> Vector2:
 
 func _over_handle() -> bool:
 	var obj := selected_object()
-	if obj == null:
+	if obj == null or not obj.def.can_rotate():
 		return false
 	var px := SimConst.PX_PER_M
 	var screen_px := mouse_m().distance_to(handle_m(obj)) * px * _zoom()
@@ -342,7 +342,7 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE / zoom)
 	var px := SimConst.PX_PER_M * zoom
 	var obj := selected_object()
-	if obj != null and not uses_brush():
+	if obj != null and not uses_brush() and obj.def.can_rotate():
 		# Tilt ring: a faint circle, a line along the object's axis and a handle to drag.
 		var c := obj.position * px
 		var r := ring_radius(obj) * px
