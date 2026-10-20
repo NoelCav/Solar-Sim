@@ -14,7 +14,8 @@ const LIST := {
 	"lens_field": {"hour": 9.0, "bench": [9.0, 12.0],
 		"about": "30 identical lenses in a row: lots of beams, the object cache, many focal spots"},
 	"power_farm": {"hour": 12.0, "bench": [12.0, 17.5],
-		"about": "Ten panels, six surface cells (four under lenses: ~3× sun), an open cell, a network without a grid"},
+		"about": "Ten panels, six surface cells (four under lenses: ~3× sun), an open cell, batteries, "
+			+ "a network without a grid"},
 	"optics_mix": {"hour": 10.5, "bench": [10.5, 15.0],
 		"about": "Prism rainbow, a mirror chain, glass blocks, a water pool under a lens, a burning focus"},
 	"night": {"hour": -1.0, "bench": [],
@@ -80,7 +81,7 @@ static func _demo(world: SimWorld, objects: ObjectDB) -> void:
 ## Ten panels at 1.5 m; six surface cells on the ground, the first four under crown lenses at
 ## 85 % of their focal length (the 1 m lens's light on a 25 cm cell: about 3× sun, hot); all wired
 ## to one grid connection. Beyond the wire: a panel with no wire (open circuit) and a panel wired
-## to nothing that sells.
+## to a battery with no grid connection. A battery also sits on the main network.
 static func _power_farm(world: SimWorld, objects: ObjectDB) -> void:
 	var lens := objects.get_by_key(&"lens_crown")
 	var glass := world.materials.get_by_key(lens.material)
@@ -97,7 +98,9 @@ static func _power_farm(world: SimWorld, objects: ObjectDB) -> void:
 	_wire(world, -14.0, 10.5)
 	_put(world, objects, &"cell_si", 13.0, 1.5)
 	_put(world, objects, &"cell_si", 16.0, 1.5)
+	_put(world, objects, &"battery", 18.0, 0.0)
 	_wire(world, 16.0, 18.0)
+	_put(world, objects, &"battery", -11.0, 0.0)
 
 
 static func _optics_mix(world: SimWorld, objects: ObjectDB) -> void:

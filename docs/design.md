@@ -301,7 +301,7 @@ Starter set: air, dirt, stone, sand, wood, steel, copper, aluminum, crown glass,
 
 `ObjectDef` resource (`data/objects/*.tres`): kind (lens, mirror, prism, probe, cell, grid connection), mount (stand, ground, free; D21), catalog category, material, shape parameters (the optical surfaces are generated from them, D4), per-bin reflectance, cell parameters. Every object has one thermal node (D13) and connects to conduits at its foot (`Mounting.port_tiles`). Later: `cost` and `unlock` (D15), components (D16).
 
-Built: lens (bi/plano-convex), flat mirror, prism, irradiance probe, Si cell panel (1 m), Si surface cell (25 cm), grid connection. Next: battery and lamp (run 01 group 5); heatsink with pipes (M4).
+Built: lens (bi/plano-convex), flat mirror, prism, irradiance probe, Si cell panel (1 m), Si surface cell (25 cm), grid connection, battery. Next: lamp (run 01 group 5); heatsink with pipes (M4).
 
 ### 9.1 Solar cell model
 
@@ -329,8 +329,8 @@ Junction materials: Ge 0.67, Si 1.12, GaAs 1.42, GaInP 1.9 eV; perovskite (tunab
 ## 10. Power & economy (M3)
 
 - Networks are wire tiles joined edge to edge (D14); objects join at their foot. Per tick: production → consumers (priority) → batteries → grid export (capped).
-- **Built (run 01 group 3):** cells on a network with a grid connection deliver what they make and the network sells it; without one they sit at open circuit. Energy is counted in real time (a game day is 24 h, `SimConst.DAY_COMPRESSION`). Analog power meters sit on each cell's pole and in the grid connection (network total), scaled to rated power. Not yet: wire resistance and limits, export caps, consumers, batteries.
-- **Batteries:** capacity, max charge/discharge rate, ~90% round-trip; losses become heat; degrade with temperature; thermal runaway at extreme.
+- **Built (run 01 group 3):** cells on a network with a grid connection deliver what they make and the network sells it; without one they sit at open circuit. Energy is counted in real time (a game day is 24 h, `SimConst.DAY_COMPRESSION`). Analog power meters sit on each cell's pole and in the grid connection (network total), scaled to rated power. Not yet: wire resistance and limits, export caps, consumers.
+- **Batteries (built, run 01 group 5):** a machine (`Kind.BATTERY`, D19 box on the ground) with capacity (0.5 kWh), a power limit (250 W) and 95 % one-way efficiency (~90 % round trip). `PowerSystem.flows` is the one home of the network's energy policy (ticks, meters and the inspector all read it): on a network with a grid connection a battery takes in surplus when the price is below 6 ¢/kWh (`Market.stance`), gives out above 15 ¢ and holds between; the rest of the cells' power is sold. A network with a battery and no grid connection only charges it (any price); when it is full the cells sit at open circuit. Charge is real energy (J), saved with the site. Losses are not tracked as heat (machines have no thermal node). Not yet: degradation with temperature, thermal runaway, a player-set policy.
 - **Grid market:** price follows a **duck curve** — cheap midday (solar glut), expensive evening peak (built: 3 ¢/kWh at noon, 35 ¢ at 19:00, `Market`). Events: heatwaves, export caps, negative-price hours.
 - Internal consumers: pumps, trackers/lens motors, fans, research lab, lens kiln, later electrolyzer.
 
@@ -601,7 +601,7 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 **Where things are.** Light (sun and moon, beams, C# engine), heat (tiles, surface skin, object nodes), stands, solar cells, wires, grid sale and money, site save, the interface (top bar, tool rail, catalog, inspector with cell and lens cards, power meters on devices), test scenarios, the benchmark and bug sweep with a recorded baseline, and SimProbe in the game and headless. 24-minute day; optical materials absorb as measured. All tests pass; every benchmark check passes. Run notes: `docs/runs/run-01.md`.
 
 **Next, in order (each with tests, a scenario or rig in the benchmark, SimProbe commands, and a note here):**
-1. **Group 5 of run 01:** batteries (store on a network; charge when the price is low, sell when high; meter); the first consumer, a **lamp**, which needs the light engine to trace more than one source (§18 M3 row) and brings display lighting stages 1–2 (§6.8); cell damage (degrades above ~85 °C, fails ~150–200 °C, §9.1).
+1. **Group 5 of run 01:** ~~batteries~~ (done: §10; `power_farm` has two, tests in `test_power.gd`, SimProbe `charge`); the first consumer, a **lamp**, which needs the light engine to trace more than one source (§18 M3 row) and brings display lighting stages 1–2 (§6.8); cell damage (degrades above ~85 °C, fails ~150–200 °C, §9.1).
 2. **Optics parts A** (§6.9: beam splitter, dichroic, filters/plates; the engine's path fork) and the `optics_lab` scenario.
 3. **Light accuracy follow-ups** found by the benchmark: popping at the site's edge columns; incremental passes replaying pooled reflections an edit changed; beams spreading ~2 % of a sharp focus into its neighbours unevenly (3 % under a symmetric lens).
 4. **Shop, prices and unlocks** (D15, §15): deliberately after the core systems.

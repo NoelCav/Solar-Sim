@@ -231,9 +231,9 @@ func _ticks(world: SimWorld, t: Dictionary, w: Dictionary, f: Dictionary) -> voi
 		band += heat.last_step_ms
 		skin += heat.last_skin_ms
 		subcycles += heat.subcycles
-		var delivered := 0.0   # What the tick sold: its cells' power_w (zero off a selling network)
+		var delivered := 0.0   # What the tick sold: its cells' power_w less what batteries took in
 		for obj: SimObject in world.objects.values():
-			delivered += obj.power_w
+			delivered += obj.power_w + obj.flow_w
 		expected += Market.earnings(world, delivered, SimConst.DT)
 	var sorted := times.duplicate()
 	sorted.sort()
@@ -306,7 +306,14 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 	var selling := 0
 	var delivered := 0.0
 	var cell_hi := 0.0
+	var stored := 0.0
 	for obj: SimObject in world.objects.values():
+		if obj.def.kind == ObjectDef.Kind.BATTERY:
+			delivered += obj.flow_w
+			var cap := obj.def.battery_capacity_kwh * Market.J_PER_KWH
+			_check(obj.stored_j >= 0.0 and obj.stored_j <= cap + 1e-6 and absf(obj.flow_w) <= obj.def.battery_max_w + 1e-6,
+				"battery %d holds %.1f of %.1f J, flow %.2f W" % [obj.id, obj.stored_j, cap, obj.flow_w])
+			stored += obj.stored_j
 		if obj.def.kind != ObjectDef.Kind.CELL:
 			continue
 		cells += 1
@@ -314,7 +321,7 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 		cell_hi = maxf(cell_hi, obj.temperature_k)
 		_check(obj.power_w >= 0.0 and obj.power_w <= arriving + 1e-6,
 			"cell %d delivers %.3f W of %.3f W arriving" % [obj.id, obj.power_w, arriving])
-		if power.sells(world, obj):
+		if power.delivers(world, obj):
 			selling += 1
 			delivered += obj.power_w
 		else:
@@ -332,6 +339,7 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 		% [Readout.power(sold), selling, cells, power.networks.count, grids]
 		+ "· cells max %.1f °C · $%.6f" % [SimConst.k_to_c(cell_hi), world.money])
 	f.sold_w = sold
+	f.stored_j = stored
 	f.cell_max_k = cell_hi
 
 

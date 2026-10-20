@@ -38,7 +38,9 @@ const COMMANDS := {
 	"site": "{op: save|reset|scenario|load, name}: save the player's site now (it autosaves every 5 s), "
 		+ "forget it and start fresh, show test scenario `name` (Scenarios.LIST; never saved), or go back to "
 		+ "the player's site",
-	"power": "money, grid price, and each wire network: tiles, grid connection, W sold, cells on it",
+	"power": "money, grid price, and each wire network: tiles, grid connection, W sold, batteries' stance, "
+		+ "objects on it",
+	"charge": "{id, fraction}: sets a battery's charge (0 to 1) directly, for setting up a case",
 	"wire": "{x0, y0, x1, y1, remove: false}: lay (or remove) wire along an L from (x0, y0) across, then "
 		+ "down/up to (x1, y1)",
 	"time": "{hour}: jump to that hour of the current day (24+ = next day)",
@@ -134,6 +136,11 @@ func _object_info(obj: SimObject) -> Dictionary:
 		# Unrounded: moonlight readings are mW/m².
 		d["probe_w_m2"] = obj.incident_irradiance()
 		d["spectrum_w_m2"] = Array(obj.incident_spectrum())
+	if obj.def.kind == ObjectDef.Kind.BATTERY:
+		var cap := obj.def.battery_capacity_kwh * Market.J_PER_KWH
+		d["stored_kwh"] = obj.stored_j / Market.J_PER_KWH
+		d["charge"] = snappedf(obj.stored_j / cap, 0.0001)
+		d["flow_w"] = snappedf(obj.flow_w, 0.001)
 	if obj.def.kind == ObjectDef.Kind.CELL:
 		var light: LightSystem = world.get_system(&"light")
 		d["front_w_m2"] = snappedf(obj.incident_irradiance() * light.power_scale(world), 0.01)
@@ -374,12 +381,13 @@ func _cmd_wire(a: Dictionary) -> Dictionary:
 func _cmd_power(_a: Dictionary) -> Dictionary:
 	var w := world
 	var power: PowerSystem = w.get_system(&"power")
-	power.networks.sync(w.grid, w.grid.wire)
+	power.sync(w)
 	var nets := []
 	for n in power.networks.count:
 		nets.append({"network": n, "tiles": power.networks.network.count(n), "grid": power.network_grid[n] == 1
 			if n < power.network_grid.size() else false,
 			"sold_w": snappedf(power.output_w(w, n), 0.001),
+			"stance": Market.Stance.keys()[Market.stance(w)],
 			"objects": []})
 	for obj: SimObject in w.objects.values():
 		var n := power.network_of(w, obj)
@@ -405,6 +413,14 @@ func _cmd_site(a: Dictionary) -> Dictionary:
 			_main.load_site.call_deferred("")
 			return {"ok": true, "note": "the player's site on the next frame"}
 	return {"error": "op is save, reset, scenario or load"}
+
+
+func _cmd_charge(a: Dictionary) -> Dictionary:
+	var obj: SimObject = world.objects.get(int(a.get("id", -1)))
+	if obj == null or obj.def.kind != ObjectDef.Kind.BATTERY:
+		return {"error": "no battery %s" % a.get("id")}
+	obj.stored_j = clampf(float(a.get("fraction", 0.0)), 0.0, 1.0) * obj.def.battery_capacity_kwh * Market.J_PER_KWH
+	return _object_info(obj)
 
 
 func _cmd_remove(a: Dictionary) -> Dictionary:

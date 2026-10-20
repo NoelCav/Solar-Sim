@@ -8,7 +8,8 @@ extends RefCounted
 ##   pins the needle there and lights the amber lamp.
 ## - The lamp is green while the device is on a network that sells, dark otherwise (an open
 ##   cell makes nothing: the inspector says what it could make).
-## - The LCD under the scale shows the watts once it is big enough to read.
+## - The LCD under the scale shows the watts once it is big enough to read. A battery's meter
+##   reads its flow against its maximum (either way) and shows its charge on the LCD.
 ## Sizes are in meters, so the meters zoom with the world.
 
 const FULL_SCALE := 1.25
@@ -30,20 +31,27 @@ const LAMP_OVER := Color(1.0, 0.65, 0.2)
 const LAMP_OFF := Color(0.3, 0.3, 0.3)
 
 
-## Draws the meter of every cell and grid connection on `ci`; `base` is the canvas item's
+## Draws the meter of every cell, battery and grid connection on `ci`; `base` is the canvas item's
 ## screen-unit transform (restored afterwards), `px` screen units per meter. Read from the
 ## light now, so the meters are right while paused too.
 static func draw_all(ci: CanvasItem, world: SimWorld, base: Transform2D, px: float) -> void:
 	var power: PowerSystem = world.get_system(&"power")
-	var light_scale := (world.get_system(&"light") as LightSystem).power_scale(world)
 	power.sync(world)
 	for obj: SimObject in world.objects.values():
 		match obj.def.kind:
 			ObjectDef.Kind.CELL:
-				var sells := power.sells(world, obj)
-				var watts := SolarCell.object_power(obj, light_scale) if sells else 0.0
+				var n := power.network_of(world, obj)
+				var sells := power.delivers(world, obj)
+				var watts: float = power.flows(world, n, SimConst.DT).cells[obj.id] if sells else 0.0
 				_draw_meter(ci, base * Transform2D(0.0, _cell_meter_m(world, obj) * px), CELL_METER_M * px,
 					watts, SolarCell.rated_power(obj.def), sells)
+			ObjectDef.Kind.BATTERY:
+				var n := power.network_of(world, obj)
+				var charge := obj.stored_j / (obj.def.battery_capacity_kwh * Market.J_PER_KWH)
+				var at := obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)
+				var flow := absf(power.flows(world, n, SimConst.DT).batteries[obj.id]) if n >= 0 else 0.0
+				_draw_meter(ci, base * Transform2D(obj.angle, at * px), CABINET_METER_M * px, flow,
+					obj.def.battery_max_w, n >= 0, "%.0f %%" % (charge * 100.0))
 			ObjectDef.Kind.GRID_TIE:
 				var n := power.network_of(world, obj)
 				var at := obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)
@@ -64,7 +72,7 @@ static func _cell_meter_m(world: SimWorld, obj: SimObject) -> Vector2:
 ## One meter of `s` screen units centered on `at`'s origin: housing, face with scale and
 ## needle, LCD and lamp.
 static func _draw_meter(ci: CanvasItem, at: Transform2D, s: Vector2, watts: float, rated: float,
-		selling: bool) -> void:
+		selling: bool, text := "") -> void:
 	ci.draw_set_transform_matrix(at)
 	var box := Rect2(-s * 0.5, s)
 	ci.draw_rect(box, HOUSING)
@@ -97,7 +105,8 @@ static func _draw_meter(ci: CanvasItem, at: Transform2D, s: Vector2, watts: floa
 	if font_size < MIN_TEXT:
 		return
 	var font := ThemeDB.fallback_font
-	var text := Readout.power(watts) if selling else "no grid"
+	if text == "":
+		text = Readout.power(watts) if selling else "no grid"
 	var baseline := lcd.get_center().y + (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5
 	ci.draw_string(font, Vector2(lcd.position.x + pad * 0.5, baseline), text, HORIZONTAL_ALIGNMENT_RIGHT,
 		lcd.size.x - pad, font_size, LCD_TEXT)

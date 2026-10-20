@@ -23,6 +23,10 @@ var temperature_k := 0.0
 var heat_in := 0.0
 ## Electrical power it delivers this tick, W (PowerSystem; cells on a network that sells).
 var power_w := 0.0
+## Battery: energy held, J (real energy; saved), and this tick's flow, W (+ out to the network,
+## − in from it).
+var stored_j := 0.0
+var flow_w := 0.0
 
 
 func _init(p_id: int, p_def: ObjectDef, p_position: Vector2, p_angle: float) -> void:

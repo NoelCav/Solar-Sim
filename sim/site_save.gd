@@ -1,7 +1,7 @@
 class_name SiteSave
 extends RefCounted
 ## Saves and restores a site: the clock, money, objects (definition key, position, tilt,
-## mounted), the wire layer and the terrain (tile materials). Temperatures and light are not
+## mounted, battery charge), the wire layer and the terrain (tile materials). Temperatures and light are not
 ## saved; they settle again within moments. Restoring is part of building the world, like
 ## WorldGen: it writes the state directly, before play starts (no commands, no undo history).
 
@@ -13,7 +13,7 @@ static func capture(world: SimWorld) -> Dictionary:
 	var objects := []
 	for obj: SimObject in world.objects.values():
 		objects.append({"key": str(obj.def.key), "x": obj.position.x, "y": obj.position.y,
-			"angle": obj.angle, "mounted": obj.mounted})
+			"angle": obj.angle, "mounted": obj.mounted, "stored_j": obj.stored_j})
 	var wires := []
 	for i in world.grid.size():
 		if world.grid.wire[i] != 0:
@@ -54,6 +54,7 @@ static func restore(world: SimWorld, data: Dictionary, defs: ObjectDB) -> String
 			continue
 		var obj := SimObject.new(world.next_object_id, def, Vector2(float(o.x), float(o.y)), float(o.angle))
 		obj.mounted = bool(o.get("mounted", false))
+		obj.stored_j = float(o.get("stored_j", 0.0))
 		world.add_object(obj)
 	world.refresh_environment()
 	return ""

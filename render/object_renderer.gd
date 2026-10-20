@@ -45,7 +45,7 @@ func _draw() -> void:
 		var pieces := obj.world_pieces()
 		var hl := obj.id == highlighted_id or obj.id == selected_id
 		match def.kind:
-			ObjectDef.Kind.LENS, ObjectDef.Kind.PRISM, ObjectDef.Kind.GRID_TIE:
+			ObjectDef.Kind.LENS, ObjectDef.Kind.PRISM, ObjectDef.Kind.GRID_TIE, ObjectDef.Kind.BATTERY:
 				var outline := OpticsGen.outline(pieces)
 				var pts := PackedVector2Array()
 				for p in outline:

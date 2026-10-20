@@ -4,7 +4,7 @@ extends Resource
 ## probe, cell) and machines (grid connection; later batteries and consumers). Machines are
 ## boxes behind the play plane (D19): no optics, and they only collide with other machines.
 
-enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE }
+enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE, BATTERY }
 ## How it stands in the world (Mounting): on a stand, flat on the ground, or floating.
 enum Mount { STAND, GROUND, FREE }
 ## Where it is listed in the build catalog.
@@ -36,6 +36,15 @@ enum Category { OPTICS, POWER, MACHINES, TOOLS }
 ## Reflectance per spectral bin: a mirror's, or what a cell's front (its AR coating) and back reflect.
 @export var reflectance: PackedFloat32Array = PackedFloat32Array([0.9, 0.9, 0.9, 0.9, 0.9, 0.9])
 
+@export_group("Battery")
+## Energy it holds, kWh (real energy, like the market's), and the most power it takes in or gives
+## out, W.
+@export var battery_capacity_kwh: float = 0.5
+@export var battery_max_w: float = 250.0
+## Share of the energy that survives one way in or out (lithium-ion round trip is about 90 %).
+## The rest is lost; machines have no thermal node (D19), so it is not tracked as heat.
+@export var battery_efficiency: float = 0.95
+
 @export_group("Cell")
 ## Solar cell parameters (§9.1, SolarCell). Defaults: crystalline silicon, calibrated to ≈22 %
 ## at 1 sun and 25 °C.
@@ -60,7 +69,7 @@ func build_pieces() -> Array:
 			return OpticsGen.convex_lens(size_m, radius_front_m, radius_back_m, thickness_m, arc_segments)
 		Kind.PRISM:
 			return OpticsGen.prism(size_m, apex_angle_deg)
-		Kind.GRID_TIE:
+		Kind.GRID_TIE, Kind.BATTERY:
 			return OpticsGen.box(size_m, thickness_m)
 		_:
 			return OpticsGen.flat_strip(size_m)
@@ -78,7 +87,7 @@ func is_body() -> bool:
 
 ## True for machines: boxes behind the play plane, outside the optics (D19).
 func is_machine() -> bool:
-	return kind == Kind.GRID_TIE
+	return kind == Kind.GRID_TIE or kind == Kind.BATTERY
 
 
 ## True when the shape is a closed outline (bodies and machines), not an open surface.

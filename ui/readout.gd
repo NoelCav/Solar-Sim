@@ -46,6 +46,9 @@ static func item_stats(def: ObjectDef, materials: MaterialDB, full := false) -> 
 			return "Measures light; blocks nothing"
 		ObjectDef.Kind.GRID_TIE:
 			return "Sells the power of its wire network"
+		ObjectDef.Kind.BATTERY:
+			var held := "%s · %s" % [energy(def.battery_capacity_kwh * Market.J_PER_KWH), power(def.battery_max_w)]
+			return held + " · takes surplus when power is cheap, sells when dear" if full else held
 	return ""
 
 
@@ -76,6 +79,12 @@ static func power(watts: float) -> String:
 	if absf(watts) >= 1e3:
 		return "%.2f kW" % (watts / 1e3)
 	return "%.1f W" % watts
+
+
+## Energy with a unit that fits its size, from joules.
+static func energy(joules: float) -> String:
+	var kwh := joules / Market.J_PER_KWH
+	return "%.2f kWh" % kwh if absf(kwh) >= 1.0 else "%.0f Wh" % (kwh * 1000.0)
 
 
 static func _mean(values: PackedFloat32Array) -> float:

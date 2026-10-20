@@ -2,6 +2,7 @@ extends TestSuite
 ## Solar cell model checks (design doc §9.1, SolarCell), wires and selling power (§10).
 
 const CELL_SI := preload("res://data/objects/cell_si.tres")
+const BATTERY := preload("res://data/objects/battery.tres")
 
 
 func _efficiency(def: ObjectDef, suns: float, temp_k: float = SolarCell.T_REF_K) -> float:
@@ -126,18 +127,22 @@ func test_wires_form_networks() -> void:
 
 
 ## A ground of stone (rows 10+) at noon with a cell panel on a 1 m stand (column 8) and a grid
-## connection (column 12); `wired` lays wire along the ground between their feet.
-func _array_world(wired: bool) -> SimWorld:
+## connection (column 12); `wired` lays wire along the ground between their feet. `hour` is the
+## time of day; `battery` puts a battery between them, `grid` leaves out the grid connection.
+func _array_world(wired: bool, hour := 12.0, battery := false, grid := true) -> SimWorld:
 	var world := SimWorld.new(load_materials(), 16, 16, 1)
 	var g := world.grid
 	var stone := world.materials.id_of(&"stone")
 	for i in g.size():
 		g.material[i] = stone if i / g.width >= 10 else MaterialDB.AIR_ID
 	g.mark_structure_changed()
-	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.time_s = hour / 24.0 * SimConst.DAY_LENGTH_S
 	world.tick()
 	world.enqueue(PlaceObjectCommand.new(CELL_SI, Vector2(2.1, 1.5), 0.0, true))
-	world.enqueue(PlaceObjectCommand.new(load("res://data/objects/grid_tie.tres"), Vector2(3.1, 2.0), 0.0, true))
+	if grid:
+		world.enqueue(PlaceObjectCommand.new(load("res://data/objects/grid_tie.tres"), Vector2(3.1, 2.0), 0.0, true))
+	if battery:
+		world.enqueue(PlaceObjectCommand.new(BATTERY, Vector2(2.0, 2.0), 0.0, true))
 	if wired:
 		var cells := PackedInt32Array()
 		for x in range(8, 13):
@@ -164,7 +169,7 @@ func test_wired_cell_sells_power() -> void:
 		var could := SolarCell.object_power(cell, light.power_scale(world))   # Power runs before heat
 		# Before any tick (as while paused) the power system already knows who sells what.
 		var power: PowerSystem = world.get_system(&"power")
-		check_eq(power.sells(world, cell), wired, "sells before a tick")
+		check_eq(power.delivers(world, cell), wired, "sells before a tick")
 		check_near(power.output_w(world, power.network_of(world, tie)), could if wired else 0.0, 1e-3,
 			"network output before a tick")
 		check_near(power.rated_w(world, power.network_of(world, tie)),
@@ -192,3 +197,113 @@ func test_duck_curve() -> void:
 	check(at.call(12.0) < at.call(8.0) and at.call(12.0) < at.call(19.0), "midday dip")
 	check(at.call(19.0) > at.call(17.0) and at.call(19.0) > at.call(21.0), "evening peak")
 	check_near(at.call(23.999), at.call(0.0), 1e-3, "continuous at midnight")
+
+
+## The battery (design §10): at a cheap price it takes in the surplus a cell makes and the rest
+## is sold; the charge gained is the power taken times the one-way efficiency.
+func test_battery_charges_when_cheap() -> void:
+	var world := _array_world(true, 12.0, true)
+	var cell: SimObject = world.objects[1]
+	var bat := _battery_of(world)
+	check_eq(Market.stance(world), Market.Stance.CHARGE, "noon is cheap")
+	var power: PowerSystem = world.get_system(&"power")
+	var n := power.network_of(world, bat)
+	var made := SolarCell.object_power(cell, (world.get_system(&"light") as LightSystem).power_scale(world))
+	var f := power.flows(world, n, SimConst.DT)
+	check_near(f.batteries[bat.id], -made, 1e-6, "all the surplus goes in (a cell is below the battery's limit)")
+	check_near(f.sold_w, 0.0, 1e-6, "nothing left to sell")
+	world.tick()
+	check_near(bat.stored_j, made * SimConst.DT * SimConst.DAY_COMPRESSION * bat.def.battery_efficiency, 1e-3,
+		"charge gained = power × time × efficiency")
+	check_near(world.money, 0.0, 1e-12, "nothing sold, nothing earned")
+
+
+## When the price is high a charged battery gives out up to its limit, and the grid pays for it.
+## The charge falls by the energy given divided by the efficiency.
+func test_battery_sells_when_dear() -> void:
+	var world := _array_world(true, 19.0, true)
+	var bat := _battery_of(world)
+	var def := bat.def
+	bat.stored_j = def.battery_capacity_kwh * Market.J_PER_KWH
+	check_eq(Market.stance(world), Market.Stance.SELL, "evening is dear")
+	var before := bat.stored_j
+	var money := world.money
+	var earns := Market.earnings(world, def.battery_max_w, SimConst.DT)
+	world.tick()
+	check_near(bat.flow_w, def.battery_max_w, 1e-6, "gives its maximum")
+	check_near(bat.stored_j, before - def.battery_max_w * SimConst.DT * SimConst.DAY_COMPRESSION / def.battery_efficiency,
+		1e-3, "charge falls by energy / efficiency")
+	check_near(world.money - money, earns, 1e-8, "the grid pays for it")
+	bat.stored_j = 0.0
+	world.tick()
+	check_eq(bat.flow_w, 0.0, "an empty battery gives nothing")
+
+
+## Between cheap and dear it holds: cells sell as before, the battery does nothing.
+func test_battery_holds_between() -> void:
+	var world := _array_world(true, 8.0, true)
+	var bat := _battery_of(world)
+	bat.stored_j = 1000.0
+	check_eq(Market.stance(world), Market.Stance.HOLD, "mid-morning is neither")
+	world.tick()
+	check_eq(bat.flow_w, 0.0, "idle")
+	check_eq(bat.stored_j, 1000.0, "charge unchanged")
+
+
+## It never holds more than its capacity or less than nothing, and over a day of ticks the energy
+## adds up: charge gained = taken × efficiency − given / efficiency.
+func test_battery_stays_in_bounds_and_conserves() -> void:
+	var world := _array_world(true, 11.0, true)
+	var bat := _battery_of(world)
+	var cap := bat.def.battery_capacity_kwh * Market.J_PER_KWH
+	bat.stored_j = cap - 50.0
+	var net := 0.0
+	for k in SimConst.TICK_RATE * 120:
+		world.tick()
+		net += (-bat.flow_w * bat.def.battery_efficiency if bat.flow_w < 0.0
+			else -bat.flow_w / bat.def.battery_efficiency) * SimConst.DT * SimConst.DAY_COMPRESSION
+		check(bat.stored_j >= 0.0 and bat.stored_j <= cap + 1e-6, "charge %.1f in [0, %.1f]" % [bat.stored_j, cap])
+	check_near(bat.stored_j, cap - 50.0 + net, 1e-2, "energy adds up")
+	check_near(bat.stored_j, cap, 1e-3, "a full battery stays full")
+
+
+## A network with a battery and no grid connection: the cell charges it (any price), and once it
+## is full the cell has nowhere to send its power and runs as hot as an unwired one.
+func test_battery_without_grid_only_charges() -> void:
+	var world := _array_world(true, 12.0, true, false)
+	var cell: SimObject = world.objects[1]
+	var bat := _battery_of(world)
+	var power: PowerSystem = world.get_system(&"power")
+	check(power.delivers(world, cell), "a battery takes the cell's power")
+	world.tick()
+	check(cell.power_w > 30.0 and bat.flow_w < 0.0, "cell %.1f W into the battery %.1f W" % [cell.power_w, bat.flow_w])
+	check_near(-bat.flow_w, cell.power_w, 1e-6, "all of it")
+	check_eq(world.money, 0.0, "nothing sold")
+	bat.stored_j = bat.def.battery_capacity_kwh * Market.J_PER_KWH
+	world.tick()
+	check_eq(cell.power_w, 0.0, "full: the cell is at open circuit")
+	check_eq(bat.flow_w, 0.0, "and the battery takes nothing")
+
+
+## A saved site keeps each battery's charge.
+func test_battery_charge_saves() -> void:
+	var world := _array_world(true, 12.0, true)
+	var bat := _battery_of(world)
+	bat.stored_j = 123456.789
+	var data: Dictionary = JSON.parse_string(SiteSave.to_text(world))
+	var defs := ObjectDB.new()
+	defs.load_dir()
+	var fresh := SimWorld.new(load_materials(), 16, 16, 1)
+	check_eq(SiteSave.restore(fresh, data, defs), "", "restores")
+	var restored: SimObject = null
+	for obj: SimObject in fresh.objects.values():
+		if obj.def.kind == ObjectDef.Kind.BATTERY:
+			restored = obj
+	check(restored != null and restored.stored_j == 123456.789, "charge kept")
+
+
+func _battery_of(world: SimWorld) -> SimObject:
+	for obj: SimObject in world.objects.values():
+		if obj.def.kind == ObjectDef.Kind.BATTERY:
+			return obj
+	return null

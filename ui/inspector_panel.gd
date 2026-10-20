@@ -150,6 +150,8 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 		return s
 	if obj.def.kind == ObjectDef.Kind.CELL:
 		s += _cell_text(obj, selected)
+	elif obj.def.kind == ObjectDef.Kind.BATTERY:
+		return s + _battery_text(obj)
 	elif obj.def.kind == ObjectDef.Kind.GRID_TIE:
 		var n := _power.network_of(world, obj)
 		if n < 0:
@@ -162,6 +164,21 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 	return s
 
 
+## A battery's charge, what it is doing at this price, and what it can still take or give.
+func _battery_text(obj: SimObject) -> String:
+	var n := _power.network_of(world, obj)
+	if n < 0:
+		return "\n[color=#8a93a0]not wired: run wire to its foot[/color]"
+	var cap := obj.def.battery_capacity_kwh * Market.J_PER_KWH
+	var w: float = _power.flows(world, n, SimConst.DT).batteries[obj.id]
+	var doing := "idle" if absf(w) < 0.05 else ("giving %s" % Readout.power(w) if w > 0.0 else "taking %s" % Readout.power(-w))
+	var s := "\n%s of %s (%.0f %%) · %s" % [Readout.energy(obj.stored_j), Readout.energy(cap), obj.stored_j / cap * 100.0, doing]
+	if _power.network_grid[n] == 0:
+		return s + "\n[color=#8a93a0]no grid connection: it only charges[/color]"
+	return s + "\n[color=#8a93a0]price %.1f ¢/kWh: %s[/color]" % [Market.price_per_kwh(world) * 100.0,
+		["charges from surplus", "holds", "sells"][Market.stance(world)]]
+
+
 ## What a cell makes now (on a network that sells) or could make (not wired to one); read from
 ## the light now, so it is right while paused too. `full` adds its efficiency against rated,
 ## and how much of its light came straight from the source.
@@ -170,7 +187,7 @@ func _cell_text(obj: SimObject, full: bool) -> String:
 	var watts := SolarCell.object_power(obj, _light.power_scale(world))
 	var rated := SolarCell.rated_power(obj.def)
 	var eta := watts / (irr * obj.def.face_area_m2()) if irr > 0.0 else 0.0
-	var s := "\nmaking %s" % Readout.power(watts) if _power.sells(world, obj) \
+	var s := "\nmaking %s" % Readout.power(watts) if _power.delivers(world, obj) \
 		else "\ncould make %s  [color=#8a93a0](not wired to a grid connection)[/color]" % Readout.power(watts)
 	if not full:
 		return s + "  [color=#8a93a0](%.0f%% of %s)[/color]" % [eta * 100.0, Readout.irradiance(irr)]
