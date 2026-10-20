@@ -231,6 +231,7 @@ func _on_card_input(event: InputEvent, k: int) -> void:
 	if mb.pressed:
 		_was_picked = tool.selected == k
 		tool.pick_item(k)
+		_followed = tool.selected   # Picked from the list: it is already in view, so don't jump
 		_dragging = true
 	elif _dragging:
 		_dragging = false
