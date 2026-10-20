@@ -53,6 +53,7 @@ func update() -> void:
 	if key != _key:
 		_key = key
 		_rebuild()
+		_fit()
 	# A newly picked item (1–9, entering Build) brings its section into view, once.
 	var building := tool.mode == ObjectTool.Mode.BUILD
 	if building and tool.selected != _followed and tool.selected >= 0 and tool.selected < tool.defs.size() \
@@ -61,6 +62,18 @@ func update() -> void:
 	_followed = tool.selected if building else -2
 	if tool.selected != _shown_selected:
 		_style_cards()
+
+
+## The catalog takes the height between the top bar and the dock; the other tools' options only what
+## they need.
+func _fit() -> void:
+	if tool.mode == ObjectTool.Mode.BUILD:
+		anchor_bottom = 1.0
+		offset_bottom = -(UiStyle.DOCK_H + 2.0 * UiStyle.GAP)
+	else:
+		anchor_bottom = 0.0
+		offset_bottom = 0.0
+		reset_size()
 
 
 func _rebuild() -> void:

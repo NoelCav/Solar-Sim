@@ -15,7 +15,7 @@ The site is saved every 5 s (`user://site.json`: objects, wire, painted terrain,
 
 What you see: the sky glows from the screen edge the sunlight comes from and is colored by the sun's actual spectrum (red at dawn and dusk). At night the moon takes over: it goes through phases over 8 game days, rises about 3.4 h later each day, and its light (about a millionth of the sun's) is traced through the same optics and drawn pale blue at a night exposure; below the original ground line a dark earth backdrop sits behind the tiles. Lenses, prisms and mirrors have their own temperature (Heat view fills them with it).
 
-Screen: the top bar (clock, time controls, money and price, views), the tool rail on the left, the tool's side panel (the build catalog, or paint and wire options), the inspector top right and the view legend bottom right. The map ignores the pointer while it is over a panel.
+Screen: the top bar (clock, time controls, money and price, views), the tool dock along the bottom, the tool's panel at the left (the build catalog, or paint and wire options), the inspector top right and the view legend bottom right. The map ignores the pointer while it is over a panel.
 
 Controls (the window opens maximized and the interface scales with it; every key below also has a button):
 
@@ -24,7 +24,7 @@ Controls (the window opens maximized and the interface scales with it; every key
 | Select tool (Esc, 0) — default | Click an object to select it, drag to move, drag its ring handle to tilt (Ctrl snaps 15°); drag empty space to pan |
 | Build tool (B) | Click a catalog card, then click the map to place it as often as you like (R/F tilt the ghost first); RMB or the card again drops it. Or drag a card onto the map to place one. 1–9 pick items by number. With nothing picked it works like Select. Objects go on stands that snap to tile columns and 25 cm heights (surface cells lie on the ground); hold Alt to float one (creative) |
 | Paint tool (T) | LMB paint, RMB erase, Q/E or the swatches for material, `[` `]` size |
-| Wire tool (V) | LMB lay wire, RMB remove, `[` `]` size. Objects connect at the foot of their stand; cells wired to a Grid Connection sell their power (money and price in the top bar) |
+| Wire tool (V) | Drag a line (one bend; Shift flips it), right-drag erases; pick one of four colors, which cross without touching. Objects connect at the foot of their stand and surface cells conduct, so touching cells need one connection; cells wired to a Grid Connection sell their power and lamps draw from it (money and price in the top bar) |
 | WASD / middle-drag, wheel | Pan, zoom (up to 64×; outlines and labels stay crisp) |
 | R / F (Shift = fine), Shift+wheel | Tilt the selected or hovered object |
 | X / Delete | Delete the selected or hovered object |
@@ -32,7 +32,7 @@ Controls (the window opens maximized and the interface scales with it; every key
 | `,` `.` (Shift: 6 h), the jump buttons, Set time… | Move the clock (−1 h, +30 min, +1 h, +6 h, or to a chosen hour) without simulating the time between (the sun moves, temperatures don't) |
 | H, or the view buttons (top bar) | Views: Normal · Light (all wavelengths in false color, tiles show absorbed light) · Heat (every tile's temperature; hover the legend to read values) |
 | G / J, or the wavelength list | Show one spectral band (UV, blue, green, red, near IR, IR) or all |
-| F1, or ? on the rail | Hide/show the help line |
+| F1, or Menu in the dock | Controls and options (performance numbers) |
 | Ctrl+Z, or the rail's undo | Undo |
 
 ## Agent tools (inspect and drive the sim)

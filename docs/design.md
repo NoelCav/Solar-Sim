@@ -412,7 +412,7 @@ Water is a resource: open cooling (towers, evaporating pools) loses water; deser
 Built (run 01 group 4): the screen is the map with fixed panels around it (`Hud` assembles them, `UiStyle` holds the look). The map ignores the pointer while it is over a panel.
 
 - **Top bar:** clock and sky; pause, speed − / +, clock jumps and Set time; money, what the site sells and the price with its trend; views and wavelength.
-- **Tool rail** (left): Select, Build, Paint, Wire, Undo, Help.
+- **Tool dock** (bottom, §16.2): Select, Build, Paint, Wire, Undo, Menu.
 - **Side panel:** Build is a catalog with search, category tabs and item cards (one at-a-glance figure; all numbers in the tooltip). Click a card, then click the map to place as many as you like (RMB or the card again drops it), or drag a card onto the map to place one. Paint and Wire show their options.
 - **Inspector** (top right): hover gives a summary of an object or tile; selecting an object gives the full numbers (a lens's focus, transmission and material; a cell's efficiency card: rated vs now, where the light goes, power by color, direct vs through optics) and its actions.
 - **On the map:** probe reading tags, the peak marker, power meters on the devices (§10), the tilt ring.
@@ -424,27 +424,25 @@ Built (run 01 group 4): the screen is the map with fixed panels around it (`Hud`
 - Built: paint tiles, place anything free (Alt floats it off its stand), set the time, undo (D6).
 - Planned: area fill, paint temperature / add heat; spawn liquid, smoke, steam (once those layers ship); freeze sun, weather, latitude; redo; toggle sim layers on/off for debugging.
 
-### 16.2 UI overhaul (proposal, 2026-10-20; the user's notes after playing the lamp build)
+### 16.2 UI overhaul (2026-10-20; the user's notes after playing the lamp build)
 
-What was said, grouped. Nothing here is a locked rule: layout, icons and flows are open until the user is happy.
+Decided with the user: a **bottom toolbar**, **wire drawn as a line**, **right- or middle-drag pans** in every tool that isn't brushing. Nothing here is a locked rule: layout, icons and flows stay open until the user is happy.
 
-**Building (quick to do, quick to read)**
-- Dragging places many surface cells in a row (click and drag; one undo step). Neighbouring surface cells are one *set*: they conduct to each other (a cell acts as wire), need one connection to the network between them, and show one meter.
-- A wire visibly meets the foot of a device (today the wire stops at the tile above, so it doesn't look connected).
-- Wire is drawn as a line like roads and pipes in Cities: Skylines: press, drag, release draws the whole run (straight or one bend, with a preview); one undo takes the whole gesture (done for brush strokes: `SimCommand.group`). Connections to devices snap to their feet.
-- Several wire colours so wires can cross: a tile holds up to four channels (like Terraria's coloured wire); a network is one channel; a device joins the channel of the wire at its foot (chosen in its inspector when more than one is there).
-- The grid connection both sells and supplies (lamps already draw from it at retail): its meter and inspector show import and export.
-- Panning while the buy menu is open: right-drag or middle-drag pans in every tool (a plain right-click still drops the held item); left-drag paints only for items that are laid in runs (surface cells, wire, terrain).
-- Only things that can turn show a tilt ring and tilt buttons (done).
+**Built**
+- *Look:* `UiTheme` (one dark, soft-cornered Theme on the Hud: font, buttons, fields, menus, sliders, scroll bars, tooltips) on top of `UiStyle`.
+- *Layout:* `ToolDock` along the bottom (Select, Build, Paint, Wire, Undo, Menu: a drawing over the name and key); a slim top bar (clock and sky, time, money, price, view buttons with icons, the performance numbers when switched on); the catalog at the left above the dock; the inspector top right; `HelpMenu` (F1 or the dock's Menu: controls for the tool in use, and the performance toggle) in place of the help line.
+- *Catalog:* every buyable in sections (Optics, Power, Machines, Tools) with a button per section that jumps down to it; item icons are drawn per kind (lens and mirror outlines, a panel, a battery, a pylon, a bulb, a probe); the Build button is a crate with a plus. Paint and Wire show only what they need.
+- *Building:* dragging lays a run of surface cells (`SimCommand.group`: one undo for the gesture, also for brush strokes). Surface cells conduct, so touching cells are one network and one *set* with one meter (`PowerSystem.sets`); each device has a lug from its foot to the tile it connects at (copper when it is on a network, grey when not). Wire is drawn as a line (one bend, Shift flips it, a press on a device starts at its foot, a preview, one undo; right-drag erases). Four wire colors (*channels*: a tile holds a bit per channel) cross without touching; devices join the network at their foot in the lowest channel there. Right-drag or middle-drag pans in Select and Build; a right-click still drops the held item. Only things that can turn (`ObjectDef.can_rotate`) get a tilt ring and tilt buttons.
+- *Meters:* redrawn as instruments (rounded housing, a green/amber/red dial with a needle, an LCD, a status lamp; titles and scale marks when large); hovering a device's meter picks the device, and the inspector shows an enlarged copy (`MeterView`). The grid connection's meter and the top bar show buying as well as selling.
+- *Light view:* draws the light on each surface as *skins* along the faces (glass and water still tile by tile); the single-wavelength views stay tile by tile.
+- *Display light:* stands, bodies and meter housings are lit by the light at their position (`LightLayer.irradiance_at`, shadows included, each layer at its exposure: `DisplayLight.light_at`); self-lit things (lamps, LCDs) stay bright. Lamp light is drawn at ×1000 at night (×1 by day), lamp beams much gentler (×30).
+- *Peak marker:* "× sun" by day, plain W/m² at night (a multiple of the moon meant nothing next to a lamp).
 
-**Layout (the part to decide)**
-- Proposal: a bottom toolbar, like Cities: Skylines and the hotbars of editing tools: category buttons with real icons (power, optics, machines, wires, terrain, tools) that open a shelf of every item in the category; a catalog of *everything* buyable with section buttons that jump down to each section; the clock, pause, speed and money in a slim top strip; the inspector as a floating card by the thing it describes (or docked, toggleable) instead of a fixed box; the help line becomes a menu with the controls, and a performance readout that can be toggled off sits in a corner.
-- The meters get redrawn as proper instruments (the enlarged one in the inspector most of all).
-- Light view draws *skins* (the lit strips along surfaces) instead of tinting whole blocks, with a gradient legend that reads like Skylines' overlays.
-- Icons: one set drawn in code from the item's shape, so every buyable has one (the download symbol goes).
-
-**Lighting (display, §6.8)**
-- Light stays on surfaces: it doesn't pass through the ground (the sim doesn't either; the display light field is shadowed the same way). Lit stands, lens rims, meters and wires come from the light at a point (a layer can say how bright it is anywhere, shadows included), and parallax backdrop layers get lit by the same field.
+**Still open**
+- Light stays on surfaces: it doesn't pass through the ground (the sim doesn't either; the display field is shadowed the same way).
+- Parallax backdrop layers that the light field can light (§6.8); normal-mapped surfaces.
+- A wire channel choice per device in its inspector; a lasting set summary in the inspector for surface-cell sets; better icons for terrain materials; the top bar's remaining crowding; the inspector as a floating card by what it describes.
+- Wire cutters / junction boxes, if crossing wires of the same color is ever wanted.
 
 ## 17. Project structure (Godot 4, latest stable)
 
@@ -466,7 +464,7 @@ res://
     materials/*.tres
     objects/*.tres
   render/              # Nodes that read sim state: tiles, beams, objects, meters, overlays, shaders
-  ui/                  # top bar, tool rail, catalog, inspector, tools, Readout, UiStyle
+  ui/                  # top bar, tool dock, catalog, inspector, tools, Readout, UiStyle, UiTheme
   debug/               # SimProbe (agent tooling)
   scenes/main.tscn
   tests/               # headless sim tests and benchmark
@@ -615,7 +613,7 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 
 ### 18.12 Interface and readouts (2026-10-19/20, run 01 group 4)
 
-- **Interface (§16):** chose a tool rail with a side catalog over a bottom build bar. `TopBar`, `ToolRail`, `ToolPanel`, `InspectorPanel`, `LegendPanel`, assembled by `Hud`; look and widgets in `UiStyle`. The map ignores the pointer over panels (`Hud.covers`). Build picks nothing by default; with nothing picked Build works like Select (pan, pick objects).
+- **Interface (§16):** chose a tool rail with a side catalog over a bottom build bar (superseded 2026-10-20: the user chose a bottom toolbar, §16.2). `TopBar`, `ToolDock` (was `ToolRail`), `ToolPanel`, `InspectorPanel`, `LegendPanel`, assembled by `Hud`; look and widgets in `UiStyle`. The map ignores the pointer over panels (`Hud.covers`). Build picks nothing by default; with nothing picked Build works like Select (pan, pick objects).
 - **Cell light by source:** the light engine records each object's incident light twice per bin, straight from the source and through optics (`SimObject.incident_direct`). `SolarCell.analyze` returns the whole loss breakdown (reflected, below gap, photon excess, collection, voltage, temperature, series) and power per bin; the cell's output now excludes the coating's reflection (voltage factor recalibrated 0.5 → 0.52).
 - **Readouts:** catalog cards show one figure (all of them in the tooltip); a selected lens shows its full numbers; a selected cell shows its efficiency card (`StackBar` bars). Analog power meters drawn on the devices (`PowerMeters`) replace map labels for power. Hover = summary, select = everything.
 - **Site save** (§18.11) and paused readouts that ask `PowerSystem` directly.
