@@ -29,6 +29,7 @@ public partial class LightEngine : RefCounted
     const double MinSpacing = 0.02;   // Narrowest interval worth refining, m
     const double LandingTol = 0.35;   // Same-path rays landing this close count as one beam
     const double ReplayDepsPerPath = 30.0;   // A replay costs ~one ray path per this many deposits
+    const double SpreadStep = 0.01;  // Medium deposits of a coherent interval are spread in steps this wide, m
     const int CoatMirror = 1;
     const int CoatProbe = 2;
     const int CoatCell = 3;   // A mirror whose front face also records the light arriving on it
@@ -1837,8 +1838,12 @@ public partial class LightEngine : RefCounted
             Grow(p);
         foreach (var p in rb.Pts)
             Grow(p);
-        ApplyPath(ra, half, bin, iv.Ua);
-        ApplyPath(rb, half, bin, iv.Ub);
+        // A coherent interval (both rays cross the same faces) is one beam: what it deposits in
+        // tile media is spread over the band each ray stands for, not left on the ray, so the
+        // light absorbed in water or glass tiles doesn't jump as the samples slide across tiles.
+        bool coherent = iv.Kind != Span.Split;
+        ApplyPath(ra, half, bin, iv.Ua, coherent ? rb : null);
+        ApplyPath(rb, half, bin, iv.Ub, coherent ? ra : null);
         switch (iv.Kind)
         {
             case Span.Exact:
@@ -1852,8 +1857,7 @@ public partial class LightEngine : RefCounted
                 break;
             }
             case Span.Near:
-                Terminal(ra, half, bin);
-                Terminal(rb, half, bin);
+                LandBand(ra, rb, half, bin);
                 RenderStrip(ra, rb, half * 2.0, bin);
                 break;
             default:
@@ -1869,11 +1873,24 @@ public partial class LightEngine : RefCounted
     /// to its tile. Exact for any offset of the leg from the tile grid.
     void SplitDeposit(PathRec r, double frac, int body, D2 a, D2 b, double tau)
     {
+        TileShares(a, b, tau);
+        var sh = _shares;
+        for (int j = 0; j < sh.Count; j += 7)
+            AddDep(r, (int)sh[j], frac * sh[j + 1], body, new D2(sh[j + 2], sh[j + 3]), new D2(sh[j + 4], sh[j + 5]),
+                sh[j + 6]);
+    }
+
+    /// How a leg a→b of optical depth tau absorbs across the tiles it crosses (Beer–Lambert along
+    /// it; a point goes whole to its tile): fills _shares with (tile, share, ax, ay, bx, by, tau)
+    /// per piece, shares summing to 1.
+    void TileShares(D2 a, D2 b, double tau)
+    {
+        var sh = _shares;
+        sh.Clear();
         D2 d = b - a;
-        double len = Math.Sqrt(d.X * d.X + d.Y * d.Y);
-        if (len < 1e-12)
+        if (d.X * d.X + d.Y * d.Y < 1e-24)
         {
-            AddDep(r, TileAt(a), frac, body, a, a, 0);
+            sh.Add(TileAt(a)); sh.Add(1.0); sh.Add(a.X); sh.Add(a.Y); sh.Add(a.X); sh.Add(a.Y); sh.Add(0.0);
             return;
         }
         // Tile-boundary crossings along the leg, as fractions of its length.
@@ -1899,11 +1916,13 @@ public partial class LightEngine : RefCounted
                 continue;
             double w = tau > 1e-9 ? (Math.Exp(-tau * t0) - Math.Exp(-tau * t1)) / norm : t1 - t0;
             D2 p0 = a + d * t0, p1 = a + d * t1;
-            AddDep(r, TileAt(a + d * (0.5 * (t0 + t1))), frac * w, body, p0, p1, tau * (t1 - t0));
+            sh.Add(TileAt(a + d * (0.5 * (t0 + t1)))); sh.Add(w);
+            sh.Add(p0.X); sh.Add(p0.Y); sh.Add(p1.X); sh.Add(p1.Y); sh.Add(tau * (t1 - t0));
         }
     }
 
     readonly List<double> _splitTs = new();
+    readonly List<double> _shares = new();
 
     static void AddDep(PathRec r, int tile, double frac, int body, D2 a, D2 b, double tau)
     {
@@ -1918,11 +1937,36 @@ public partial class LightEngine : RefCounted
     }
 
     /// Applies a path's recorded deposits, probe crossings and reflections for `watts` of input.
-    void ApplyPath(PathRec r, double watts, int bin, double u)
+    /// With `partner` (the other ray of a coherent interval), deposits in tile media are spread
+    /// over the half of the interval this ray stands for: copies of each leg shifted toward the
+    /// matching leg of the partner, re-split over the tiles each copy crosses. Bodies keep theirs
+    /// (an object's heat doesn't depend on where in it the light was absorbed).
+    void ApplyPath(PathRec r, double watts, int bin, double u, PathRec partner = null)
     {
         var deps = r.Deps;
+        bool spread = partner != null && partner.Pts.Count == r.Pts.Count && r.Pts.Count >= 2;
         for (int k = 0; k < deps.Count; k += 8)
-            ApplyBin((int)deps[k], bin, watts * deps[k + 1], (int)deps[k + 2]);
+        {
+            int body = (int)deps[k + 2];
+            if (!spread || body >= 0)
+            {
+                ApplyBin((int)deps[k], bin, watts * deps[k + 1], body);
+                continue;
+            }
+            D2 a = new D2(deps[k + 3], deps[k + 4]), b = new D2(deps[k + 5], deps[k + 6]);
+            D2 offA = PartnerOffset(r, partner, a), offB = PartnerOffset(r, partner, b);
+            double reach = 0.5 * Math.Sqrt(Math.Max(offA.Dot(offA), offB.Dot(offB)));
+            int n = Math.Clamp((int)Math.Ceiling(reach / SpreadStep), 1, 16);
+            double w = watts * deps[k + 1] / n;
+            for (int m = 0; m < n; m++)
+            {
+                double f = 0.5 * (m + 0.5) / n;
+                TileShares(a + offA * f, b + offB * f, deps[k + 7]);
+                var sh = _shares;
+                for (int j = 0; j < sh.Count; j += 7)
+                    ApplyBin((int)sh[j], bin, w * sh[j + 1], -1);
+            }
+        }
         var incident = r.Incident;
         for (int k = 0; k < incident.Count; k += 3)
             AddIncident((int)incident[k], bin, watts * incident[k + 1], incident[k + 2] > 0.5);
@@ -1958,6 +2002,65 @@ public partial class LightEngine : RefCounted
             pool.Samples.Add(dy);
         }
     }
+
+    /// Where point p on ray r's path lies on the partner ray's path (same segment, same fraction
+    /// along it), as an offset from p. Coherent rays cross the same faces, so their paths have
+    /// matching segments.
+    static D2 PartnerOffset(PathRec r, PathRec partner, D2 p)
+    {
+        int best = 0;
+        double bestD = double.PositiveInfinity, bestT = 0;
+        for (int j = 0; j + 1 < r.Pts.Count; j++)
+        {
+            D2 s0 = r.Pts[j], seg = r.Pts[j + 1] - s0;
+            double len2 = seg.Dot(seg);
+            double t = len2 > 1e-24 ? Math.Clamp((p - s0).Dot(seg) / len2, 0.0, 1.0) : 0.0;
+            D2 q = s0 + seg * t - p;
+            double dist = q.Dot(q);
+            if (dist < bestD)
+            {
+                bestD = dist;
+                best = j;
+                bestT = t;
+            }
+        }
+        return partner.Pts[best].Lerp(partner.Pts[best + 1], bestT) - p;
+    }
+
+    /// A NEAR beam (same path, landing on uneven ground): its light lands where the band between
+    /// the rays really meets the ground, not on the two rays' landing points (that would make
+    /// light hop between tiles as the samples slide). Sub-rays across the band, `SpreadStep`
+    /// apart, re-trace only the last leg (from between the rays' last events, in between their
+    /// directions; nothing on it absorbs, the rays' Remain already counts that) and the band's
+    /// power, interpolated between the rays, lands where each meets an opaque face. A sub-ray that
+    /// meets anything else gives its share to the nearer ray's landing.
+    void LandBand(PathRec ra, PathRec rb, double half, int bin)
+    {
+        D2 a0 = ra.Pts[^2], a1 = ra.Pts[^1], b0 = rb.Pts[^2], b1 = rb.Pts[^1];
+        double wa = half * ra.Remain, wb = half * rb.Remain;
+        int n = Math.Clamp((int)Math.Ceiling(a1.DistanceTo(b1) / SpreadStep), 1, 32);
+        var none = _noPower;
+        for (int m = 0; m < n; m++)
+        {
+            double f = (m + 0.5) / n;
+            double w = (wa + (wb - wa) * f) * 2.0 / n;
+            D2 o = a0.Lerp(b0, f), d = (a1.Lerp(b1, f) - o).Normalized();
+            March(o + d * Nudge, d, none, 0, -1);
+            if (_evKind == Ev.Opaque)
+            {
+                D2 hit = _evO + d * _evT;
+                int side = FaceCode(_evFace);
+                AbsorbOpaqueBin(_evTile, side, StripAt(_evTile, side, hit), bin, w);
+            }
+            else
+            {
+                PathRec r = f < 0.5 ? ra : rb;
+                AbsorbOpaqueBin(r.TermTile, r.TermSide, StripAt(r.TermTile, r.TermSide, r.Pts[^1]), bin, w);
+            }
+        }
+    }
+
+    readonly double[] _noPower = new double[Bins];
 
     void Terminal(PathRec r, double watts, int bin)
     {

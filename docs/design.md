@@ -561,7 +561,8 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Benchmark and bug sweep** (`tests/bench.gd`, `python tools/test.py --bench`): per scenario and hour, timings by stage (advisory), machine-independent work counts, fingerprints and checks (see README); once per scenario incremental = fresh, determinism, save round trip, probes block nothing, noon symmetry. Light is checked against independent references (`LightChecks`): dense plain rays (ground truth) and small sun steps (popping). Accuracy measures are ratcheted against `tests/bench_baseline.json`.
 - **SimProbe headless** (`tools/probe.py`, `debug/probe_cli.gd`): any command on a scenario or the saved site without the game; new commands `scenarios`, `analyze`, `retrace`, `truth`, `steady`, `symmetry`. `SetTimeCommand.at_hour` is the one home of "jump to an hour".
 - **Fixed by it:** saves dropped float precision (objects came back slightly moved; now full precision, `SiteSave.to_text`).
-- **Found, open (see §19):** light in water flickers (a spectral bin's deposit drops out of a surface tile as the sun moves); incremental passes replay pooled reflections an edit changed (≤ 0.2 % of a tile until the next full pass); beams spread ~2 % of a sharp focus into its neighbours, unevenly (3 % asymmetry under a symmetric lens).
+- **Fixed (2026-10-20):** light in water and glass tiles flickered as the sun moved: a coherent beam's absorption in a tile medium sat on its two sample rays, 10 cm apart, so a tile got two or three samples' worth. Deposits are now spread over the band each ray stands for (`ApplyPath` with the partner ray, `TileShares`). Near beams (same path, uneven ground) landed on their two rays' points; `LandBand` now re-traces the last leg across the band, so the light lands where the band meets the ground. Popping in the worst scenarios fell from 19–26 % to ~10 % of the brightest tile, at no extra ray paths.
+- **Found, open (see §19):** popping at the site's edge columns (direct-light lanes at the boundary); incremental passes replay pooled reflections an edit changed (≤ 0.2 % of a tile until the next full pass); beams spread ~2 % of a sharp focus into its neighbours, unevenly (3 % asymmetry under a symmetric lens).
 - **Learned:** crown glass absorbed ~25 % of what crossed a 24 cm lens (data 5–50× real BK7); a fixed lens walked its focus ~16 cm in 15 s of game time. Decided: real absorption for every optical material, and a 24-minute day (focus drift halves).
 
 ## 19. Open questions
@@ -570,7 +571,7 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - Working title: *Bandgap*, *Heliolab*, *Photon Farm*, *Sunsink*…
 - Tuning: ray count/spacing, heat-capacity scale, dn/dT exaggeration.
 - Wind and weather depth.
-- **Light bugs from the bench (18.13):** water flicker (spectral-bin deposits in strongly absorbing tile media); incremental replay of changed pooled reflections; beam focus-edge spread and asymmetry.
+- **Light accuracy from the bench (18.13):** popping at the site's edge columns; incremental replay of changed pooled reflections; beam focus-edge spread and asymmetry.
 - **Sun speed vs focus:** even with the 24-minute day a fixed focus moves ~0.5 cm/s: sun tracking (§6.5) is core for concentrators, or wider receivers.
 - ~~GDScript vs. C#/GDExtension port~~ — done in C# (§18.4).
 - ~~Thermal tuning~~ — solid/liquid heat capacity now scales with the day compression (DAY_LENGTH_S / 86400 ≈ 1/120), so ground warms and cools on a realistic daily cycle (dirt surface ~16 → 49 °C, subsurface lags by hours) and focal spots heat ~6× faster than before.
