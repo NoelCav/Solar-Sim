@@ -162,6 +162,7 @@ func _light(world: SimWorld, light: LightSystem, t: Dictionary, w: Dictionary, f
 		_check(absf(sum / emitted - 1.0) < 1e-5, "energy balance %.7f" % (sum / emitted))
 	else:
 		print("  energy  no light traced")
+	_lamps(light, w, f)
 	var tiles := 0.0
 	var bad := 0
 	for i in light.tile_power.size():
@@ -198,6 +199,29 @@ func _light(world: SimWorld, light: LightSystem, t: Dictionary, w: Dictionary, f
 	if best_c > 0.0:
 		print("  cells   brightest %.2f× sun" % best_c)
 		f.peak_concentration = best_c
+
+
+## Each lamp's layer: its energy balances too, and its paths and watts are counted.
+func _lamps(light: LightSystem, w: Dictionary, f: Dictionary) -> void:
+	if light.lamps.is_empty():
+		return
+	var emitted := 0.0
+	var absorbed := 0.0
+	var paths := 0
+	for id: int in light.lamps:
+		var s: Dictionary = (light.lamps[id] as LightLayer).stats
+		var e: float = s.get("emitted", 0.0)
+		emitted += e
+		absorbed += s.get("absorbed", 0.0)
+		paths += s.get("rays", 0)
+		if e > 0.0:
+			var sum: float = s.absorbed + s.escaped + s.scattered + s.culled
+			_check(absf(sum / e - 1.0) < 1e-5, "lamp %d energy balance %.7f" % [id, sum / e])
+	w.lamp_paths = paths
+	f.lamp_emitted_w = emitted
+	f.lamp_absorbed_w = absorbed
+	print("  lamps   %d · emitted %s · absorbed %s · %d paths" % [light.lamps.size(), Readout.power(emitted),
+		Readout.power(absorbed), paths])
 
 
 func _mesh(world: SimWorld, t: Dictionary, w: Dictionary) -> void:

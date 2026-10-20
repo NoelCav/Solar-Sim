@@ -1,6 +1,9 @@
 extends "res://tests/optics_fixtures.gd"
 ## Point sources (lamps, design doc §6.11): what a pass over a lamp's light must do.
 
+const LAMP := preload("res://data/objects/lamp_led.tres")
+const CELL_SI := preload("res://data/objects/cell_si.tres")
+
 
 ## A complete pass over `world` for one lamp, on a pass of its own (the sky is not involved).
 func _lamp_pass(world: SimWorld, lamp: LightSource) -> LightPass:
@@ -93,10 +96,6 @@ func test_lamp_at_focus_makes_a_parallel_beam() -> void:
 
 
 # --- Lamp objects (the lamp layer) -----------------------------------------------------------------
-
-const LAMP := preload("res://data/objects/lamp_led.tres")
-const CELL_SI := preload("res://data/objects/cell_si.tres")
-
 
 ## Stone ground below row 15; an LED lamp on a stand 1.5 m above it at x = 5 m and a cell panel
 ## 0.75 m above it right under the lamp.

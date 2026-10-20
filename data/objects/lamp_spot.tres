@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ObjectDef" format=3]
+
+[ext_resource type="Script" path="res://sim/objects/object_def.gd" id="1_objdef"]
+
+[resource]
+script = ExtResource("1_objdef")
+key = &"lamp_spot"
+display_name = "Spot Lamp"
+category = 2
+kind = 7
+mount = 0
+material = &"steel"
+color = Color(0.95, 0.85, 0.6, 1)
+size_m = 0.3
+thickness_m = 0.15
+lamp_watts = 30.0
+lamp_spread_deg = 40.0

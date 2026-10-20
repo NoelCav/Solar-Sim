@@ -1,6 +1,6 @@
 {
 	"engine": "4.7.2-stable (official)",
-	"recorded": "2026-10-20T01:39:16",
+	"recorded": "2026-10-20T03:36:16",
 	"results": {
 		"demo": {
 			"a": {
@@ -38,18 +38,18 @@
 				"truth_ratio": 1.00100978059845
 			},
 			"t": {
-				"beams_ms": 4.379,
-				"direct_ms": 2.339,
-				"drag_tick_ms": 7.3864,
-				"drag_worst_ms": 11.444,
-				"heat_band_ms": 0.21409,
-				"map_ms": 0.58,
-				"mesh_ms": 2.052,
-				"pass_ms": 7.345,
-				"skin_ms": 0.226843333333333,
-				"tick_ms": 1.40563332855701,
-				"tick_p95_ms": 8.12399959564209,
-				"tick_worst_ms": 9.80799961090088
+				"beams_ms": 4.315,
+				"direct_ms": 2.369,
+				"drag_tick_ms": 8.16671666666666,
+				"drag_worst_ms": 11.434,
+				"heat_band_ms": 0.211846666666667,
+				"map_ms": 0.634,
+				"mesh_ms": 1.881,
+				"pass_ms": 7.352,
+				"skin_ms": 0.220103333333333,
+				"tick_ms": 1.4982966597875,
+				"tick_p95_ms": 9.07999992370605,
+				"tick_worst_ms": 12.1590003967285
 			},
 			"w": {
 				"beam_floats": 15126,
@@ -91,18 +91,18 @@
 				"truth_ratio": 1.00047296909317
 			},
 			"t": {
-				"beams_ms": 1.75,
-				"direct_ms": 1.876,
-				"drag_tick_ms": 6.30901666666666,
-				"drag_worst_ms": 7.917,
-				"heat_band_ms": 0.22021,
-				"map_ms": 0.565,
-				"mesh_ms": 1.495,
-				"pass_ms": 4.212,
-				"skin_ms": 0.226496666666667,
-				"tick_ms": 1.24154666711887,
-				"tick_p95_ms": 6.5149998664856,
-				"tick_worst_ms": 8.58800029754639
+				"beams_ms": 1.794,
+				"direct_ms": 1.922,
+				"drag_tick_ms": 10.36455,
+				"drag_worst_ms": 18.419,
+				"heat_band_ms": 0.225703333333333,
+				"map_ms": 0.669,
+				"mesh_ms": 1.498,
+				"pass_ms": 4.426,
+				"skin_ms": 0.23381,
+				"tick_ms": 1.34271333446105,
+				"tick_p95_ms": 7.29699993133545,
+				"tick_worst_ms": 9.2790002822876
 			},
 			"w": {
 				"beam_floats": 8826,
@@ -152,18 +152,18 @@
 				"truth_ratio": 1.00241895425379
 			},
 			"t": {
-				"beams_ms": 13.384,
-				"direct_ms": 1.892,
-				"drag_tick_ms": 8.99256666666667,
-				"drag_worst_ms": 13.228,
-				"heat_band_ms": 0.16787,
-				"map_ms": 0.82,
-				"mesh_ms": 5.851,
-				"pass_ms": 16.154,
-				"skin_ms": 0.324446666666667,
-				"tick_ms": 2.76361999938885,
-				"tick_p95_ms": 8.01900005340576,
-				"tick_worst_ms": 13.9659996032715
+				"beams_ms": 21.593,
+				"direct_ms": 2.972,
+				"drag_tick_ms": 15.1681666666667,
+				"drag_worst_ms": 21.103,
+				"heat_band_ms": 0.26379,
+				"map_ms": 1.406,
+				"mesh_ms": 8.777,
+				"pass_ms": 26.087,
+				"skin_ms": 0.53898,
+				"tick_ms": 4.83555668632189,
+				"tick_p95_ms": 13.8020000457764,
+				"tick_worst_ms": 27.867000579834
 			},
 			"w": {
 				"beam_floats": 66049,
@@ -214,18 +214,18 @@
 				"truth_ratio": 1.00227334160646
 			},
 			"t": {
-				"beams_ms": 13.456,
-				"direct_ms": 1.846,
-				"drag_tick_ms": 8.66008333333334,
-				"drag_worst_ms": 10.464,
-				"heat_band_ms": 0.169323333333333,
-				"map_ms": 0.736,
-				"mesh_ms": 4.115,
-				"pass_ms": 16.117,
-				"skin_ms": 0.19814,
-				"tick_ms": 2.68061000615358,
-				"tick_p95_ms": 8.31599998474121,
-				"tick_worst_ms": 13.6599998474121
+				"beams_ms": 20.797,
+				"direct_ms": 3.063,
+				"drag_tick_ms": 14.9975333333333,
+				"drag_worst_ms": 23.268,
+				"heat_band_ms": 0.26792,
+				"map_ms": 1.209,
+				"mesh_ms": 6.069,
+				"pass_ms": 25.184,
+				"skin_ms": 0.330843333333333,
+				"tick_ms": 4.77612667570511,
+				"tick_p95_ms": 14.9919996261597,
+				"tick_worst_ms": 23.6509990692139
 			},
 			"w": {
 				"beam_floats": 39343,
@@ -263,18 +263,18 @@
 				"truth_ratio": 1.00114766712855
 			},
 			"t": {
-				"beams_ms": 8.145,
-				"direct_ms": 1.916,
-				"drag_tick_ms": 8.0897,
-				"drag_worst_ms": 12.051,
-				"heat_band_ms": 0.190643333333334,
-				"map_ms": 0.763,
-				"mesh_ms": 3.79,
-				"pass_ms": 10.89,
-				"skin_ms": 0.212403333333334,
-				"tick_ms": 2.08111333310604,
-				"tick_p95_ms": 6.89599990844727,
-				"tick_worst_ms": 13.7600002288818
+				"beams_ms": 13.197,
+				"direct_ms": 2.949,
+				"drag_tick_ms": 14.18265,
+				"drag_worst_ms": 18.107,
+				"heat_band_ms": 0.28183,
+				"map_ms": 1.322,
+				"mesh_ms": 5.541,
+				"pass_ms": 17.571,
+				"skin_ms": 0.34075,
+				"tick_ms": 3.62087667872508,
+				"tick_p95_ms": 11.6510000228882,
+				"tick_worst_ms": 30.6070003509521
 			},
 			"w": {
 				"beam_floats": 25900,
@@ -290,6 +290,130 @@
 				"secondary_rays": 2330,
 				"skin_faces": 342,
 				"truth_ray_paths": 45923
+			}
+		},
+		"lamp_lab": {
+			"a": {
+				"replay_worst_w": 0.0
+			},
+			"f": {
+				"state_hash": 61235896.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 12
+			}
+		},
+		"lamp_lab@12:00": {
+			"a": {
+				"steady_kink": 0.130208791410309,
+				"truth_l1": 0.00724022169495673
+			},
+			"f": {
+				"absorbed_w": 15338.098818857,
+				"cell_max_k": 335.756414036998,
+				"emitted_w": 18163.569688797,
+				"lamp_absorbed_w": 16.3711294686615,
+				"lamp_emitted_w": 30.0497267103791,
+				"light_strips": 15033.9605708373,
+				"light_tiles": 700392.056808472,
+				"money": 0.0,
+				"object_absorbed_w": 304.137594943915,
+				"object_incident_w": 317.193009018898,
+				"object_max_k": 335.756414036998,
+				"peak_concentration": 1.25058152198792,
+				"skin_max_k": 347.958679199219,
+				"sold_w": 0.0,
+				"stored_j": 0.0,
+				"tile_max_k": 306.911834716797,
+				"tile_mean_k": 293.970563751221,
+				"truth_ratio": 1.00003049926259
+			},
+			"t": {
+				"beams_ms": 1.479,
+				"direct_ms": 2.972,
+				"drag_tick_ms": 37.3050666666667,
+				"drag_worst_ms": 50.317,
+				"heat_band_ms": 0.32946,
+				"map_ms": 0.994,
+				"mesh_ms": 1.715,
+				"pass_ms": 5.497,
+				"skin_ms": 0.33462,
+				"tick_ms": 3.16091666261355,
+				"tick_p95_ms": 10.8859996795654,
+				"tick_worst_ms": 17.2159996032715
+			},
+			"w": {
+				"beam_floats": 4446,
+				"cache_misses": 114,
+				"drag_passes": 60,
+				"heat_subcycles": 300,
+				"lamp_paths": 875,
+				"lanes": 3750,
+				"lit_strips": 2952,
+				"lit_tiles": 296,
+				"mesh_vertices": 22956,
+				"passes": 33,
+				"paths": 546,
+				"secondary_rays": 360,
+				"skin_faces": 350,
+				"truth_ray_paths": 19114
+			}
+		},
+		"lamp_lab@22:00": {
+			"a": {
+				"steady_kink": 0.0964636929279172,
+				"truth_l1": 0.0142508210150482
+			},
+			"f": {
+				"absorbed_w": 0.018475198130973,
+				"cell_max_k": 292.883645584104,
+				"emitted_w": 0.0293270959398615,
+				"lamp_absorbed_w": 16.3711294686615,
+				"lamp_emitted_w": 30.0497267103791,
+				"light_strips": 0.018154142972125,
+				"light_tiles": 0.844046089860242,
+				"money": 0.0,
+				"object_absorbed_w": 0.000321055036217827,
+				"object_incident_w": 0.00031588426639928,
+				"object_max_k": 293.084001562835,
+				"peak_concentration": 0.0407019729906233,
+				"skin_max_k": 291.808319091797,
+				"sold_w": 0.0,
+				"stored_j": 0.0,
+				"tile_max_k": 292.344146728516,
+				"tile_mean_k": 291.629118490431,
+				"truth_ratio": 1.00054843287415
+			},
+			"t": {
+				"beams_ms": 1.812,
+				"direct_ms": 2.728,
+				"drag_tick_ms": 37.69425,
+				"drag_worst_ms": 52.912,
+				"heat_band_ms": 0.322593333333333,
+				"map_ms": 0.936,
+				"mesh_ms": 1.364,
+				"pass_ms": 5.531,
+				"skin_ms": 0.36723,
+				"tick_ms": 3.04215666651726,
+				"tick_p95_ms": 11.4399995803833,
+				"tick_worst_ms": 13.5170001983643
+			},
+			"w": {
+				"beam_floats": 5579,
+				"cache_misses": 138,
+				"drag_passes": 60,
+				"heat_subcycles": 300,
+				"lamp_paths": 875,
+				"lanes": 3446,
+				"lit_strips": 3268,
+				"lit_tiles": 310,
+				"mesh_vertices": 20994,
+				"passes": 29,
+				"paths": 410,
+				"secondary_rays": 170,
+				"skin_faces": 350,
+				"truth_ray_paths": 18843
 			}
 		},
 		"lens_field": {
@@ -324,18 +448,18 @@
 				"truth_ratio": 1.00977693209923
 			},
 			"t": {
-				"beams_ms": 42.081,
-				"direct_ms": 1.754,
-				"drag_tick_ms": 6.14356666666667,
-				"drag_worst_ms": 11.961,
-				"heat_band_ms": 0.156636666666667,
-				"map_ms": 1.074,
-				"mesh_ms": 17.73,
-				"pass_ms": 45.04,
-				"skin_ms": 0.195536666666667,
-				"tick_ms": 4.78642000198364,
-				"tick_p95_ms": 8.17099952697754,
-				"tick_worst_ms": 16.0879993438721
+				"beams_ms": 69.207,
+				"direct_ms": 3.026,
+				"drag_tick_ms": 10.3401,
+				"drag_worst_ms": 19.851,
+				"heat_band_ms": 0.237463333333333,
+				"map_ms": 1.829,
+				"mesh_ms": 25.707,
+				"pass_ms": 74.302,
+				"skin_ms": 0.327263333333333,
+				"tick_ms": 7.77410332977772,
+				"tick_p95_ms": 12.6309995651245,
+				"tick_worst_ms": 23.2929992675781
 			},
 			"w": {
 				"beam_floats": 191863,
@@ -373,18 +497,18 @@
 				"truth_ratio": 1.00019372217383
 			},
 			"t": {
-				"beams_ms": 15.739,
-				"direct_ms": 1.761,
-				"drag_tick_ms": 7.25805,
-				"drag_worst_ms": 11.78,
-				"heat_band_ms": 0.163113333333333,
-				"map_ms": 1.141,
-				"mesh_ms": 10.329,
-				"pass_ms": 18.773,
-				"skin_ms": 0.204813333333333,
-				"tick_ms": 2.86766666034857,
-				"tick_p95_ms": 5.55600023269653,
-				"tick_worst_ms": 12.5150003433228
+				"beams_ms": 23.973,
+				"direct_ms": 2.789,
+				"drag_tick_ms": 11.6306666666667,
+				"drag_worst_ms": 21.887,
+				"heat_band_ms": 0.257456666666667,
+				"map_ms": 2.031,
+				"mesh_ms": 15.965,
+				"pass_ms": 29.032,
+				"skin_ms": 0.34116,
+				"tick_ms": 4.86702333350976,
+				"tick_p95_ms": 9.49600028991699,
+				"tick_worst_ms": 31.2299995422363
 			},
 			"w": {
 				"beam_floats": 47565,
@@ -438,18 +562,18 @@
 				"truth_ratio": 1.00042495477383
 			},
 			"t": {
-				"beams_ms": 1.99,
-				"direct_ms": 2.13,
-				"drag_tick_ms": 6.72063333333333,
-				"drag_worst_ms": 11.129,
-				"heat_band_ms": 0.224026666666667,
-				"map_ms": 0.654,
-				"mesh_ms": 1.455,
-				"pass_ms": 4.81,
-				"skin_ms": 0.22666,
-				"tick_ms": 1.14805666436752,
-				"tick_p95_ms": 6.80299997329712,
-				"tick_worst_ms": 8.40499973297119
+				"beams_ms": 3.513,
+				"direct_ms": 3.278,
+				"drag_tick_ms": 12.0877333333333,
+				"drag_worst_ms": 15.374,
+				"heat_band_ms": 0.31151,
+				"map_ms": 1.106,
+				"mesh_ms": 2.244,
+				"pass_ms": 7.946,
+				"skin_ms": 0.32566,
+				"tick_ms": 1.86815666993459,
+				"tick_p95_ms": 12.0729999542236,
+				"tick_worst_ms": 15.2329998016357
 			},
 			"w": {
 				"beam_floats": 10633,
@@ -499,18 +623,18 @@
 				"truth_ratio": 1.00047228703412
 			},
 			"t": {
-				"beams_ms": 6.276,
-				"direct_ms": 1.996,
-				"drag_tick_ms": 6.38306666666667,
-				"drag_worst_ms": 12.178,
-				"heat_band_ms": 0.19739,
-				"map_ms": 0.654,
-				"mesh_ms": 1.584,
-				"pass_ms": 8.965,
-				"skin_ms": 0.21026,
-				"tick_ms": 1.84769333620866,
-				"tick_p95_ms": 9.20499992370605,
-				"tick_worst_ms": 14.8540000915527
+				"beams_ms": 10.055,
+				"direct_ms": 3.211,
+				"drag_tick_ms": 11.37325,
+				"drag_worst_ms": 16.308,
+				"heat_band_ms": 0.292406666666667,
+				"map_ms": 1.271,
+				"mesh_ms": 3.006,
+				"pass_ms": 14.605,
+				"skin_ms": 0.333906666666667,
+				"tick_ms": 3.09307667116324,
+				"tick_p95_ms": 15.0880002975464,
+				"tick_worst_ms": 34.851001739502
 			},
 			"w": {
 				"beam_floats": 15776,
@@ -548,18 +672,18 @@
 				"truth_ratio": 1.00118880482584
 			},
 			"t": {
-				"beams_ms": 8.378,
-				"direct_ms": 1.929,
-				"drag_tick_ms": 8.1636,
-				"drag_worst_ms": 13.576,
-				"heat_band_ms": 0.17947,
-				"map_ms": 0.592,
-				"mesh_ms": 1.698,
-				"pass_ms": 10.981,
-				"skin_ms": 0.20673,
-				"tick_ms": 1.95368999391794,
-				"tick_p95_ms": 11.2030000686646,
-				"tick_worst_ms": 17.0690002441406
+				"beams_ms": 14.13,
+				"direct_ms": 2.958,
+				"drag_tick_ms": 14.0191,
+				"drag_worst_ms": 23.596,
+				"heat_band_ms": 0.261106666666667,
+				"map_ms": 1.038,
+				"mesh_ms": 2.544,
+				"pass_ms": 18.203,
+				"skin_ms": 0.323046666666666,
+				"tick_ms": 3.41142667283614,
+				"tick_p95_ms": 19.2259998321533,
+				"tick_worst_ms": 29.2779998779297
 			},
 			"w": {
 				"beam_floats": 18850,
@@ -613,18 +737,18 @@
 				"truth_ratio": 1.00078500438901
 			},
 			"t": {
-				"beams_ms": 4.257,
-				"direct_ms": 1.795,
-				"drag_tick_ms": 6.73708333333333,
-				"drag_worst_ms": 8.034,
-				"heat_band_ms": 0.19221,
-				"map_ms": 0.686,
-				"mesh_ms": 2.729,
-				"pass_ms": 6.789,
-				"skin_ms": 0.21829,
-				"tick_ms": 1.80126666128635,
-				"tick_p95_ms": 5.39300012588501,
-				"tick_worst_ms": 11.2390003204346
+				"beams_ms": 6.777,
+				"direct_ms": 2.956,
+				"drag_tick_ms": 11.3435166666667,
+				"drag_worst_ms": 13.994,
+				"heat_band_ms": 0.293966666666666,
+				"map_ms": 1.736,
+				"mesh_ms": 4.292,
+				"pass_ms": 11.596,
+				"skin_ms": 0.36483,
+				"tick_ms": 3.14031999349594,
+				"tick_p95_ms": 9.31599998474121,
+				"tick_worst_ms": 23.2660007476807
 			},
 			"w": {
 				"beam_floats": 30519,
@@ -664,18 +788,18 @@
 				"tile_mean_k": 293.937234730191
 			},
 			"t": {
-				"beams_ms": 3.697,
-				"direct_ms": 0.956,
-				"drag_tick_ms": 4.20201666666667,
-				"drag_worst_ms": 7.931,
-				"heat_band_ms": 0.195176666666667,
-				"map_ms": 0.436,
-				"mesh_ms": 1.333,
-				"pass_ms": 5.129,
-				"skin_ms": 0.23834,
-				"tick_ms": 1.49594999611378,
-				"tick_p95_ms": 5.34200000762939,
-				"tick_worst_ms": 11.378999710083
+				"beams_ms": 6.773,
+				"direct_ms": 1.534,
+				"drag_tick_ms": 7.23976666666667,
+				"drag_worst_ms": 16.22,
+				"heat_band_ms": 0.319453333333334,
+				"map_ms": 0.842,
+				"mesh_ms": 2.04,
+				"pass_ms": 9.249,
+				"skin_ms": 0.321600000000001,
+				"tick_ms": 2.44521666646004,
+				"tick_p95_ms": 9.5959997177124,
+				"tick_worst_ms": 21.9020004272461
 			},
 			"w": {
 				"beam_floats": 20924,

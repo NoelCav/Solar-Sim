@@ -18,6 +18,9 @@ const LIST := {
 			+ "a network without a grid"},
 	"optics_mix": {"hour": 10.5, "bench": [10.5, 15.0],
 		"about": "Prism rainbow, a mirror chain, glass blocks, a water pool under a lens, a burning focus"},
+	"lamp_lab": {"hour": 22.0, "bench": [22.0, 12.0],
+		"about": "Lamps: one in the open, one over a cell panel, a spot lamp at a lens's focus over a surface cell "
+			+ "(a collimated beam), a spot lamp aimed along the ground"},
 	"night": {"hour": -1.0, "bench": [],
 		"about": "The demo by moonlight: the dimmest light the engine traces (start hour: brightest moon)"},
 	"dug_terrain": {"hour": 9.0, "bench": [9.0],
@@ -59,6 +62,8 @@ static func build(world: SimWorld, objects: ObjectDB, name: String) -> String:
 			_power_farm(world, objects)
 		"optics_mix":
 			_optics_mix(world, objects)
+		"lamp_lab":
+			_lamp_lab(world, objects)
 		"night":
 			_demo(world, objects)
 		"dug_terrain":
@@ -101,6 +106,23 @@ static func _power_farm(world: SimWorld, objects: ObjectDB) -> void:
 	_put(world, objects, &"battery", 18.0, 0.0)
 	_wire(world, 16.0, 18.0)
 	_put(world, objects, &"battery", -11.0, 0.0)
+
+
+## Lamps (design §6.11): an LED lamp over open ground; one over a cell panel; a spot lamp at the
+## front focal point of a crown lens, over a surface cell (the lens makes the beam parallel); a spot
+## lamp lying on its side, lighting along the ground.
+static func _lamp_lab(world: SimWorld, objects: ObjectDB) -> void:
+	var lens := objects.get_by_key(&"lens_crown")
+	var glass := world.materials.get_by_key(lens.material)
+	var f := OpticsGen.focal_length(lens.size_m, lens.radius_front_m, lens.radius_back_m, lens.thickness_m,
+		glass.refractive_index(0.55))
+	_put(world, objects, &"lamp_led", -12.0, 3.0)
+	_put(world, objects, &"lamp_led", -6.0, 2.5)
+	_put(world, objects, &"cell_si", -6.0, 1.0)
+	_put(world, objects, &"lens_crown", 2.0, 2.0)
+	_put(world, objects, &"lamp_spot", 2.0, 2.0 + f + 0.1)
+	_put(world, objects, &"cell_si_surface", 2.0, 0.0)
+	_put(world, objects, &"lamp_spot", 8.0, 0.75, 90.0)
 
 
 static func _optics_mix(world: SimWorld, objects: ObjectDB) -> void:
