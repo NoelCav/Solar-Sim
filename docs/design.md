@@ -2,7 +2,7 @@
 
 > Living document. Sections marked **LOCKED** are architecture decisions we build against and should not change without a deliberate migration. Everything else is tunable.
 >
-> Last updated: 2026-10-20 (run 01 docs and cleanup pass; next: batteries, then lamps with display lighting)
+> Last updated: 2026-10-20 (sign-off of run 01; where things stand and what comes next: §18.14)
 
 ---
 
@@ -246,6 +246,33 @@ A display-only lighting pass that gives everything depth and makes light feel re
 
 Self-lit things (meter LCDs and lamps, glowing hot tiles) are emissive and stay visible at night. Stage 1 can come any time; stage 2 comes with the first lamp, stage 3 with gases. It replaces the per-face lighting in the current tile shader (one lighting path, not two). References: Noita (per-pixel light and glow), Dead Cells (normal-mapped sprites).
 
+### 6.9 Optical components (planned, decided 2026-10-20)
+
+Real parts that make interesting rigs, in the order to build them. Each lands with a scenario rig and a benchmark check against its textbook behaviour (§18.13).
+
+**A. Next (small engine changes, big gameplay):**
+1. **Beam splitter / half mirror:** a coated plate that reflects a share per bin and transmits the rest. Engine: a primary path that **forks** at a surface (both branches traced as beams, not the reflected one pooled like a Fresnel reflection), so a 50 % split is as accurate as a mirror.
+2. **Dichroic mirror** (already in §6.4): reflects bins above a cutoff, transmits the rest (hot mirror, cold mirror, cell-matched splitters for §9.2). Same fork.
+3. **Coloured and blocking filters:** absorptive glass plates (red, green, blue, IR-cut, UV-cut, neutral density). Data only (materials with per-bin bulk absorption from real glass catalogues) plus a thin **plate** object (the box generator).
+
+**B. With the lens crafter (new shapes):**
+4. **Concave lenses** (negative radii; plano-concave): Galilean telescopes, beam expanders.
+5. **Curved mirrors**, spherical and parabolic: Newtonian/Cassegrain telescopes, solar furnaces, heliostat fields.
+6. **Cemented doublet** (crown + flint achromat): two bodies sharing a face; engine: a body-to-body interface (today a ray leaves a body into the tile medium).
+7. **Fresnel lens** (§6.3).
+
+**C. Later, only if gameplay asks for it:**
+8. **Polarizers:** light carries no polarization (Fresnel reflection uses the average). Adding it doubles the state per bin (s and p) and splits Fresnel per component; it would bring Brewster windows, polarizing splitters and shutters.
+9. **Diffusers / frosted glass:** scatter light into many directions; needs scattered light to be traced (§6.10 level 2).
+
+**Real setups to test with them (`optics_lab` scenario):** today's parts: Keplerian telescope / beam expander (parallel in → parallel out, width × f₂/f₁), periscope (two 45° mirrors: shifted, same direction), corner reflector (two mirrors at 90°: light returns antiparallel), prism at minimum deviation (closed form), two opposed prisms (rainbow recombines to white), right-angle prism (TIR mirror). With B: Galilean telescope, Newtonian telescope, solar furnace, achromat (all colours to one focus).
+
+### 6.10 Projection and cameras (ideas, not scheduled)
+
+1. **Projecting a light source** already works (a lens images the sun: a focal spot). With lamps (§18 M3) plus a slide (a filter or mask plate, §6.9) and a lens, a projector throws an image on a wall. Cheap once lamps and plates exist.
+2. **A camera** needs every lit surface to send its light on in all directions with its own colour (today the engine only counts it as `scattered`), plus a sensor object that records light by position and bin. In 2D the image of the world is a 1D strip of colours. A pinhole or lens camera producing it is a showpiece but a big addition (about the size of the light engine work so far); after lamps and display lighting.
+3. **Coloured bounce light for looks** (a red wall tinting the floor) belongs to the display lighting (§6.8): one bounce in its light field, no sim change.
+
 ## 7. Heat
 
 - Per tile: temperature T, from material: density ρ, specific heat c, conductivity k, emissivity ε.
@@ -309,6 +336,8 @@ Junction materials: Ge 0.67, Si 1.12, GaAs 1.42, GaInP 1.9 eV; perovskite (tunab
 
 ## 11. Fluids
 
+**Decided 2026-10-20:** fill-based liquid (Terraria-like) plus packet pipes (ONI-like) plus scalar gas fields, not a velocity/pressure fluid sim (D2: each system at its own resolution; each conserves its own quantity, so the benchmark can check it). **One liquid system, no cosmetic water:** what you see is what is simulated (no Terraria-style falling-water effect separate from the real liquid). Liquid falls whenever its support goes: a block mined, burned or melted away drains what it held up; a broken pipe spills its contents into the free liquid (and vents steam into the gas field). Today's water is a stopgap: a tile *material* painted in place (it refracts and absorbs light, it doesn't flow). With M6 liquids move into the `liquid_amount` / `liquid_type` layers (§5.2) on air tiles, and the light engine reads that layer as the medium.
+
 ### 11.1 Pipes (M4)
 
 - ONI-style packets: each pipe segment holds ≤ 1 packet (fluid type, mass, temperature). Pumps inject; packets advance along flow direction each tick.
@@ -316,15 +345,16 @@ Junction materials: Ge 0.67, Si 1.12, GaAs 1.42, GaInP 1.9 eV; perovskite (tunab
 - No general pressure sim. **Exception:** liquid that boils inside a pipe → overpressure → burst chance; burst spills liquid into the free-liquid layer and vents steam into the gas layer.
 - Coolants: water → glycol → thermal oil → molten salt.
 
-### 11.3 Thermal power (M4) — the Ivanpah path
-
-An alternative to cells: heliostat mirrors on tracking stands focus onto a **receiver/boiler** on a tower; steam drives a **turbine** (power ∝ heat flow × a Carnot-limited efficiency of the hot/cold temperatures); a **condenser/radiator** dumps the rest. Closed loop inside pipes (§11.1): no new simulation system — the boiler takes heat from the heat field, the turbine is an object with a pipe port and a power port (D17). Open loops (venting steam, rain falling back) wait for the free-liquid and gas layers (M6) and stay optional.
-
 ### 11.2 Free liquid (M6)
 
 - Terraria-style CA on non-solid tiles: fall, then spread sideways, by `liquid_amount`.
 - Contributes heat capacity to its tile; evaporates (to steam field) based on temperature; boils at `boil_temp`.
-- Sources: reservoirs, rain, pipe bursts.
+- Sources: reservoirs, rain, pipe bursts, and anything that removes a liquid's support (mining, burning, melting; see §11 above).
+- Steam: boiling moves mass from `liquid_amount` into the `steam` field (§12); condensing moves it back. Pipes carry steam as packets (§11.1).
+
+### 11.3 Thermal power (M4) — the Ivanpah path
+
+An alternative to cells: heliostat mirrors on tracking stands focus onto a **receiver/boiler** on a tower; steam drives a **turbine** (power ∝ heat flow × a Carnot-limited efficiency of the hot/cold temperatures); a **condenser/radiator** dumps the rest. Closed loop inside pipes (§11.1): no new simulation system — the boiler takes heat from the heat field, the turbine is an object with a pipe port and a power port (D17). Open loops (venting steam, rain falling back) wait for the free-liquid and gas layers (M6) and stay optional.
 
 ## 12. Gas fields (M6)
 
@@ -420,7 +450,8 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 | M3b — Stands & crafter | Swappable stand contents (D16) and stand qualities (§9), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
 | M3 — Cells & power | Cell model ✅, power network ✅, grid market ✅; batteries, cell damage; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power. Display lighting stages 1–2 (§6.8) with the lamp |
-| M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule |
+| Optics parts | §6.9 A (beam splitter, dichroic, filters and plates; the fork in the engine) with an `optics_lab` scenario; B with the crafter |
+| M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule (spills into free liquid once M6 exists) |
 | M5 — Fire & destruction | Integrity, ignition, debris, mining/deconstruction |
 | M6 — Liquids & gases | Free liquid CA, smoke/steam fields, phase change, light attenuation; volumetric display lighting (§6.8 stage 3) |
 | M7 — Lens failure | Thermal slices, thermal lensing, sag, cracks, slag |
@@ -564,6 +595,19 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Fixed (2026-10-20):** light in water and glass tiles flickered as the sun moved: a coherent beam's absorption in a tile medium sat on its two sample rays, 10 cm apart, so a tile got two or three samples' worth. Deposits are now spread over the band each ray stands for (`ApplyPath` with the partner ray, `TileShares`). Near beams (same path, uneven ground) landed on their two rays' points; `LandBand` now re-traces the last leg across the band, so the light lands where the band meets the ground. Popping in the worst scenarios fell from 19–26 % to ~10 % of the brightest tile, at no extra ray paths.
 - **Found, open (see §19):** popping at the site's edge columns (direct-light lanes at the boundary); incremental passes replay pooled reflections an edit changed (≤ 0.2 % of a tile until the next full pass); beams spread ~2 % of a sharp focus into its neighbours, unevenly (3 % asymmetry under a symmetric lens).
 - **Learned:** crown glass absorbed ~25 % of what crossed a 24 cm lens (data 5–50× real BK7); a fixed lens walked its focus ~16 cm in 15 s of game time. Decided: real absorption for every optical material, and a 24-minute day (focus drift halves).
+
+### 18.14 Status at sign-off and next steps (2026-10-20)
+
+**Where things are.** Light (sun and moon, beams, C# engine), heat (tiles, surface skin, object nodes), stands, solar cells, wires, grid sale and money, site save, the interface (top bar, tool rail, catalog, inspector with cell and lens cards, power meters on devices), test scenarios, the benchmark and bug sweep with a recorded baseline, and SimProbe in the game and headless. 24-minute day; optical materials absorb as measured. All tests pass; every benchmark check passes. Run notes: `docs/runs/run-01.md`.
+
+**Next, in order (each with tests, a scenario or rig in the benchmark, SimProbe commands, and a note here):**
+1. **Group 5 of run 01:** batteries (store on a network; charge when the price is low, sell when high; meter); the first consumer, a **lamp**, which needs the light engine to trace more than one source (§18 M3 row) and brings display lighting stages 1–2 (§6.8); cell damage (degrades above ~85 °C, fails ~150–200 °C, §9.1).
+2. **Optics parts A** (§6.9: beam splitter, dichroic, filters/plates; the engine's path fork) and the `optics_lab` scenario.
+3. **Light accuracy follow-ups** found by the benchmark: popping at the site's edge columns; incremental passes replaying pooled reflections an edit changed; beams spreading ~2 % of a sharp focus into its neighbours unevenly (3 % under a symmetric lens).
+4. **Shop, prices and unlocks** (D15, §15): deliberately after the core systems.
+5. Later milestones as in the table above: pipes and cooling (M4), fire and destruction (M5), liquids and gases (M6, §11 decisions), lens failure (M7), progression (M8); cameras (§6.10) late.
+
+**Known small issues:** the editor's Output tab shows stale parse errors from old in-memory copies of edited scripts (harmless; the game runs from disk); the editor's class cache may still list the deleted `DemoRig` (harmless). Stands don't adapt when the ground under them is dug out; probe readings aren't rescaled between passes; wire has no resistance; cells get no diffuse light; objects only dim with the ambient (no light from the light field yet).
 
 ## 19. Open questions
 

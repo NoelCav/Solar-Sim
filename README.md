@@ -1,6 +1,6 @@
 # Solar-Sim
 
-A 2D side-view systems sandbox about harnessing sunlight: route spectral light through lenses, prisms and splitters onto solar cells, and manage the heat. See [docs/design.md](docs/design.md).
+A 2D side-view systems sandbox about harnessing sunlight: route spectral light through lenses, prisms and splitters onto solar cells, and manage the heat. See [docs/design.md](docs/design.md) (state and next steps: §18.14) and, for working on the code, [CLAUDE.md](CLAUDE.md).
 
 ## Running
 

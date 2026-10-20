@@ -186,6 +186,19 @@ spectral bin drops out of one surface tile at a time); beams spread a sharp focu
 unevenly; incremental passes keep changed pooled reflections briefly. Also: crown glass absorbs a
 quarter of a big lens's light, and a fixed lens loses a 25 cm target within seconds of game time.
 
+### Decisions taken during the run (all in the design doc)
+
+- Interface: tool rail and side catalog; hover = summary, select = full numbers; power meters on the devices (§16, §18.12).
+- Shop, prices and unlocks after the core systems (§15).
+- Display lighting as a display-only pass with a shared light field (§6.8).
+- A 24-minute day; optical materials absorb as measured, no gameplay exaggeration (§4, §8).
+- Water: one fill-based liquid system with no cosmetic falling; it drains when support is removed and spills from broken pipes (§11).
+- Optical components to add, in order (§6.9); projection and camera ideas (§6.10).
+
+### Where to pick up
+
+Design doc §18.14 lists the state and the next steps in order; `CLAUDE.md` has the commands and working rules. Group 5 (batteries, the lamp, cell damage) is next.
+
 ## Open questions
 
 - ~~The editor has to be reloaded whenever a run adds a new `class_name` script.~~ Solved without a
