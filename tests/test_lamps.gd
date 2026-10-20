@@ -174,3 +174,27 @@ func test_lamp_light_heats_the_ground() -> void:
 	var absorbed: float = layer.stats.absorbed
 	check(absorbed > 0.2 * LAMP.lamp_light_w(), "the lamp's light is absorbed (%.2f W)" % absorbed)
 	check_near(deposited, absorbed * SimConst.DT, absorbed * SimConst.DT * 1e-3, "light absorbed = heat deposited")
+
+
+## What a light layer says about a point (LightLayer.irradiance_at; the display lights stands and meters
+## with it): a lamp's I / (r × depth) in the open, nothing behind something that shades it, and the
+## sun's irradiance in open air but not underground.
+func test_light_at_a_point() -> void:
+	var world := _lamp_world()
+	var light: LightSystem = world.get_system(&"light")
+	var lamp := _object_of_kind(world, ObjectDef.Kind.LAMP)
+	var layer: LightLayer = light.lamps[lamp.id]
+	var near := lamp.position + Vector2(0.0, 0.4)
+	var expected := LAMP.lamp_light_w() / TAU / (0.4 * SimConst.DEPTH_M)
+	check_near(layer.irradiance_at(world, near), expected, expected * 0.03, "0.4 m below the lamp")
+	check_near(layer.irradiance_at(world, lamp.position + Vector2(0.4, 0.0)), expected, expected * 0.03, "and beside it")
+	var cell := _object_of_kind(world, ObjectDef.Kind.CELL)
+	check_eq(layer.irradiance_at(world, cell.position + Vector2(0.0, 0.3)), 0.0, "in the cell's shadow")
+	check_eq(layer.irradiance_at(world, Vector2(5.0, 3.9)), 0.0, "inside the ground")
+	var day := _flat_world(40, 20, 15)
+	day.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	day.tick()
+	var sky: LightLayer = (day.get_system(&"light") as LightSystem).sky
+	(day.get_system(&"light") as LightSystem).retrace(day)
+	check_near(sky.irradiance_at(day, Vector2(5.0, 1.0)), day.light_dni, day.light_dni * 0.01, "open air in the sun")
+	check_eq(sky.irradiance_at(day, Vector2(5.0, 4.5)), 0.0, "underground")

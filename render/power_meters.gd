@@ -40,12 +40,14 @@ const DETAIL_PX := 110.0                  ## Meters at least this tall (screen u
 ## item's screen-unit transform (restored afterwards), `px` screen units per meter. Read from the
 ## light now, so the meters are right while paused too.
 static func draw_all(ci: CanvasItem, world: SimWorld, base: Transform2D, px: float) -> void:
+	var light: LightSystem = world.get_system(&"light")
 	for obj: SimObject in world.objects.values():
 		var r := reading(world, obj)
 		if r.is_empty() or not _shows_meter(world, obj):
 			continue
+		var lit := DisplayLight.light_at(world, light, r.center, ObjectRenderer.DARK_FLOOR, obj.id)
 		_draw_meter(ci, base * Transform2D(obj.angle if obj.def.is_machine() else 0.0, r.center * px),
-			r.size * px, r.watts, r.rated, r.on, r.text, r.title)
+			r.size * px, r.watts, r.rated, r.on, r.text, r.title, lit)
 	ci.draw_set_transform_matrix(base)
 
 
@@ -136,16 +138,16 @@ static func _cell_meter_m(world: SimWorld, obj: SimObject) -> Vector2:
 ## with green, amber and red zones and a needle), the LCD and the status lamp; a tall one also
 ## names the device and marks the scale.
 static func _draw_meter(ci: CanvasItem, at: Transform2D, s: Vector2, watts: float, rated: float,
-		selling: bool, text := "", title := "") -> void:
+		selling: bool, text := "", title := "", lit := 1.0) -> void:
 	ci.draw_set_transform_matrix(at)
 	var detail := s.y >= DETAIL_PX
 	var box := Rect2(-s * 0.5, s)
 	var radius := int(s.y * 0.1)
-	ci.draw_style_box(_rounded(HOUSING, radius, HOUSING_EDGE, 1 if detail else 0), box)
+	ci.draw_style_box(_rounded(_dim(HOUSING, lit), radius, _dim(HOUSING_EDGE, lit), 1 if detail else 0), box)
 	var pad := s.y * 0.07
 	var head := s.y * 0.14 if detail else 0.0   # Room for the title
 	var face := Rect2(box.position + Vector2(pad, pad + head), Vector2(s.x - 2.0 * pad, s.y * 0.6 - head))
-	ci.draw_style_box(_rounded(FACE, int(radius * 0.7)), face)
+	ci.draw_style_box(_rounded(_dim(FACE, lit), int(radius * 0.7)), face)
 	var pivot := Vector2(0.0, face.end.y - pad * 0.5)
 	var r := minf(face.size.x * 0.46, face.size.y * 0.95)
 	var a0 := -PI * 0.5 - SWEEP
@@ -190,6 +192,11 @@ static func _draw_meter(ci: CanvasItem, at: Transform2D, s: Vector2, watts: floa
 	var baseline := lcd.get_center().y + (lcd_font.get_ascent(font_size) - lcd_font.get_descent(font_size)) * 0.5
 	ci.draw_string(lcd_font, Vector2(lcd.position.x + pad * 0.5, baseline), text, HORIZONTAL_ALIGNMENT_RIGHT,
 		lcd.size.x - pad, font_size, LCD_TEXT)
+
+
+## A housing color in the light `lit` (0 to 1): the dials and the LCD are self-lit and stay bright.
+static func _dim(c: Color, lit: float) -> Color:
+	return Color(c.r * lit, c.g * lit, c.b * lit, c.a)
 
 
 static func _rounded(color: Color, radius: int, edge := Color.TRANSPARENT, border := 0) -> StyleBoxFlat:

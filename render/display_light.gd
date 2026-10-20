@@ -35,6 +35,21 @@ static func lamp_beam_exposure(world: SimWorld) -> float:
 	return lerpf(LAMP_BEAM_EXPOSURE, 1.0, ambient(world))
 
 
+## How lit a thing at point `p` (m) looks, 0 to 1: the light that reaches it from the sun or moon and
+## from lamps (shadows included, each layer at its own exposure), never below the ambient or
+## `min_level`. By day everything is fully lit (the ambient is 1); at night only what the moon or a
+## lamp reaches shows. `owner` is the object's own id, which doesn't shade itself.
+static func light_at(world: SimWorld, light: LightSystem, p: Vector2, min_level := 0.0, owner := -1) -> float:
+	var level := ambient(world)
+	if level >= 1.0:
+		return 1.0
+	var lit := 0.0
+	for layer in light.layers():
+		var exposure := exposure(world) if layer.lamp_id < 0 else lamp_exposure(world)
+		lit += layer.irradiance_at(world, p, owner) * exposure / SimConst.REFERENCE_DNI
+	return clampf(maxf(maxf(level, min_level), lit), 0.0, 1.0)
+
+
 ## How lit everything is without direct light: 1 by day, fading through dusk to
 ## NIGHT_AMBIENT (and back at dawn) with the sun's height.
 static func ambient(world: SimWorld) -> float:

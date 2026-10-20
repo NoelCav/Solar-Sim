@@ -7,6 +7,7 @@ extends Node2D
 ## In the heat view, lenses, prisms, mirrors and cells are filled with their own temperature color.
 
 const STAND_COLOR := Color(0.3, 0.31, 0.34)
+const DARK_FLOOR := 0.12        ## Objects stay faintly visible to edit in the dark
 const POLE_M := 0.04            ## Pole width
 const FOOT_M := 0.2             ## Foot width
 
@@ -16,9 +17,12 @@ var selected_id := -1
 var view := ViewMode.NORMAL
 var overlay: OverlayRenderer   ## For the heat scale
 
+var _light: LightSystem
+
 
 func setup(p_world: SimWorld) -> void:
 	world = p_world
+	_light = world.get_system(&"light")
 	z_index = 4
 
 
@@ -39,11 +43,12 @@ func _draw() -> void:
 		if obj.mounted and obj.def.mount == ObjectDef.Mount.STAND:
 			var base := Mounting.stand_base(world, obj.position)
 			if is_finite(base):
-				draw_stand(self, obj.position, base, px, STAND_COLOR)
+				draw_stand(self, obj.position, base, px, _shade(STAND_COLOR, _lit(obj)))
 	for obj: SimObject in world.objects.values():
 		var def := obj.def
 		var pieces := obj.world_pieces()
 		var hl := obj.id == highlighted_id or obj.id == selected_id
+		var lit := _lit(obj)
 		match def.kind:
 			ObjectDef.Kind.LENS, ObjectDef.Kind.PRISM, ObjectDef.Kind.GRID_TIE, ObjectDef.Kind.BATTERY, \
 					ObjectDef.Kind.LAMP:
@@ -52,13 +57,13 @@ func _draw() -> void:
 				for p in outline:
 					pts.append(p * px)
 				if pts.size() >= 3:
-					var fill := _heat_color(obj) if heat else def.color
+					var fill := _heat_color(obj) if heat else _shade(def.color, lit)
 					if def.kind == ObjectDef.Kind.LAMP and not heat:
-						fill = def.color.darkened(0.6).lerp(def.color.lightened(0.3), obj.lamp_level)
-						draw_circle(obj.position * px, def.size_m * px * 1.5, Color(1.0, 0.9, 0.6, 0.25 * obj.lamp_level))
+						fill = def.color.darkened(0.6).lerp(def.color.lightened(0.3), obj.lamp_level)   # Self-lit
+						_draw_glow(obj.position * px, def.size_m * px * 3.5, Color(1.0, 0.9, 0.6), obj.lamp_level)
 					draw_colored_polygon(pts, fill)
 					pts.append(pts[0])
-					var edge := Color(0.9, 0.97, 1.0, 0.9 if hl else 0.6)
+					var edge := _shade(Color(0.9, 0.97, 1.0, 0.9 if hl else 0.6), lit)
 					if obj.id == selected_id:
 						edge = Color(1.0, 0.85, 0.45)
 					draw_polyline(pts, edge, 2.0 if hl else 1.0, true)
@@ -66,15 +71,31 @@ func _draw() -> void:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
 				var back := Vector2.from_angle(obj.angle + PI * 0.5) * clampf(0.004 * px, 1.5, 12.0)
-				draw_line(a + back, b + back, _heat_color(obj) if heat else Color(0.15, 0.15, 0.18),
+				draw_line(a + back, b + back, _heat_color(obj) if heat else _shade(Color(0.15, 0.15, 0.18), lit),
 					clampf(0.006 * px, 2.0, 16.0), true)
-				draw_line(a, b, def.color if not hl else Color.WHITE, 2.0, true)
+				draw_line(a, b, _shade(def.color, lit) if not hl else Color.WHITE, 2.0, true)
 			ObjectDef.Kind.PROBE:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
 				draw_line(a, b, Color(0, 0, 0, 0.6), 5.0 if hl else 4.0, true)
-				draw_dashed_line(a, b, def.color, 3.0 if hl else 2.5, 6.0)
+				draw_dashed_line(a, b, _shade(def.color, lit), 3.0 if hl else 2.5, 6.0)
 	PowerMeters.draw_all(self, world, Transform2D.IDENTITY.scaled(Vector2.ONE / zoom), px)
+
+
+## How lit object `obj` is (DisplayLight.light_at), with a floor so it can still be edited in the dark.
+func _lit(obj: SimObject) -> float:
+	return DisplayLight.light_at(world, _light, obj.position, DARK_FLOOR, obj.id)
+
+
+## A soft halo: stacked discs, each faint, so the light fades out to nothing at `radius`.
+func _draw_glow(center: Vector2, radius: float, color: Color, strength: float) -> void:
+	for k in 8:
+		var t := float(k) / 8.0
+		draw_circle(center, radius * (1.0 - t), Color(color, 0.045 * strength))
+
+
+static func _shade(c: Color, lit: float) -> Color:
+	return Color(c.r * lit, c.g * lit, c.b * lit, c.a)
 
 
 ## Draws a stand on `ci` (screen units, `px` pixels per meter): a pole from the object center

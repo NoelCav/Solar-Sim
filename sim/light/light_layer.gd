@@ -166,6 +166,37 @@ func strip_irradiance_max(i: int, world: SimWorld) -> float:
 	return best
 
 
+## How much light of this layer reaches point `p` (m) now, W/m² across the light, shadows included:
+## the lane the point lies in must have its first hit beyond it (or be the point's own object,
+## `owner`: its own surfaces don't shade it). Light that reaches it through optics isn't counted. For
+## display (lit stands, meters, backdrops); the sim never reads it.
+func irradiance_at(world: SimWorld, p: Vector2, owner := -1) -> float:
+	if _shown == null or _shown.source == null or shown_strength <= 0.0:
+		return 0.0
+	var map := _shown.map
+	var src := _shown.source
+	var scale := power_scale(world)
+	var k := 0
+	var distance := 0.0   # How far from the source along the light
+	var irradiance := 0.0
+	if src.kind == LightSource.Kind.POINT:
+		var d := p - src.position
+		distance = maxf(d.length(), 0.05)
+		k = floori(wrapf(d.angle() - map.u0, 0.0, TAU) / map.lane_w)
+		irradiance = Spectrum.total(src.spectrum) / (distance * SimConst.DEPTH_M)
+	else:
+		k = floori((p.dot(map.perp) - map.u0) / map.lane_w)
+		distance = p.dot(map.dir)
+		irradiance = src.dni
+	if k < 0 or k >= map.count:
+		return 0.0
+	if distance > map.depth[k] + 0.02:
+		var own := map.kind[k] == LaneMap.Hit.SURFACE and _shown.surfaces.owner[map.ref[k]] == owner
+		if not own:
+			return 0.0
+	return irradiance * scale
+
+
 ## Factor from the traced deposits (heat, skin) to the strength now.
 func deposit_scale(world: SimWorld) -> float:
 	return strength_now(world) / _traced_strength if _traced_strength > 0.0 else 0.0
