@@ -20,7 +20,7 @@ const LIST := {
 		"about": "Prism rainbow, a mirror chain, glass blocks, a water pool under a lens, a burning focus"},
 	"lamp_lab": {"hour": 22.0, "bench": [22.0, 12.0],
 		"about": "Lamps: one in the open, one over a cell panel, a spot lamp at a lens's focus over a surface cell "
-			+ "(a collimated beam), a spot lamp aimed along the ground"},
+			+ "(a collimated beam), a spot lamp aimed along the ground, all wired to a grid connection"},
 	"night": {"hour": -1.0, "bench": [],
 		"about": "The demo by moonlight: the dimmest light the engine traces (start hour: brightest moon)"},
 	"dug_terrain": {"hour": 9.0, "bench": [9.0],
@@ -123,6 +123,8 @@ static func _lamp_lab(world: SimWorld, objects: ObjectDB) -> void:
 	_put(world, objects, &"lamp_spot", 2.0, 2.0 + f + 0.1)
 	_put(world, objects, &"cell_si_surface", 2.0, 0.0)
 	_put(world, objects, &"lamp_spot", 8.0, 0.75, 90.0)
+	_put(world, objects, &"grid_tie", 14.0, 0.0)
+	_wire(world, -12.0, 14.0)
 
 
 static func _optics_mix(world: SimWorld, objects: ObjectDB) -> void:

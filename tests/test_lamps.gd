@@ -142,8 +142,8 @@ func test_dimmed_lamp_gives_less() -> void:
 	var cell := _object_of_kind(world, ObjectDef.Kind.CELL)
 	var full := Spectrum.total(cell.lamp_light)
 	lamp.lamp_level = 0.5
-	world.tick()   # Within the re-trace threshold the layer rescales its traced light
-	world.tick()
+	light.tick(world, SimConst.DT)   # Within the re-trace threshold the layer rescales its traced light
+	light.tick(world, SimConst.DT)
 	light.retrace(world)
 	check_near(Spectrum.total(cell.lamp_light), 0.5 * full, 0.02 * full,
 		"half the level, half the light")

@@ -11,6 +11,9 @@ enum Stance { CHARGE, HOLD, SELL }
 const J_PER_KWH := 3.6e6
 const CHEAP_PER_KWH := 0.06      ## Below this price a battery takes in surplus power
 const DEAR_PER_KWH := 0.15       ## Above it a battery gives out
+## What the grid charges for power bought from it, relative to what it pays for the same power
+## (retail against export prices).
+const RETAIL_FACTOR := 3.0
 ## Price per kWh through the day: [hour, $/kWh], linear between, wrapping at 24 h.
 const DUCK_CURVE := [
 	[0.0, 0.10], [5.0, 0.09], [7.0, 0.14], [9.0, 0.08], [12.0, 0.03], [15.0, 0.05],
@@ -38,6 +41,11 @@ static func price_at_hour(hours: float) -> float:
 static func stance(world: SimWorld) -> Stance:
 	var price := price_per_kwh(world)
 	return Stance.CHARGE if price < CHEAP_PER_KWH else (Stance.SELL if price > DEAR_PER_KWH else Stance.HOLD)
+
+
+## Money paid for buying `watts` for `dt` game seconds at the current price, $.
+static func cost(world: SimWorld, watts: float, dt: float) -> float:
+	return earnings(world, watts, dt) * RETAIL_FACTOR
 
 
 ## Money earned by exporting `watts` for `dt` game seconds at the current price, $.

@@ -201,6 +201,37 @@ func _light(world: SimWorld, light: LightSystem, t: Dictionary, w: Dictionary, f
 		f.peak_concentration = best_c
 
 
+## Per network, what the last tick's objects add up to: its cells' power plus what batteries gave,
+## less what lamps drew (positive: it sold, negative: it bought; zero without a grid).
+func _network_nets(world: SimWorld) -> Dictionary:
+	var power: PowerSystem = world.get_system(&"power")
+	var net := {}
+	for obj: SimObject in world.objects.values():
+		var watts := obj.power_w + obj.flow_w
+		if obj.def.kind == ObjectDef.Kind.LAMP:
+			watts -= obj.lamp_level * obj.def.lamp_watts
+		if watts != 0.0:
+			var n := power.network_of(world, obj)
+			net[n] = net.get(n, 0.0) + watts
+	return net
+
+
+## What the last tick earned (sold less bought), from the objects' own numbers.
+func _net_income(world: SimWorld) -> float:
+	var power: PowerSystem = world.get_system(&"power")
+	var income := 0.0
+	var nets := _network_nets(world)
+	for n: int in nets:
+		if power.network_grid[n] == 0:
+			continue   # Without a grid connection nothing is sold or bought
+		var watts: float = nets[n]
+		if watts > 0.0:
+			income += Market.earnings(world, watts, SimConst.DT)
+		else:
+			income -= Market.cost(world, -watts, SimConst.DT)
+	return income
+
+
 ## Each lamp's layer: its energy balances too, and its paths and watts are counted.
 func _lamps(light: LightSystem, w: Dictionary, f: Dictionary) -> void:
 	if light.lamps.is_empty():
@@ -255,10 +286,7 @@ func _ticks(world: SimWorld, t: Dictionary, w: Dictionary, f: Dictionary) -> voi
 		band += heat.last_step_ms
 		skin += heat.last_skin_ms
 		subcycles += heat.subcycles
-		var delivered := 0.0   # What the tick sold: its cells' power_w less what batteries took in
-		for obj: SimObject in world.objects.values():
-			delivered += obj.power_w + obj.flow_w
-		expected += Market.earnings(world, delivered, SimConst.DT)
+		expected += _net_income(world)
 	var sorted := times.duplicate()
 	sorted.sort()
 	var avg := 0.0
@@ -328,12 +356,10 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 	power.sync(world)
 	var cells := 0
 	var selling := 0
-	var delivered := 0.0
 	var cell_hi := 0.0
 	var stored := 0.0
 	for obj: SimObject in world.objects.values():
 		if obj.def.kind == ObjectDef.Kind.BATTERY:
-			delivered += obj.flow_w
 			var cap := obj.def.battery_capacity_kwh * Market.J_PER_KWH
 			_check(obj.stored_j >= 0.0 and obj.stored_j <= cap + 1e-6 and absf(obj.flow_w) <= obj.def.battery_max_w + 1e-6,
 				"battery %d holds %.1f of %.1f J, flow %.2f W" % [obj.id, obj.stored_j, cap, obj.flow_w])
@@ -347,7 +373,6 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 			"cell %d delivers %.3f W of %.3f W arriving" % [obj.id, obj.power_w, arriving])
 		if power.delivers(world, obj):
 			selling += 1
-			delivered += obj.power_w
 		else:
 			_check(obj.power_w == 0.0, "unwired cell %d delivers %.3f W" % [obj.id, obj.power_w])
 	if cells == 0:
@@ -355,7 +380,13 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 	# The networks' readout reads the light and cell temperatures now, as the next tick will; the
 	# cells delivered at the temperature before this tick's heat step, so they agree closely only.
 	var sold := _sold_w(world)
-	_check(absf(sold - delivered) <= 1e-3 + 2e-3 * sold, "networks sell %.4f W, cells deliver %.4f W" % [sold, delivered])
+	var delivered := 0.0   # What the objects say each grid network sent out (less what it bought)
+	var nets := _network_nets(world)
+	for n: int in nets:
+		if power.network_grid[n] == 1:
+			delivered += maxf(nets[n], 0.0)
+	_check(absf(sold - delivered) <= 1e-3 + 2e-3 * sold,
+		"networks sell %.4f W, objects deliver %.4f W" % [sold, delivered])
 	var grids := 0
 	for n in power.networks.count:
 		grids += power.network_grid[n]

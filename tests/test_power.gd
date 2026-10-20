@@ -3,6 +3,7 @@ extends TestSuite
 
 const CELL_SI := preload("res://data/objects/cell_si.tres")
 const BATTERY := preload("res://data/objects/battery.tres")
+const LAMP := preload("res://data/objects/lamp_led.tres")
 
 
 func _efficiency(def: ObjectDef, suns: float, temp_k: float = SolarCell.T_REF_K) -> float:
@@ -307,3 +308,64 @@ func _battery_of(world: SimWorld) -> SimObject:
 		if obj.def.kind == ObjectDef.Kind.BATTERY:
 			return obj
 	return null
+
+
+func _put_lamp(world: SimWorld, def := LAMP) -> SimObject:
+	world.enqueue(PlaceObjectCommand.new(def, Vector2(2.6, 2.0), 0.0, true))
+	world.flush_commands()
+	for obj: SimObject in world.objects.values():
+		if obj.def.kind == ObjectDef.Kind.LAMP:
+			return obj
+	return null
+
+
+## A lamp is a consumer (§10): on a network with a grid connection it is fully bright and, with
+## no sun, pays retail for its power; the cell serves it first, so at noon the cell's power goes to
+## the lamp and only the rest is sold. Off every network it stays dark.
+func test_lamp_is_served_by_cells_then_the_grid() -> void:
+	var night := _array_world(true, 1.0)
+	var lamp := _put_lamp(night)
+	var money := night.money
+	night.tick()
+	check_eq(lamp.lamp_level, 1.0, "full brightness on the grid at night")
+	var paid := Market.cost(night, LAMP.lamp_watts, SimConst.DT)
+	check_near(money - night.money, paid, paid * 0.01, "pays retail for its watts")
+	var noon := _array_world(true)
+	var cell: SimObject = noon.objects[1]
+	lamp = _put_lamp(noon)
+	var power: PowerSystem = noon.get_system(&"power")
+	var n := power.network_of(noon, lamp)
+	var f := power.flows(noon, n, SimConst.DT)
+	var made := SolarCell.object_power(cell, (noon.get_system(&"light") as LightSystem).power_scale(noon))
+	check_near(f.sold_w, made - LAMP.lamp_watts, 1e-6, "the lamp takes its share of the cell's power first")
+	check_eq(f.bought_w, 0.0, "nothing bought while the cell covers it")
+	var dark := _array_world(false)
+	lamp = _put_lamp(dark)
+	dark.tick()
+	check_eq(lamp.lamp_level, 0.0, "a lamp on no network is dark")
+
+
+## Without a grid connection a lamp gets what the cell makes and what a battery holds: brightness is
+## the share of its demand that was met, and a battery runs down serving it.
+func test_lamp_on_a_small_network_dims_and_drains_the_battery() -> void:
+	var world := _array_world(true, 12.0, true, false)
+	var big := LAMP.duplicate()
+	big.lamp_watts = 100.0
+	var lamp := _put_lamp(world, big)
+	var bat := _battery_of(world)
+	var cell: SimObject = world.objects[1]
+	bat.stored_j = 0.0
+	world.tick()
+	var made := cell.power_w + 0.0
+	var power: PowerSystem = world.get_system(&"power")
+	var f := power.flows(world, power.network_of(world, lamp), SimConst.DT)
+	check_near(f.lamps[lamp.id], clampf(SolarCell.object_power(cell, (world.get_system(&"light") as LightSystem)
+		.power_scale(world)) / big.lamp_watts, 0.0, 1.0), 1e-6, "brightness = the share of its demand the cell meets")
+	check(f.lamps[lamp.id] < 1.0, "the cell alone (%.1f W) can't carry %.0f W" % [made, big.lamp_watts])
+	bat.stored_j = 3.6e6 * 0.1
+	var before := bat.stored_j
+	world.time_s = 1.0 / 24.0 * SimConst.DAY_LENGTH_S   # Night: the cell makes nothing
+	world.tick()
+	world.tick()
+	check_eq(lamp.lamp_level, 1.0, "a charged battery carries the lamp at night")
+	check(bat.stored_j < before and bat.flow_w > 0.0, "and runs down doing it (%.0f W)" % bat.flow_w)
