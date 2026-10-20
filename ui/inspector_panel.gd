@@ -2,7 +2,8 @@ class_name InspectorPanel
 extends PanelContainer
 ## The inspector, fixed at the top right under the top bar: the selected object, or else what
 ## the pointer is over (an object, then the tile under it). A selected object also gets its
-## actions (tilt, level, delete). A hovered probe shows its spectrum.
+## actions (tilt, level, delete) and, for optics, its full numbers (focus, transmission,
+## material). A hovered probe shows its spectrum.
 
 const WIDTH := 340.0
 
@@ -58,7 +59,7 @@ func update() -> void:
 	var over_world := world.grid.in_bounds(cell.x, cell.y) and get_viewport().gui_get_hovered_control() == null
 	var lines := PackedStringArray()
 	if obj != null:
-		lines.append(_object_text(obj))
+		lines.append(_object_text(obj, obj == selected))
 	if selected == null and over_world:
 		lines.append(_tile_text(world.grid.idx(cell.x, cell.y), cell))
 	visible = not lines.is_empty()
@@ -111,9 +112,12 @@ func _light_text(i: int) -> String:
 		Readout.bands(bp[o] * scale, bp[o + 1] * scale, bp[o + 2] * scale)]
 
 
-func _object_text(obj: SimObject) -> String:
+func _object_text(obj: SimObject, selected: bool) -> String:
 	var s := "[b][color=#ffd873]%s[/color][/b]  [color=#8a93a0]%.1f°[/color]" % [obj.def.display_name,
 		wrapf(rad_to_deg(obj.angle), -180.0, 180.0)]
+	if selected and obj.def.kind in [ObjectDef.Kind.LENS, ObjectDef.Kind.MIRROR, ObjectDef.Kind.PRISM]:
+		s += "
+[color=#8a93a0]%s[/color]" % Readout.item_stats(obj.def, world.materials, true)
 	if obj.def.kind == ObjectDef.Kind.PROBE:
 		var irr := obj.incident_irradiance()
 		s += "\nreads %s  (%.1f× %s)" % [Readout.irradiance(irr), Readout.times_light(world, irr), Readout.light_name(world)]

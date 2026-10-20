@@ -1,9 +1,10 @@
 class_name ToolPanel
 extends PanelContainer
 ## The side panel next to the tool rail, holding the current tool's options:
-## - Build: the catalog, with search and category tabs; each item is a card with its price
-##   and key numbers (Readout.item_stats). Drag a card onto the map and let go where it
-##   should stand (R / F tilt it on the way).
+## - Build: the catalog, with search and category tabs; each item is a card with its
+##   at-a-glance number (Readout.item_stats; all of them in its tooltip). Click a card to pick
+##   the item and click the map to place as many as you like (click the card again or RMB to
+##   drop it); or drag a card onto the map to place one (R / F tilt it on the way).
 ## - Paint: material swatches and brush size. Wire: brush size and how wiring works.
 ## Hidden for Select.
 
@@ -22,6 +23,7 @@ var _key := []                 ## What the panel was built for; rebuilt when it 
 var _shown_selected := -2      ## Item the cards were last styled for
 var _followed := -2            ## Item whose category the tabs last switched to
 var _dragging := false         ## A card is held: letting go over the map places the item
+var _was_picked := false       ## The held card's item was already picked when it was pressed
 
 
 func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> void:
@@ -117,8 +119,8 @@ func _build_catalog(search: String) -> void:
 	_cards.add_theme_constant_override(&"separation", 6)
 	scroll.add_child(_cards)
 	_fill_cards()
-	_add_hint("Drag an item onto the map · R / F tilt it on the way · Alt floats it\n1–9 pick an item to "
-		+ "click-place · RMB drops it")
+	_add_hint("Click an item, then click the map to place it (again and again) · or drag one onto the "
+		+ "map\nR / F tilt · Alt floats · RMB or the card again drops it · 1–9 pick")
 
 
 ## The cards for the current category, or for the search across all categories.
@@ -158,7 +160,8 @@ func _card(k: int) -> Button:
 	var def := tool.defs[k]
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.tooltip_text = "%s  (%d)" % [def.display_name, k + 1] if k < 9 else def.display_name
+	b.tooltip_text = "%s%s\n%s" % [def.display_name, "  (%d)" % (k + 1) if k < 9 else "",
+		Readout.item_stats(def, world.materials, true)]
 	b.gui_input.connect(_on_card_input.bind(k))
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -179,20 +182,24 @@ func _card(k: int) -> Button:
 	return b
 
 
-## Press picks the item up (its ghost follows the pointer over the map); letting go over the
-## map places it there, letting go over the panel puts it back.
+## Press picks the item up (its ghost follows the pointer over the map). Letting go over the
+## map places one there (a drag); letting go on the panel keeps it picked for clicking onto the
+## map (a click), or drops it if it was already picked.
 func _on_card_input(event: InputEvent, k: int) -> void:
 	var mb := event as InputEventMouseButton
 	if mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
 		return
 	if mb.pressed:
+		_was_picked = tool.selected == k
 		tool.pick_item(k)
 		_dragging = true
 	elif _dragging:
 		_dragging = false
 		if not get_global_rect().has_point(mb.global_position):
 			tool.place_selected()
-		tool.selected = -1
+			tool.selected = -1
+		elif _was_picked:
+			tool.selected = -1
 
 
 # --- Paint and wire -------------------------------------------------------------------------

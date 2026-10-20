@@ -104,8 +104,8 @@ func _help_text() -> String:
 			line = "Drag an object to move it · drag its ring handle to tilt (Ctrl snaps 15°) · " + \
 				"R/F or Shift+wheel tilts · drag empty space to pan"
 		ObjectTool.Mode.BUILD:
-			line = "Drag an item from the catalog onto the map · 1–9 pick, click to place · RMB drop · " + \
-				"with nothing picked: drag to pan, click objects"
+			line = "Click an item, then click the map to place (repeatable) · or drag one onto the map · " + \
+				"RMB drop · with nothing picked: drag to pan, click objects"
 		ObjectTool.Mode.PAINT:
 			line = "LMB paint · RMB erase · Q/E material · [ ] size"
 		ObjectTool.Mode.WIRE:

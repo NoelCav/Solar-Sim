@@ -3,10 +3,10 @@ extends Node2D
 ## Pointer tools (creative mode). All edits are commands (D6).
 ## - Select (default, Esc / 0): click an object to select it, drag it to move, drag the ring
 ##   handle to tilt (Ctrl snaps to 15°); dragging empty space pans the view.
-## - Build (B): drag an item from the catalog (ToolPanel) onto the map; or pick one with 1–9
-##   and click to place it (R / F tilt the ghost first; RMB drops the pick). With nothing
-##   picked the mouse works as in Select. Objects go on stands (Mounting) that snap to tile
-##   columns and heights; in creative mode Alt floats them.
+## - Build (B): pick an item in the catalog (ToolPanel) or with 1–9 and click the map to place
+##   it, as often as you like; or drag a card onto the map to place one (R / F tilt the ghost
+##   first; RMB drops the pick). With nothing picked the mouse works as in Select. Objects go
+##   on stands (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
 ## The map ignores the pointer while it is over a panel (Hud.covers): no ghost, no hover.
 ## - Paint (T): the tile brush (CreativeBrush) owns the mouse.
 ## - Wire (V): the same brush lays wire (LMB) and removes it (RMB).

@@ -321,6 +321,7 @@ An alternative to cells: heliostat mirrors on tracking stands focus onto a **rec
 - Tiles and objects have `integrity`. Heat above thresholds reduces it; reaching 0 converts to the material's `burns_to` / `melts_to` / debris.
 - **Fire:** a flammable tile above `ignition_temp` gets the burning flag → adds heat, emits smoke, consumes integrity, spreads via heat.
 - **Focused beams ignite anything** they concentrate on.
+- *Idea:* grass on dirt surfaces (a thin flammable top layer) that scorches and burns under a focused beam and regrows slowly, so the world reacts to stray light long before anything serious catches fire.
 - **No repair** (D12). Debris (char, ash, slag, broken cell) must be mined/deconstructed; deconstruction refunds a fraction of materials. Powders (ash, sand) fall when unsupported.
 
 ## 14. Byproduct chains
