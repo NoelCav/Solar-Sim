@@ -230,18 +230,23 @@ func _sync_surfaces(world: SimWorld) -> void:
 				coating = SurfaceSet.Coating.PROBE
 			ObjectDef.Kind.CELL:
 				coating = SurfaceSet.Coating.CELL
+			ObjectDef.Kind.SPLITTER:
+				coating = SurfaceSet.Coating.SPLITTER
 			_:
 				back = mats.id_of(def.material)
 		for piece in obj.world_pieces():
 			surfaces.add_polyline(piece[0], piece[1], MaterialDB.AIR_ID, back, coating, obj.id,
-				def.reflectance)
+				def.reflectance, def.transmittance)
 	surfaces.build_buckets(world.grid.width, world.grid.height)
 	var reflectance := PackedFloat32Array()
 	for r in surfaces.reflectance:
 		reflectance.append_array(r if r.size() == Spectrum.BIN_COUNT else Spectrum.make_zero())
+	var transmittance := PackedFloat32Array()
+	for t in surfaces.transmittance:
+		transmittance.append_array(t if t.size() == Spectrum.BIN_COUNT else Spectrum.make_zero())
 	engine.SetSurfaces(surfaces.ax, surfaces.ay, surfaces.ex, surfaces.ey, surfaces.normal,
 		surfaces.normal_a, surfaces.normal_b, surfaces.front_mat, surfaces.back_mat, surfaces.coating,
-		surfaces.owner, surfaces.piece, reflectance, surfaces.cell_start, surfaces.cell_items)
+		surfaces.owner, surfaces.piece, reflectance, transmittance, surfaces.cell_start, surfaces.cell_items)
 	objects_version = world.objects_version
 
 

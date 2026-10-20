@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ObjectDef" format=3]
+
+[ext_resource type="Script" path="res://sim/objects/object_def.gd" id="1_objdef"]
+
+[resource]
+script = ExtResource("1_objdef")
+key = &"splitter_half"
+display_name = "Beam Splitter (50/50)"
+kind = 8
+material = &"crown_glass"
+color = Color(0.8, 0.9, 1.0, 1)
+size_m = 1.0
+reflectance = PackedFloat32Array(0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+transmittance = PackedFloat32Array(0.45, 0.45, 0.45, 0.45, 0.45, 0.45)

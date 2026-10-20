@@ -110,6 +110,24 @@ public partial class LightEngine
                 Push(hit + r * Nudge, r, outP, medium, body, events + 1);
                 break;
             }
+            case CoatSplit:
+            {
+                // Both branches go on as rays: the reflected one and the transmitted one (straight on),
+                // what the plate absorbs heats it.
+                var reflected = new double[Bins];
+                var passed = new double[Bins];
+                int tile = TileAt(hit);
+                for (int b = 0; b < Bins; b++)
+                {
+                    reflected[b] = p[b] * _refl[s * Bins + b];
+                    passed[b] = p[b] * _trans[s * Bins + b];
+                    DepositBin(tile, b, Math.Max(p[b] - reflected[b] - passed[b], 0.0), owner, hit, hit);
+                }
+                D2 r = d - n * (2.0 * d.Dot(n));
+                PushChild(hit, d, passed, medium, body, events, _minRayW);
+                PushChild(hit, r, reflected, medium, body, events, _minChildW);
+                break;
+            }
             default:
             {
                 // Which side we hit decides inside/outside, so a ray that slipped past a corner

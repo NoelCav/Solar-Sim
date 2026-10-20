@@ -86,6 +86,34 @@ public partial class LightEngine
                         o = hit + d * Nudge;
                         continue;
                     }
+                    if (_coating[s] == CoatSplit)
+                    {
+                        // Fork: this run is traced once per combination of branches (the task's mask:
+                        // bit j set = reflect at the j-th splitter met), each carrying its share. A
+                        // variant records only what comes after its last reflection: what came before
+                        // was recorded by the variants that took the other branches.
+                        int j = rec.Forks++;
+                        double rr = _refl[s * Bins + bin], tt = _trans[s * Bins + bin];
+                        if (((_mask >> j) & 1) != 0)
+                        {
+                            if ((_mask >> (j + 1)) == 0)
+                            {
+                                rec.Deps.Clear();
+                                rec.Incident.Clear();
+                                rec.Refls.Clear();
+                                rec.Start = rec.Pts.Count;
+                            }
+                            rec.Sig.Add(_piece[s] * 2 + (fromFront ? 0 : 1) + SplitSig);
+                            p[bin] *= rr;
+                            d = d - n * (2.0 * d.Dot(n));
+                        }
+                        else
+                        {
+                            DepositBin(TileAt(hit), bin, p[bin] * Math.Max(1.0 - rr - tt, 0.0), owner, hit, hit);
+                            p[bin] *= tt;
+                        }
+                        break;
+                    }
                     bool direct = rec.Sig.Count == 0;   // Nothing redirected it before this surface
                     rec.Sig.Add(_piece[s] * 2 + (fromFront ? 0 : 1));
                     if (_coating[s] == CoatMirror || _coating[s] == CoatCell)
@@ -145,6 +173,17 @@ public partial class LightEngine
         }
         rec.Remain = p[bin];
         _rec = null;
+        _runForks = Math.Max(_runForks, rec.Forks);
+        if (rec.Term != Term.Pending && (_mask >> rec.Forks) != 0)
+        {
+            // This variant reflects at a splitter the ray never met: nothing to count.
+            rec.Invalid = true;
+            rec.Term = Term.Culled;
+            rec.Remain = 0.0;
+            rec.Deps.Clear();
+            rec.Incident.Clear();
+            rec.Refls.Clear();
+        }
     }
 
     D2 PrimaryInterface(PathRec rec, D2 hit, D2 d, D2 nrm, int m1, int m2, double[] p, int reflBody)

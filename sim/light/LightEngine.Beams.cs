@@ -36,6 +36,9 @@ public partial class LightEngine
             changed.Add(new R2(areas[k], areas[k + 1], areas[k] + areas[k + 2], areas[k + 1] + areas[k + 3]));
         _tasks.Clear();
         _next = 0;
+        _prevEngine = prev;
+        _reuseLogs = reuse;
+        _changedAreas = changed;
         for (int r = 0; r * 3 + 2 < runs.Length; r++)
         {
             int k0 = runs[r * 3], k1 = runs[r * 3 + 1], key = runs[r * 3 + 2];
@@ -44,7 +47,7 @@ public partial class LightEngine
                 if (_src.PerU[b] <= 0)
                     continue;
                 TaskLog old = null;
-                if (reuse && prev != null && prev._logs.TryGetValue((k0, k1, key, b), out TaskLog l)
+                if (reuse && prev != null && prev._logs.TryGetValue((k0, k1, key, b, 0), out TaskLog l)
                     && l.SMin == sMins[r] && !Touches(l, changed))
                     old = l;
                 _tasks.Add(new Task { K0 = k0, K1 = k1, Key = key, Bin = b, SMin = sMins[r], Replay = old });
@@ -81,10 +84,30 @@ public partial class LightEngine
             else
                 log = TraceRun(t);
             if (log != null)
-                _logs[(log.K0, log.K1, log.Key, log.Bin)] = log;
+            {
+                _logs[(log.K0, log.K1, log.Key, log.Bin, log.Mask)] = log;
+                SpawnForks(t, log.Forks);
+            }
             _next++;
         }
         return _next >= _tasks.Count;
+    }
+
+    /// A run whose rays met `forks` splitters is traced again for each branch that can be taken at
+    /// them (replayed from the last pass when it hasn't been touched): the task for the variant that
+    /// reflects at splitter j, after the ones the task already decided.
+    void SpawnForks(Task t, int forks)
+    {
+        int from = t.Mask == 0 ? 0 : 32 - System.Numerics.BitOperations.LeadingZeroCount((uint)t.Mask);
+        for (int j = from; j < Math.Min(forks, MaxForks); j++)
+        {
+            int mask = t.Mask | (1 << j);
+            TaskLog old = null;
+            if (_reuseLogs && _prevEngine != null && _prevEngine._logs.TryGetValue((t.K0, t.K1, t.Key, t.Bin, mask),
+                out TaskLog l) && l.SMin == t.SMin && !Touches(l, _changedAreas))
+                old = l;
+            _tasks.Add(new Task { K0 = t.K0, K1 = t.K1, Key = t.Key, Bin = t.Bin, Mask = mask, SMin = t.SMin, Replay = old });
+        }
     }
 
     void Replay(TaskLog t)
@@ -157,8 +180,10 @@ public partial class LightEngine
         int bin = task.Bin;
         if (_src.PerU[bin] <= 0)
             return null;
-        var log = new TaskLog { K0 = task.K0, K1 = task.K1, Key = task.Key, Bin = bin, SMin = task.SMin };
+        var log = new TaskLog { K0 = task.K0, K1 = task.K1, Key = task.Key, Bin = bin, SMin = task.SMin, Mask = task.Mask };
         _log = log;
+        _mask = task.Mask;
+        _runForks = 0;
         int paths0 = _rayCount;
         int seg0 = _segFrom.Count;
         int render0 = _render.Count;
@@ -217,6 +242,7 @@ public partial class LightEngine
         }
         s_taskIds.Clear();
         log.Paths = _rayCount - paths0;
+        log.Forks = _runForks;
         log.Render = _render.GetRange(render0, _render.Count - render0).ToArray();
         log.SegFrom = _segFrom.GetRange(seg0, _segFrom.Count - seg0).ToArray();
         log.SegTo = _segTo.GetRange(seg0, _segTo.Count - seg0).ToArray();
@@ -261,6 +287,8 @@ public partial class LightEngine
     /// NEAR: same path, landing within LandingTol on uneven ground; SPLIT: different paths.
     Span Classify(PathRec ra, PathRec rb)
     {
+        if (ra.Invalid && rb.Invalid)
+            return Span.Exact;   // Nothing here for this variant
         if (ra.Term != rb.Term || ra.Term == Term.Culled)
             return Span.Split;
         if (ra.Pts.Count != rb.Pts.Count || !SameSig(ra, rb))
@@ -348,6 +376,8 @@ public partial class LightEngine
     void Settle(Interval iv, int bin)
     {
         PathRec ra = iv.Ra, rb = iv.Rb;
+        if (ra.Invalid && rb.Invalid)
+            return;
         double half = _src.Watts(bin, iv.Ua, iv.Ub) * 0.5;   // W each ray carries for this interval
         foreach (var p in ra.Pts)
             Grow(p);

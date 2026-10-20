@@ -12,14 +12,17 @@ public partial class LightEngine
     /// A coherent beam between two rays, drawn up to (not including) leg `last` (-1 = all).
     void RenderStrip(PathRec ra, PathRec rb, double watts, int bin, int last = -1)
     {
+        if (ra.Invalid || rb.Invalid)
+            return;
         int end = last < 0 ? ra.Pts.Count - 1 : last;
-        if (end < 2)
+        int first = Math.Max(1, Math.Max(ra.Start, rb.Start));   // A variant draws from its own fork on
+        if (end - first + 1 < 2)
             return;
         _render.Add(0);   // BeamGeometry.STRIP
         _render.Add(bin);
         _render.Add((float)watts);
-        _render.Add(end);   // points 1..end
-        for (int k = 1; k <= end; k++)
+        _render.Add(end - first + 1);   // points first..end
+        for (int k = first; k <= end; k++)
         {
             D2 a = ra.Pts[k], b = rb.Pts[k];
             _render.Add((float)a.X);
@@ -38,6 +41,14 @@ public partial class LightEngine
     /// showing as bright and dark lines along the whole path. Slivers start where they part.
     void RenderSplit(PathRec ra, PathRec rb, double watts, double width, int bin)
     {
+        if (ra.Invalid || rb.Invalid)
+        {
+            if (!ra.Invalid)
+                RenderRay(ra, watts, width, bin, 1);
+            if (!rb.Invalid)
+                RenderRay(rb, watts, width, bin, 1);
+            return;
+        }
         int shared = 0;
         while (shared < ra.Sig.Count && shared < rb.Sig.Count && ra.Sig[shared] == rb.Sig[shared])
             shared++;
@@ -59,11 +70,18 @@ public partial class LightEngine
         double fa = la > 1e-12 ? ra.Frac[shared] + (ra.Frac[shared + 1] - ra.Frac[shared]) * t / la : ra.Frac[shared];
         double fb = lb > 1e-12 ? rb.Frac[shared] + (rb.Frac[shared + 1] - rb.Frac[shared]) * t / lb : rb.Frac[shared];
 
+        int from = Math.Max(1, Math.Max(ra.Start, rb.Start));
+        if (shared < from)
+        {
+            RenderRay(ra, watts, width, bin, Math.Max(shared, 1));
+            RenderRay(rb, watts, width, bin, Math.Max(shared, 1));
+            return;
+        }
         _render.Add(0);   // BeamGeometry.STRIP
         _render.Add(bin);
         _render.Add((float)(watts * 2.0));
-        _render.Add(shared + 1);   // points 1..shared, then the cut
-        for (int k = 1; k <= shared; k++)
+        _render.Add(shared - from + 2);   // points from..shared, then the cut
+        for (int k = from; k <= shared; k++)
             AddStripPoint(ra.Pts[k], rb.Pts[k], ra.Frac[k], rb.Frac[k]);
         AddStripPoint(aCut, bCut, fa, fb);
 
@@ -84,6 +102,7 @@ public partial class LightEngine
     /// A lone ray drawn as a beam of fixed width from leg `first` on (incoherent slivers).
     void RenderRay(PathRec r, double watts, double width, int bin, int first = 1)
     {
+        first = Math.Max(first, r.Start);
         int n = r.Pts.Count - first;
         if (n < 2)
             return;

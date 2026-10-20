@@ -52,7 +52,7 @@ public partial class LightEngine
     /// <summary>The optical surfaces this pass traces (from SurfaceSet).</summary>
     public void SetSurfaces(double[] ax, double[] ay, double[] ex, double[] ey, Vector2[] normal, Vector2[] normalA,
         Vector2[] normalB, int[] front, int[] back, int[] coating, int[] owner, int[] piece, float[] reflectance,
-        int[] cellStart, int[] cellItems)
+        float[] transmittance, int[] cellStart, int[] cellItems)
     {
         _segCount = ax.Length;
         _ax = ax; _ay = ay; _ex = ex; _ey = ey;
@@ -67,6 +67,7 @@ public partial class LightEngine
         }
         _front = front; _back = back; _coating = coating; _owner = owner; _piece = piece;
         _refl = ToDouble(reflectance);
+        _trans = ToDouble(transmittance);
         _cellStart = cellStart;
         _cellItems = cellItems;
         // A fixed point on each object (its first vertex) that its runs' samples are laid out

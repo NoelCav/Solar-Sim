@@ -4,7 +4,7 @@ extends Resource
 ## probe, cell) and machines (grid connection; later batteries and consumers). Machines are
 ## boxes behind the play plane (D19): no optics, and they only collide with other machines.
 
-enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE, BATTERY, LAMP }
+enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE, BATTERY, LAMP, SPLITTER }
 ## How it stands in the world (Mounting): on a stand, flat on the ground, or floating.
 enum Mount { STAND, GROUND, FREE }
 ## Where it is listed in the build catalog.
@@ -35,6 +35,11 @@ enum Category { OPTICS, POWER, MACHINES, TOOLS }
 @export_group("Optics")
 ## Reflectance per spectral bin: a mirror's, or what a cell's front (its AR coating) and back reflect.
 @export var reflectance: PackedFloat32Array = PackedFloat32Array([0.9, 0.9, 0.9, 0.9, 0.9, 0.9])
+
+## Beam splitters and dichroic mirrors (Kind.SPLITTER): a thin plate that reflects `reflectance` of each
+## bin, passes `transmittance` straight on and absorbs the rest (`reflectance` above is the share
+## reflected). Both sums stay at most 1 per bin.
+@export var transmittance: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
 @export_group("Battery")
 ## Energy it holds, kWh (real energy, like the market's), and the most power it takes in or gives

@@ -36,6 +36,15 @@ static func item_stats(def: ObjectDef, materials: MaterialDB, full := false) -> 
 				OpticsGen.normal_transmission(n) * 100.0, mat.display_name if mat else "?", n]
 		ObjectDef.Kind.MIRROR:
 			return "%s · reflects %.0f %%" % [length(def.size_m), _mean(def.reflectance) * 100.0]
+		ObjectDef.Kind.SPLITTER:
+			var share := "reflects %.0f %% · passes %.0f %%" % [_mean(def.reflectance) * 100.0,
+				_mean(def.transmittance) * 100.0]
+			if not full:
+				return "%s · %s" % [length(def.size_m), share]
+			return "%s plate · %s\nvisible: reflects %.0f %%, passes %.0f %% · infrared: reflects %.0f %%, passes %.0f %%" % [
+				length(def.size_m), share, _mean(def.reflectance.slice(1, 4)) * 100.0,
+				_mean(def.transmittance.slice(1, 4)) * 100.0, _mean(def.reflectance.slice(4, 6)) * 100.0,
+				_mean(def.transmittance.slice(4, 6)) * 100.0]
 		ObjectDef.Kind.PRISM:
 			if not full:
 				return "%.0f° · %s" % [def.apex_angle_deg, mat.display_name if mat else "?"]

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ObjectDef" format=3]
+
+[ext_resource type="Script" path="res://sim/objects/object_def.gd" id="1_objdef"]
+
+[resource]
+script = ExtResource("1_objdef")
+key = &"dichroic_red"
+display_name = "Color Splitter (red and beyond)"
+kind = 8
+material = &"crown_glass"
+color = Color(1.0, 0.55, 0.5, 1)
+size_m = 1.0
+reflectance = PackedFloat32Array(0.02, 0.02, 0.04, 0.93, 0.93, 0.94)
+transmittance = PackedFloat32Array(0.9, 0.95, 0.93, 0.05, 0.05, 0.04)

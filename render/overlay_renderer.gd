@@ -20,6 +20,8 @@ const AIR_ALPHA := 0.45       ## Air shows fainter than solids in the heat view
 const IRR_MIN := 10.0         ## W/m² at the bottom of the light scale
 const IRR_MAX := 1e6          ## W/m² at the top
 const GLOW_MIN := 300.0       ## Normal view: absorbed W/m² where the surface glow starts
+const HEAT_SKIN := 0.15       ## Drawn depth of the surface skin in the heat view, tiles
+const LIGHT_SKIN := 0.34      ## and in the light view, where it is the whole picture
 
 var world: SimWorld
 var view := ViewMode.NORMAL:
@@ -94,6 +96,7 @@ func _skins_in_light_view() -> bool:
 
 
 func _apply_material() -> void:
+	_heat_mat.set_shader_parameter(&"face_skin", LIGHT_SKIN if _skins_in_light_view() else HEAT_SKIN)
 	if view == ViewMode.NORMAL:
 		material = _add_mat
 	elif view == ViewMode.HEAT or _skins_in_light_view():
@@ -283,6 +286,13 @@ func _fill_light_skins() -> void:
 	_skin_bytes.fill(0)
 	var log_lo := log(IRR_MIN)
 	var log_span := log(IRR_MAX) - log_lo
+	# Every exposed face is on the scale: a face in shadow reads as the bottom of it, not as itself.
+	var skin := world.skin
+	for f in skin.faces:
+		var tile := skin.face_tile[f]
+		var base := ((tile / g.width) * 4 + skin.face_side[f]) * row + (tile % g.width) * n
+		for k in n:
+			_put_at(_skin_bytes, _light_lut, (base + k) * 4, 0.0)
 	for at in _strip_irr.size():
 		if physical[at] > peak_value:
 			peak_value = physical[at]

@@ -67,7 +67,7 @@ func _draw() -> void:
 					if obj.id == selected_id:
 						edge = Color(1.0, 0.85, 0.45)
 					draw_polyline(pts, edge, 2.0 if hl else 1.0, true)
-			ObjectDef.Kind.MIRROR, ObjectDef.Kind.CELL:
+			ObjectDef.Kind.MIRROR, ObjectDef.Kind.CELL, ObjectDef.Kind.SPLITTER:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
 				var back := Vector2.from_angle(obj.angle + PI * 0.5) * clampf(0.004 * px, 1.5, 12.0)

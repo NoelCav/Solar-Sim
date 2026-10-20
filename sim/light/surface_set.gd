@@ -5,7 +5,7 @@ extends RefCounted
 ## name the media a ray crosses between. Per-vertex normals are interpolated along the
 ## segment for smooth refraction. Segments are bucketed per tile for the tracer.
 
-enum Coating { NONE, MIRROR, PROBE, CELL }
+enum Coating { NONE, MIRROR, PROBE, CELL, SPLITTER }
 
 var a := PackedVector2Array()
 var b := PackedVector2Array()
@@ -17,7 +17,8 @@ var back_mat := PackedInt32Array()
 var coating := PackedInt32Array()
 var owner := PackedInt32Array()         ## Object id
 var piece := PackedInt32Array()         ## Index of the add_polyline call that made the segment
-var reflectance: Array[PackedFloat32Array] = []   ## Per-bin, mirrors only
+var reflectance: Array[PackedFloat32Array] = []   ## Per-bin, mirrors and splitters
+var transmittance: Array[PackedFloat32Array] = []   ## Per-bin, splitters only
 ## Each face of an object is one piece; segments of a smooth face share it, so rays hitting
 ## neighbouring segments of the same face still count as following the same path.
 var piece_count := 0
@@ -38,6 +39,7 @@ func clear() -> void:
 	for arr in [a, b, normal, normal_a, normal_b, front_mat, back_mat, coating, owner, piece]:
 		arr.clear()
 	reflectance.clear()
+	transmittance.clear()
 	piece_count = 0
 
 
@@ -47,7 +49,8 @@ func count() -> int:
 
 ## Adds an open polyline. `normals` are per-vertex and point to the front side.
 func add_polyline(points: PackedVector2Array, normals: PackedVector2Array, p_front: int,
-		p_back: int, p_coating: int, p_owner: int, p_reflectance := PackedFloat32Array()) -> void:
+		p_back: int, p_coating: int, p_owner: int, p_reflectance := PackedFloat32Array(),
+		p_transmittance := PackedFloat32Array()) -> void:
 	for k in points.size() - 1:
 		var pa := points[k]
 		var pb := points[k + 1]
@@ -68,6 +71,7 @@ func add_polyline(points: PackedVector2Array, normals: PackedVector2Array, p_fro
 		owner.append(p_owner)
 		piece.append(piece_count)
 		reflectance.append(p_reflectance)
+		transmittance.append(p_transmittance)
 	piece_count += 1
 
 

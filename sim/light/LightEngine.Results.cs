@@ -30,7 +30,7 @@ public partial class LightEngine
         _rayCount = 0;
         _tasks.Clear();
         _next = 0;
-        _logs = new Dictionary<(int, int, int, int), TaskLog>();
+        _logs = new Dictionary<(int, int, int, int, int), TaskLog>();
         _replayed = _cacheHits = _cacheMisses = 0;
         _cache.Clear();
         _objects.Clear();

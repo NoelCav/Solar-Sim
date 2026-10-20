@@ -40,6 +40,9 @@ public partial class LightEngine : RefCounted
     const int CoatMirror = 1;
     const int CoatProbe = 2;
     const int CoatCell = 3;   // A mirror whose front face also records the light arriving on it
+    const int CoatSplit = 4;  // A thin plate that reflects a share per bin and passes the rest (beam splitter, dichroic)
+    const int MaxForks = 5;   // Splitters a path forks at at most: 2^5 variants of a run
+    const int SplitSig = 2000003;   // Marks the reflected branch in a path's signature
     const int AirId = 0;
 
     struct D2
@@ -92,12 +95,15 @@ public partial class LightEngine : RefCounted
         public readonly List<double> Refls = new();   // (x, y, dx, dy, fraction, medium, body)…
         public D2 ContO, ContD;
         public int ContEvents;
+        public int Forks;         // Splitters the path has met
+        public int Start;         // Index in Pts where this variant's own record begins (earlier is the parent's)
+        public bool Invalid;      // The variant asks for a splitter this ray never met: it carries nothing
     }
 
     /// Everything one beam task added to the results, plus the area its rays touched.
     sealed class TaskLog
     {
-        public int K0, K1, Key, Bin;
+        public int K0, K1, Key, Bin, Mask, Forks;
         public double SMin;
         public List<double> Deps = new();     // (tile, bin, watts, body)…
         public readonly List<double> Strips = new();   // (strip index, watts arriving, watts absorbed)…
@@ -153,7 +159,7 @@ public partial class LightEngine : RefCounted
 
     struct Task
     {
-        public int K0, K1, Key, Bin;
+        public int K0, K1, Key, Bin, Mask;
         public double SMin;
         public TaskLog Replay;
     }
@@ -180,7 +186,7 @@ public partial class LightEngine : RefCounted
     D2[] _n = Array.Empty<D2>(), _na = Array.Empty<D2>(), _nb = Array.Empty<D2>();
     int[] _front = Array.Empty<int>(), _back = Array.Empty<int>(), _coating = Array.Empty<int>();
     int[] _owner = Array.Empty<int>(), _piece = Array.Empty<int>();
-    double[] _refl = Array.Empty<double>();
+    double[] _refl = Array.Empty<double>(), _trans = Array.Empty<double>();
     int[] _cellStart = Array.Empty<int>(), _cellItems = Array.Empty<int>();
 
     // --- Acceleration ------------------------------------------------------------------------
@@ -221,7 +227,11 @@ public partial class LightEngine : RefCounted
     readonly Dictionary<(int, long, int, long), PathRec> _cache = new();
     readonly List<Task> _tasks = new();
     int _next;
-    Dictionary<(int, int, int, int), TaskLog> _logs = new();
+    Dictionary<(int, int, int, int, int), TaskLog> _logs = new();
+    int _mask, _runForks;   // The splitter branches the run being traced takes (bit j: reflect at the j-th), and the most it met
+    LightEngine _prevEngine;   // The last pass, for replaying tasks
+    bool _reuseLogs;
+    List<R2> _changedAreas = new();
     int _replayed, _cacheHits, _cacheMisses;
 
     /// Whether identical objects share traced sample paths (off = trace every path; tests).
