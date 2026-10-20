@@ -12,6 +12,9 @@ const MOON_EXPOSURE := 0.35                  ## A full moon draws at this fracti
 const MOON_TINT := Vector3(0.62, 0.74, 1.0)  ## Night vision: moonlight reads pale blue
 ## At night a lamp's light is drawn this many times brighter than traced (1 W/m² reads as full).
 const LAMP_EXPOSURE := 1000.0
+## Beams of lamp light are drawn at this gain at night: air shows no beam in real life, so they
+## are only an aid, and a lens focusing a lamp would otherwise bloom like a sun.
+const LAMP_BEAM_EXPOSURE := 30.0
 const NIGHT_AMBIENT := 0.002                 ## Brightness of unlit things at night (linear; ~4 % on screen)
 
 
@@ -25,6 +28,11 @@ static func exposure(world: SimWorld) -> float:
 ## at night and at their true level by day (when they can't compete with the sun).
 static func lamp_exposure(world: SimWorld) -> float:
 	return lerpf(LAMP_EXPOSURE, 1.0, ambient(world))
+
+
+## Display gain for a lamp's beams, sheet and rays (see LAMP_BEAM_EXPOSURE).
+static func lamp_beam_exposure(world: SimWorld) -> float:
+	return lerpf(LAMP_BEAM_EXPOSURE, 1.0, ambient(world))
 
 
 ## How lit everything is without direct light: 1 by day, fading through dusk to

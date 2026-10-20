@@ -369,3 +369,22 @@ func test_lamp_on_a_small_network_dims_and_drains_the_battery() -> void:
 	world.tick()
 	check_eq(lamp.lamp_level, 1.0, "a charged battery carries the lamp at night")
 	check(bat.stored_j < before and bat.flow_w > 0.0, "and runs down doing it (%.0f W)" % bat.flow_w)
+
+
+## The meters (PowerMeters.reading) show what the network does: a wired cell's own delivery, a
+## battery's flow against its limit with its charge as text, the grid connection's sale; lenses and
+## lamps have none.
+func test_meters_read_the_network() -> void:
+	var world := _array_world(true, 12.0, true)
+	var power: PowerSystem = world.get_system(&"power")
+	var lamp := _put_lamp(world)
+	var cell: SimObject = world.objects[1]
+	var bat := _battery_of(world)
+	var f := power.flows(world, power.network_of(world, cell), SimConst.DT)
+	var r := PowerMeters.reading(world, cell)
+	check_near(r.watts, f.cells[cell.id], 1e-6, "cell meter: its delivery")
+	check_near(r.rated, SolarCell.rated_power(cell.def), 1e-6, "cell meter: rated power")
+	r = PowerMeters.reading(world, bat)
+	check_near(r.watts, absf(f.batteries[bat.id]), 1e-6, "battery meter: its flow")
+	check_eq(r.text, "0 %", "battery meter: its charge")
+	check(PowerMeters.reading(world, lamp).is_empty(), "a lamp has no meter")

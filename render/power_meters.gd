@@ -33,31 +33,50 @@ const LAMP_OFF := Color(0.3, 0.3, 0.3)
 
 ## Draws the meter of every cell, battery and grid connection on `ci`; `base` is the canvas item's
 ## screen-unit transform (restored afterwards), `px` screen units per meter. Read from the
-## light now, so the meters are right while paused too.
-static func draw_all(ci: CanvasItem, world: SimWorld, base: Transform2D, px: float) -> void:
+## light now, so the meters are right while paused too. A meter on a surface cell is drawn only
+## while that cell is `focus` (hovered or selected): a row of them would overlap into a pile.
+static func draw_all(ci: CanvasItem, world: SimWorld, base: Transform2D, px: float, focus: Array = []) -> void:
+	for obj: SimObject in world.objects.values():
+		var r := reading(world, obj)
+		if r.is_empty() or (obj.def.mount == ObjectDef.Mount.GROUND and obj.def.kind == ObjectDef.Kind.CELL
+				and obj.id not in focus):
+			continue
+		_draw_meter(ci, base * Transform2D(obj.angle if obj.def.is_machine() else 0.0, r.center * px),
+			r.size * px, r.watts, r.rated, r.on, r.text)
+	ci.draw_set_transform_matrix(base)
+
+
+## What `obj`'s meter shows now: {center (m), size (m), watts, rated, on, text}; empty for objects
+## without one.
+static func reading(world: SimWorld, obj: SimObject) -> Dictionary:
 	var power: PowerSystem = world.get_system(&"power")
 	power.sync(world)
-	for obj: SimObject in world.objects.values():
-		match obj.def.kind:
-			ObjectDef.Kind.CELL:
-				var n := power.network_of(world, obj)
-				var sells := power.delivers(world, obj)
-				var watts: float = power.flows(world, n, SimConst.DT).cells[obj.id] if sells else 0.0
-				_draw_meter(ci, base * Transform2D(0.0, _cell_meter_m(world, obj) * px), CELL_METER_M * px,
-					watts, SolarCell.rated_power(obj.def), sells)
-			ObjectDef.Kind.BATTERY:
-				var n := power.network_of(world, obj)
-				var charge := obj.stored_j / (obj.def.battery_capacity_kwh * Market.J_PER_KWH)
-				var at := obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)
-				var flow := absf(power.flows(world, n, SimConst.DT).batteries[obj.id]) if n >= 0 else 0.0
-				_draw_meter(ci, base * Transform2D(obj.angle, at * px), CABINET_METER_M * px, flow,
-					obj.def.battery_max_w, n >= 0, "%.0f %%" % (charge * 100.0))
-			ObjectDef.Kind.GRID_TIE:
-				var n := power.network_of(world, obj)
-				var at := obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)
-				_draw_meter(ci, base * Transform2D(obj.angle, at * px), CABINET_METER_M * px,
-					power.output_w(world, n), power.rated_w(world, n), n >= 0 and power.network_grid[n] == 1)
-	ci.draw_set_transform_matrix(base)
+	var n := power.network_of(world, obj)
+	var cabinet := obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)
+	match obj.def.kind:
+		ObjectDef.Kind.CELL:
+			var sells := power.delivers(world, obj)
+			return {"center": _cell_meter_m(world, obj), "size": CELL_METER_M, "on": sells, "text": "",
+				"watts": power.flows(world, n, SimConst.DT).cells[obj.id] if sells else 0.0,
+				"rated": SolarCell.rated_power(obj.def)}
+		ObjectDef.Kind.BATTERY:
+			var charge := obj.stored_j / (obj.def.battery_capacity_kwh * Market.J_PER_KWH)
+			return {"center": cabinet, "size": CABINET_METER_M, "on": n >= 0, "text": "%.0f %%" % (charge * 100.0),
+				"watts": absf(power.flows(world, n, SimConst.DT).batteries[obj.id]) if n >= 0 else 0.0,
+				"rated": obj.def.battery_max_w}
+		ObjectDef.Kind.GRID_TIE:
+			return {"center": cabinet, "size": CABINET_METER_M, "on": n >= 0 and power.network_grid[n] == 1, "text": "",
+				"watts": power.output_w(world, n), "rated": power.rated_w(world, n)}
+	return {}
+
+
+## Draws `obj`'s meter filling a control of `size` screen units (the inspector's enlarged copy).
+static func draw_enlarged(ci: CanvasItem, world: SimWorld, obj: SimObject, size: Vector2) -> void:
+	var r := reading(world, obj)
+	if r.is_empty():
+		return
+	_draw_meter(ci, Transform2D(0.0, size * 0.5), size, r.watts, r.rated, r.on, r.text)
+	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 ## Center of a cell's meter (m): on the pole under a mounted cell, else on the ground beside it.

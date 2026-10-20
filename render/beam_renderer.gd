@@ -119,7 +119,7 @@ func rebuild() -> void:
 	for layer in _light.layers():
 		var sky := layer.lamp_id < 0
 		var rgb := _sky_rgb if sky else _rgb
-		var exposure := DisplayLight.exposure(world) if sky else DisplayLight.lamp_exposure(world)
+		var exposure := DisplayLight.exposure(world) if sky else DisplayLight.lamp_beam_exposure(world)
 		_build_sheet(layer, rgb, exposure, verts, cols, px)
 		_build_beams(layer, rgb, exposure, verts, cols, px)
 		_build_rays(layer, rgb, exposure, verts, cols, px)

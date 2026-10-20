@@ -25,6 +25,7 @@ var brush: CreativeBrush
 var _light: LightSystem
 var _power: PowerSystem
 var _text: RichTextLabel
+var _meter: MeterView
 var _chart: SpectrumChart
 var _losses: StackBar
 var _colors: StackBar
@@ -53,6 +54,8 @@ func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> voi
 	_text.add_theme_font_size_override(&"normal_font_size", 13)
 	_text.custom_minimum_size.x = WIDTH - 24.0   # A width to wrap at; without it each word wraps
 	col.add_child(_text)
+	_meter = MeterView.new()
+	col.add_child(_meter)
 	_chart = SpectrumChart.new()
 	col.add_child(_chart)
 	_losses = StackBar.new(WIDTH - 24.0)
@@ -83,6 +86,7 @@ func update() -> void:
 		return
 	_text.text = "\n".join(lines)
 	_actions.visible = selected != null
+	_meter.show_meter(world, obj)
 	_chart.visible = obj != null and obj.def.kind == ObjectDef.Kind.PROBE and obj.incident_irradiance() > 0.0
 	if _chart.visible:
 		_chart.show_spectrum(obj.incident_spectrum(), world.light_spectrum)
