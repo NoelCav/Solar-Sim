@@ -117,7 +117,8 @@ func _target_id() -> int:
 	return selected_id if world.objects.has(selected_id) else hovered_id
 
 
-## The object under the cursor (a probe's reading tag, inside a body, or near a line), or -1.
+## The object under the cursor (a probe's reading tag, a device's meter, inside a body, or near a
+## line), or -1.
 func hovered_object() -> int:
 	if _over_ui():
 		return -1
@@ -127,6 +128,9 @@ func hovered_object() -> int:
 	for obj: SimObject in world.objects.values():
 		if obj.def.kind == ObjectDef.Kind.PROBE and MapMarkers.probe_tag_rect(world, obj, zoom).has_point(at):
 			return obj.id
+	for obj: SimObject in world.objects.values():
+		if PowerMeters.meter_rect(world, obj).has_point(m):
+			return obj.id   # The meter on a device counts as the device
 	var best := -1
 	var best_d := PICK_PX / (SimConst.PX_PER_M * _zoom())
 	for obj: SimObject in world.objects.values():

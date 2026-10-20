@@ -388,3 +388,6 @@ func test_meters_read_the_network() -> void:
 	check_near(r.watts, absf(f.batteries[bat.id]), 1e-6, "battery meter: its flow")
 	check_eq(r.text, "0 %", "battery meter: its charge")
 	check(PowerMeters.reading(world, lamp).is_empty(), "a lamp has no meter")
+	var rect := PowerMeters.meter_rect(world, cell)
+	check(rect.has_area() and rect.has_point(PowerMeters.reading(world, cell).center), "hovering a panel's meter finds it")
+	check(not PowerMeters.meter_rect(world, lamp).has_area(), "no meter to hover on a lamp")

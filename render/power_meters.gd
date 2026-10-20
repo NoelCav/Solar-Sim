@@ -70,6 +70,24 @@ static func reading(world: SimWorld, obj: SimObject) -> Dictionary:
 	return {}
 
 
+## Where `obj`'s meter is drawn on the map (m; empty when it has none or it is not shown: a surface
+## cell's meter is shown only while the cell is focused, so it can't be picked before then).
+static func meter_rect(world: SimWorld, obj: SimObject) -> Rect2:
+	var size := CELL_METER_M
+	var center := Vector2.ZERO
+	match obj.def.kind:
+		ObjectDef.Kind.CELL:
+			if obj.def.mount == ObjectDef.Mount.GROUND:
+				return Rect2()
+			center = _cell_meter_m(world, obj)
+		ObjectDef.Kind.BATTERY, ObjectDef.Kind.GRID_TIE:
+			size = CABINET_METER_M
+			center = obj.position + Vector2(0.0, -CABINET_RAISE_M).rotated(obj.angle)
+		_:
+			return Rect2()
+	return Rect2(center - size * 0.5, size)
+
+
 ## Draws `obj`'s meter filling a control of `size` screen units (the inspector's enlarged copy).
 static func draw_enlarged(ci: CanvasItem, world: SimWorld, obj: SimObject, size: Vector2) -> void:
 	var r := reading(world, obj)
