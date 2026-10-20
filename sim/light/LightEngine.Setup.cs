@@ -106,7 +106,7 @@ public partial class LightEngine
             return;
         }
         var windows = new List<R2>();
-        for (int k = 0; k + 3 < areas.Length; k += 4)
+        for (int k = 0; k + AreaRect - 1 < areas.Length; k += AreaRect)
             windows.Add(new R2(areas[k], areas[k + 1], areas[k] + areas[k + 2], areas[k + 1] + areas[k + 3]));
         foreach (int id in changedObjects)
             if (_bounds.TryGetValue(id, out R2 r))

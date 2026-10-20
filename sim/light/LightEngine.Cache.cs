@@ -75,7 +75,7 @@ public partial class LightEngine
         foreach (int v in rec.Sig)
             c.Sig.Add(v >= 0 ? v - 2 * fp : v);
         var deps = rec.Deps;
-        for (int k = 0; k < deps.Count; k += 8)
+        for (int k = 0; k < deps.Count; k += PathDep)
         {
             c.Deps.Add(-1);
             c.Deps.Add(deps[k + 1]);
@@ -87,7 +87,7 @@ public partial class LightEngine
             c.Deps.Add(deps[k + 7]);
         }
         var refls = rec.Refls;
-        for (int k = 0; k < refls.Count; k += 7)
+        for (int k = 0; k < refls.Count; k += PathRefl)
         {
             c.Refls.Add(refls[k] - off.X);
             c.Refls.Add(refls[k + 1] - off.Y);
@@ -117,7 +117,7 @@ public partial class LightEngine
         foreach (int v in c.Sig)
             r.Sig.Add(v >= 0 ? v + 2 * fp : v);
         var deps = c.Deps;
-        for (int k = 0; k < deps.Count; k += 8)
+        for (int k = 0; k < deps.Count; k += PathDep)
         {
             var a = new D2(deps[k + 3] + off.X, deps[k + 4] + off.Y);
             var b = new D2(deps[k + 5] + off.X, deps[k + 6] + off.Y);
@@ -125,7 +125,7 @@ public partial class LightEngine
             SplitDeposit(r, deps[k + 1], body, a, b, deps[k + 7]);
         }
         var refls = c.Refls;
-        for (int k = 0; k < refls.Count; k += 7)
+        for (int k = 0; k < refls.Count; k += PathRefl)
         {
             r.Refls.Add(refls[k] + off.X);
             r.Refls.Add(refls[k + 1] + off.Y);

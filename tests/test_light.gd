@@ -545,3 +545,27 @@ func test_incremental_pass_with_lenses_in_series() -> void:
 		worst = maxf(worst, absf(light.tile_power[i] - fresh_light.tile_power[i]))
 	check(worst < 1e-3, "tile power matches a full trace (max diff %.6f W)" % worst)
 	check_near(light.stats.absorbed, fresh_light.stats.absorbed, 1e-3, "absorbed total")
+
+## The object cache (identical objects share traced sample paths) changes nothing but the work:
+## the light of a row of identical lenses is the same with and without it.
+func test_object_cache_matches_tracing_every_path() -> void:
+	var results := []
+	for cached in [true, false]:
+		var world := _flat_world(80, 40, 30)
+		world.time_s = 0.46 * SimConst.DAY_LENGTH_S
+		world.tick()
+		for j in 5:
+			_place(world, LENS_CROWN, Vector2(3.0 + j * 3.0, 4.0))
+		var light: LightSystem = world.get_system(&"light")
+		light.tracer().SetCacheEnabled(cached)
+		light.retrace(world)
+		results.append([light.tile_power, light.stats])
+	LightEngine.new().SetCacheEnabled(true)
+	check(results[0][1].cache_hits > 0 and results[1][1].cache_hits == 0,
+		"the cache is used only when on (%d vs %d hits)" % [results[0][1].cache_hits, results[1][1].cache_hits])
+	var worst := 0.0
+	var total := 0.0
+	for i in results[0][0].size():
+		worst = maxf(worst, absf(results[0][0][i] - results[1][0][i]))
+		total += results[1][0][i]
+	check(worst < 1e-3 * total, "tile power matches without the cache (max diff %.5f of %.1f W)" % [worst, total])

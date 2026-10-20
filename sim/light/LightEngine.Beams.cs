@@ -38,7 +38,7 @@ public partial class LightEngine
             };
         }
         var changed = new List<R2>();
-        for (int k = 0; k + 3 < areas.Length; k += 4)
+        for (int k = 0; k + AreaRect - 1 < areas.Length; k += AreaRect)
             changed.Add(new R2(areas[k], areas[k + 1], areas[k] + areas[k + 2], areas[k + 1] + areas[k + 3]));
         _tasks.Clear();
         _next = 0;
@@ -80,7 +80,7 @@ public partial class LightEngine
             {
                 Replay(log);
                 _replayed++;
-                replayWork += (log.Deps.Count / 4) / ReplayDepsPerPath;
+                replayWork += (log.Deps.Count / LogDep) / ReplayDepsPerPath;
             }
             else
                 log = TraceRun(t);
@@ -94,16 +94,16 @@ public partial class LightEngine
     void Replay(TaskLog t)
     {
         var deps = t.Deps;
-        for (int k = 0; k < deps.Count; k += 4)
+        for (int k = 0; k < deps.Count; k += LogDep)
             ApplyBin((int)deps[k], (int)deps[k + 1], deps[k + 2], (int)deps[k + 3]);
         var incident = t.Incident;
-        for (int k = 0; k < incident.Count; k += 3)
+        for (int k = 0; k < incident.Count; k += PathIncident)
         {
             int slot = (int)incident[k + 1];
             AddIncident((int)incident[k], slot % Bins, incident[k + 2], slot < Bins);
         }
         var strips = t.Strips;
-        for (int k = 0; k < strips.Count; k += 3)
+        for (int k = 0; k < strips.Count; k += LogStrip)
             AddStrip((int)strips[k], (float)strips[k + 1], (float)strips[k + 2]);
         _escaped += t.Escaped;
         _scattered += t.Scattered;
@@ -461,7 +461,7 @@ public partial class LightEngine
     {
         var deps = r.Deps;
         bool spread = partner != null && partner.Pts.Count == r.Pts.Count && r.Pts.Count >= 2;
-        for (int k = 0; k < deps.Count; k += 8)
+        for (int k = 0; k < deps.Count; k += PathDep)
         {
             int body = (int)deps[k + 2];
             if (!spread || body >= 0)
@@ -484,10 +484,10 @@ public partial class LightEngine
             }
         }
         var incident = r.Incident;
-        for (int k = 0; k < incident.Count; k += 3)
+        for (int k = 0; k < incident.Count; k += PathIncident)
             AddIncident((int)incident[k], bin, watts * incident[k + 1], incident[k + 2] > 0.5);
         var refls = r.Refls;
-        for (int k = 0, idx = 0; k < refls.Count; k += 7, idx++)
+        for (int k = 0, idx = 0; k < refls.Count; k += PathRefl, idx++)
         {
             while (_pool.Count <= idx)
                 _pool.Add(null);
@@ -498,7 +498,7 @@ public partial class LightEngine
             ReflPool pool = _pool[idx];
             if (pool != null && pool.Samples.Count > 0)
             {
-                int last = pool.Samples.Count - 5;
+                int last = pool.Samples.Count - PoolSample;
                 bool turned = dx * pool.Samples[last + 3] + dy * pool.Samples[last + 4] < ReflSplitCos;
                 if (pool.Cell != cell || turned || pool.Medium != medium || pool.Body != body)
                     EmitPool(pool, bin);
@@ -614,7 +614,7 @@ public partial class LightEngine
             var sm = pool.Samples;
             double half = pool.Watts * 0.5, acc = 0;
             int m = 0;
-            for (; m + 5 < sm.Count; m += 5)
+            for (; m + PoolSample < sm.Count; m += PoolSample)
             {
                 acc += sm[m];
                 if (acc >= half)

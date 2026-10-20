@@ -98,10 +98,7 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	dir = Vector2.ZERO
 	dni = 0.0
 	spectrum = Spectrum.make_zero()
-	var objects_now := {}
-	for obj: SimObject in world.objects.values():
-		if not obj.def.is_machine():
-			objects_now[obj.id] = [obj.position, obj.angle, obj.def]
+	var objects_now := _object_states(world)
 	if world.light_is_up and world.light_dni > 0.0 and world.light_direction.y > 1e-3:
 		var max_drift := SimConst.RESTART_ANGLE_DEG if edit_only else SimConst.RETRACE_ANGLE_DEG
 		var reuse := prev != null and prev.dir != Vector2.ZERO \
@@ -156,13 +153,20 @@ func step(max_paths: int) -> bool:
 	return done
 
 
+## Object id → [position, angle, definition] of every optical object now (machines are behind the
+## play plane, D19): what changed between two passes shows as a difference.
+func _object_states(world: SimWorld) -> Dictionary:
+	var states := {}
+	for obj: SimObject in world.objects.values():
+		if not obj.def.is_machine():
+			states[obj.id] = [obj.position, obj.angle, obj.def]
+	return states
+
+
 ## Brings the material snapshot and the engine's acceleration up to date, recomputing only
 ## around what changed since this pass object last built them.
 func _update_accel(world: SimWorld) -> void:
-	var now := {}
-	for obj: SimObject in world.objects.values():
-		if not obj.def.is_machine():
-			now[obj.id] = [obj.position, obj.angle, obj.def]
+	var now := _object_states(world)
 	var tile_areas := []
 	var objs := PackedInt32Array()
 	var full := _accel_key.x < 0

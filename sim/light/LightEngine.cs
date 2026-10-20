@@ -28,6 +28,14 @@ public partial class LightEngine : RefCounted
     const double BaseSpacing = 0.1;   // Initial sample spacing across a run, m
     const double MinSpacing = 0.02;   // Narrowest interval worth refining, m
     const double LandingTol = 0.35;   // Same-path rays landing this close count as one beam
+    // Flat record layouts (lists of doubles): the number of values per entry.
+    const int PathDep = 8;      // PathRec.Deps: tile, fraction, body, ax, ay, bx, by, tau
+    const int PathRefl = 7;     // PathRec.Refls: x, y, dx, dy, fraction, medium, body
+    const int PathIncident = 3; // PathRec.Incident and TaskLog.Incident: owner, power or slot, direct or watts
+    const int LogDep = 4;       // TaskLog.Deps: tile, bin, watts, body
+    const int LogStrip = 3;     // TaskLog.Strips: strip index, watts arriving, watts absorbed
+    const int PoolSample = 5;   // ReflPool.Samples: watts, x, y, dx, dy
+    const int AreaRect = 4;     // Areas passed in from GDScript: x, y, w, h
     const double ReplayDepsPerPath = 30.0;   // A replay costs ~one ray path per this many deposits
     const double SpreadStep = 0.01;  // Medium deposits of a coherent interval are spread in steps this wide, m
     const int CoatMirror = 1;
@@ -106,7 +114,7 @@ public partial class LightEngine : RefCounted
         {
             var sums = new Dictionary<(int, int, int), double>();
             var order = new List<(int, int, int)>();
-            for (int k = 0; k < Deps.Count; k += 4)
+            for (int k = 0; k < Deps.Count; k += LogDep)
             {
                 var key = ((int)Deps[k], (int)Deps[k + 1], (int)Deps[k + 3]);
                 if (sums.TryGetValue(key, out double v))
