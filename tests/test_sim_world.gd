@@ -13,7 +13,7 @@ func _make_world(seed_value: int = 7) -> SimWorld:
 
 func test_grid_allocates_every_layer() -> void:
 	var g := TileGrid.new(10, 5)
-	for layer in [g.material, g.temperature, g.integrity, g.flags, g.object_id,
+	for layer in [g.material, g.temperature, g.integrity, g.flags,
 			g.liquid_amount, g.liquid_type, g.smoke, g.steam, g.energy_in, g.wire]:
 		check_eq(layer.size(), 50, "layer size")
 	check_eq(g.idx(3, 2), 23, "index")

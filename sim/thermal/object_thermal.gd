@@ -56,6 +56,11 @@ func step(world: SimWorld, dt: float) -> void:
 			energy[i] += share
 
 
+## The tiles object `obj` exchanges heat with: those its outline passes through.
+func contact_tiles(world: SimWorld, obj: SimObject) -> PackedInt32Array:
+	return _info(world, obj)[3]
+
+
 ## Total object heat relative to 0 K, J (conservation checks).
 func total_energy(world: SimWorld) -> float:
 	var e := 0.0

@@ -9,11 +9,8 @@ const AIR_ID := 0
 var defs: Array[MaterialDef] = []          ## Indexed by id; null for unused ids
 
 # Packed lookups indexed by id (filled by _build_tables).
-var density := PackedFloat32Array()
-var specific_heat := PackedFloat32Array()
 var conductivity := PackedFloat32Array()
 var emissivity := PackedFloat32Array()
-var tile_heat_capacity := PackedFloat32Array()
 var is_solid := PackedByteArray()
 var is_gas := PackedByteArray()
 ## Surface absorptivity averaged over the AM1.5 spectrum: the share of plain sunlight a
@@ -95,7 +92,7 @@ func placeable() -> Array[MaterialDef]:
 
 func _build_tables() -> void:
 	var n := defs.size()
-	for arr in [density, specific_heat, conductivity, emissivity, tile_heat_capacity, sun_absorptivity]:
+	for arr in [conductivity, emissivity, sun_absorptivity]:
 		arr.resize(n)
 		arr.fill(0.0)
 	is_solid.resize(n)
@@ -105,11 +102,8 @@ func _build_tables() -> void:
 	for def in defs:
 		if def == null:
 			continue
-		density[def.id] = def.density
-		specific_heat[def.id] = def.specific_heat
 		conductivity[def.id] = def.conductivity
 		emissivity[def.id] = def.emissivity
-		tile_heat_capacity[def.id] = def.tile_heat_capacity()
 		is_solid[def.id] = 1 if def.is_solid() else 0
 		is_gas[def.id] = 1 if def.phase == MaterialDef.Phase.GAS else 0
 		for b in Spectrum.BIN_COUNT:

@@ -102,6 +102,11 @@ func step_rows(world: SimWorld, h: float, row0: int, row1: int) -> void:
 	last_step_ms = (Time.get_ticks_usec() - start) / 1000.0
 
 
+## The tiles object `obj`'s thermal node exchanges heat with (ObjectThermal.contact_tiles).
+func object_contact_tiles(world: SimWorld, obj: SimObject) -> PackedInt32Array:
+	return _objects.contact_tiles(world, obj)
+
+
 ## Total thermal energy relative to 0 K, J (for conservation checks).
 func total_energy(world: SimWorld) -> float:
 	if _built_version != world.grid.structure_version:

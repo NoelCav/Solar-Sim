@@ -27,7 +27,9 @@ var _light: LightSystem
 var _previewed := Vector3(-1, -1, -1)   ## Structure, objects, time of the last paused preview
 
 @onready var _sky: SkyRenderer = $Sky
+@onready var _backdrop: BackdropRenderer = $Backdrop
 @onready var _tiles: TileRenderer = $Tiles
+@onready var _wires: WireRenderer = $Wires
 @onready var _objects: ObjectRenderer = $Objects
 @onready var _beams: BeamRenderer = $Beams
 @onready var _overlay: OverlayRenderer = $Overlay
@@ -61,18 +63,13 @@ func _ready() -> void:
 	_light.retrace(world)
 
 	_sky.setup(world)
-	var backdrop := BackdropRenderer.new()
-	add_child(backdrop)
-	move_child(backdrop, _sky.get_index() + 1)
-	backdrop.setup(world)
+	_backdrop.setup(world)
 	_tiles.setup(world)
-	_tiles.lit_materials.append(backdrop.material as ShaderMaterial)
-	_tiles.dimmed[backdrop.outside] = 0.0
+	_tiles.lit_materials.append(_backdrop.material as ShaderMaterial)
+	_tiles.dimmed[_backdrop.outside] = 0.0
 	_tiles.dimmed[_objects] = 0.12   # Objects stay faintly visible to edit in the dark
-	var wires := WireRenderer.new()
-	add_child(wires)
-	wires.setup(world)
-	_tiles.dimmed[wires] = 0.3
+	_wires.setup(world)
+	_tiles.dimmed[_wires] = 0.3
 	_objects.setup(world)
 	_beams.setup(world)
 	_overlay.setup(world)
@@ -137,7 +134,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(&"sim_speed"):
 		cycle_speed()
 	elif event.is_action_pressed(&"overlay_cycle"):
-		set_view((view + 1) % ViewMode.COUNT)
+		set_view((view + 1) % ViewMode.NAMES.size())
 	elif event.is_action_pressed(&"wavelength_next"):
 		set_wavelength(wavelength + 1 if wavelength < Spectrum.BIN_COUNT - 1 else -1)
 	elif event.is_action_pressed(&"wavelength_prev"):

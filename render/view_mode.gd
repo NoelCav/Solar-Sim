@@ -7,11 +7,10 @@ extends RefCounted
 enum { NORMAL, LIGHT, HEAT }
 enum Overlay { NONE, ABSORBED, TEMPERATURE }
 
-const COUNT := 3
 const NAMES: Array[String] = ["Normal", "Light", "Heat"]
 const HINTS: Array[String] = [
 	"Visible light as the eye sees it",
-	"Every wavelength in false color, tiles colored by absorbed light (slider: one band)",
+	"Every wavelength in false color, tiles colored by absorbed light (the list picks one band)",
 	"Temperature of every tile, ground and air",
 ]
 
@@ -70,6 +69,6 @@ static func wavelength_name(wavelength: int) -> String:
 	return "%s · %s" % [WAVELENGTH_NAMES[wavelength], at]
 
 
-## Spectrum band the absorbed overlay shows, or -1 for all light.
-static func overlay_band(_view: int, wavelength := -1) -> int:
+## Spectrum band the absorbed overlay shows for a wavelength filter, or -1 for all light.
+static func overlay_band(wavelength: int) -> int:
 	return Spectrum.BAND_OF[wavelength] if wavelength >= 0 else -1

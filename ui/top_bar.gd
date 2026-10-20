@@ -172,7 +172,7 @@ func _view_controls() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", 4)
 	var group := ButtonGroup.new()
-	for v in ViewMode.COUNT:
+	for v in ViewMode.NAMES.size():
 		var b := UiStyle.toggle(ViewMode.NAMES[v], ViewMode.HINTS[v] + "  (H cycles)", runner.set_view.bind(v), group)
 		b.custom_minimum_size.x = 64
 		row.add_child(b)

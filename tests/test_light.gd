@@ -248,9 +248,9 @@ func test_no_stray_deposits_in_open_air() -> void:
 		world.tick()
 		light.retrace(world)
 		for i in g.size():
-			if light.tile_power[i] > 0.0 and g.material[i] == MaterialDB.AIR_ID and g.object_id[i] < 0:
+			if light.tile_power[i] > 0.0 and g.material[i] == MaterialDB.AIR_ID:
 				stray += 1
-	check_eq(stray, 0, "air tiles heated outside any object")
+	check_eq(stray, 0, "no light deposited in air (bodies keep their own, D13)")
 
 
 func _flat_world(w: int = 40, h: int = 20, ground_row: int = 15) -> SimWorld:

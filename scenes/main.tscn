@@ -3,7 +3,9 @@
 [ext_resource type="Script" uid="uid://dynhi20ywt6ne" path="res://scenes/main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://bmldtxj2mj2ec" path="res://render/sky_renderer.gd" id="2_sky"]
 [ext_resource type="Script" uid="uid://bjvyrceymgnc5" path="res://render/tile_renderer.gd" id="3_tiles"]
+[ext_resource type="Script" uid="uid://j71noyregvmy" path="res://render/backdrop_renderer.gd" id="3_trceg"]
 [ext_resource type="Script" uid="uid://dyqdab3x6en4g" path="res://ui/creative_brush.gd" id="4_brush"]
+[ext_resource type="Script" uid="uid://bvvjelp0611ff" path="res://render/wire_renderer.gd" id="5_a8y0u"]
 [ext_resource type="Script" uid="uid://cpleblx8jmo1r" path="res://ui/camera_controller.gd" id="5_camera"]
 [ext_resource type="Script" uid="uid://biwse7770rxfp" path="res://ui/hud.gd" id="6_hud"]
 [ext_resource type="Script" uid="uid://hyl7u6r20kqy" path="res://render/beam_renderer.gd" id="7_beams"]
@@ -33,8 +35,14 @@ environment = SubResource("Environment_glow")
 mouse_filter = 2
 script = ExtResource("2_sky")
 
+[node name="Backdrop" type="Sprite2D" parent="." unique_id=1021423678]
+script = ExtResource("3_trceg")
+
 [node name="Tiles" type="Sprite2D" parent="." unique_id=1708002404]
 script = ExtResource("3_tiles")
+
+[node name="Wires" type="Node2D" parent="." unique_id=608593257]
+script = ExtResource("5_a8y0u")
 
 [node name="Objects" type="Node2D" parent="." unique_id=1685869490]
 script = ExtResource("8_objects")

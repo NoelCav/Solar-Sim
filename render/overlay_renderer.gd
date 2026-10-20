@@ -89,7 +89,7 @@ func legend() -> Dictionary:
 			return {"title": "Temperature (linear to %.0f °C, then log)" % HEAT_WARM_C,
 				"gradient": heat_gradient, "lo": "%.0f °C" % HEAT_COLD_C, "hi": "%.0f °C" % HEAT_HOT_C}
 		ViewMode.Overlay.ABSORBED:
-			var band := ViewMode.overlay_band(view, wavelength)
+			var band := ViewMode.overlay_band(wavelength)
 			return {"title": "Absorbed %s" % ("light" if band < 0 else Spectrum.BAND_NAMES[band]),
 				"gradient": light_gradient, "lo": "%.0f W/m²" % IRR_MIN, "hi": "1 MW/m²"}
 	return {}
@@ -108,9 +108,9 @@ func _process(delta: float) -> void:
 		ViewMode.Overlay.TEMPERATURE:
 			_fill_heat()
 		ViewMode.Overlay.ABSORBED:
-			_fill_light(ViewMode.overlay_band(view, wavelength), false)
+			_fill_light(ViewMode.overlay_band(wavelength), false)
 		_:
-			_fill_light(ViewMode.overlay_band(view, wavelength), true)
+			_fill_light(ViewMode.overlay_band(wavelength), true)
 	_image.set_data(world.grid.width, world.grid.height, false, Image.FORMAT_RGBA8, _bytes)
 	_texture.update(_image)
 

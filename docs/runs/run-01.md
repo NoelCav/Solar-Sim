@@ -166,7 +166,10 @@ runs warm), and red and near-IR making most of the power. Put a lens over it and
 
 **Cleanup pass.** Removed helpers left from the GDScript tracer; gave pixels per meter, face area,
 the game-day compression and Stefan–Boltzmann one home each (guarded by `tools/check.py`); shared
-panel and spacer helpers in `UiStyle`. Tests and benchmark unchanged.
+panel and spacer helpers in `UiStyle`. Then a cohesion pass over the whole codebase: removed the
+`object_id` tile layer (D20's outline rule had replaced it; it was also wrong where two objects'
+boxes overlapped), scaffolding nothing used (a tick signal, an RNG, per-system enable flags, a flag
+enum, three material tables), and made every renderer a scene node. Tests and benchmark unchanged.
 
 ## Open questions
 

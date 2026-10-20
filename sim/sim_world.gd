@@ -3,14 +3,11 @@ extends RefCounted
 ## Owns all simulation state and steps it at a fixed rate (design doc §5).
 ## Pure data: no Node dependencies, so it runs headless for tests (D5).
 
-signal ticked
-
 const MAX_HISTORY := 200
 
 var materials: MaterialDB
 var grid: TileGrid
 var skin := SurfaceSkin.new()       ## Surfaces of solids: light lands and heat leaves here (D18)
-var rng := RandomNumberGenerator.new()
 var seed_value: int
 
 var tick_count: int = 0
@@ -64,7 +61,6 @@ var _history: Array[SimCommand] = []
 func _init(p_materials: MaterialDB, width: int, height: int, p_seed: int = 1) -> void:
 	materials = p_materials
 	seed_value = p_seed
-	rng.seed = p_seed
 	grid = TileGrid.new(width, height, site_mean_ambient_k)
 	time_s = SimConst.START_TIME_OF_DAY * SimConst.DAY_LENGTH_S
 	systems = [EnvironmentSystem.new(), LightSystem.new(), PowerSystem.new(), ThermalSystem.new()]
@@ -106,11 +102,9 @@ func undo_last() -> void:
 func tick() -> void:
 	flush_commands()
 	for system in systems:
-		if system.enabled:
-			system.tick(self, SimConst.DT)
+		system.tick(self, SimConst.DT)
 	tick_count += 1
 	time_s += SimConst.DT
-	ticked.emit()
 
 
 func get_system(system_name: StringName) -> SimSystem:
@@ -124,28 +118,24 @@ func get_system(system_name: StringName) -> SimSystem:
 func add_object(obj: SimObject) -> void:
 	objects[obj.id] = obj
 	next_object_id = maxi(next_object_id, obj.id + 1)
-	_mark_footprint(obj, obj.id, -1)
 	objects_version += 1
 
 
 func remove_object(id: int) -> SimObject:
 	var obj: SimObject = objects.get(id)
 	if obj != null:
-		_mark_footprint(obj, -1, id)
 		objects.erase(id)
 		objects_version += 1
 	return obj
 
 
-## Moves/rotates an object, keeping its footprint marks in sync.
+## Moves/rotates an object.
 func set_object_transform(id: int, position: Vector2, angle: float) -> void:
 	var obj: SimObject = objects.get(id)
 	if obj == null:
 		return
-	_mark_footprint(obj, -1, id)
 	obj.position = position
 	obj.angle = angle
-	_mark_footprint(obj, id, -1)
 	objects_version += 1
 
 
@@ -155,14 +145,6 @@ func state_hash() -> int:
 	for obj: SimObject in objects.values():
 		objs.append([obj.id, obj.def.key, obj.position, obj.angle])
 	return hash([grid.state_hash(), objs])
-
-
-## Writes `value` into object_id for footprint tiles currently holding `only_if`.
-func _mark_footprint(obj: SimObject, value: int, only_if: int) -> void:
-	var ids := grid.object_id
-	for i in obj.footprint(grid):
-		if ids[i] == only_if:
-			ids[i] = value
 
 
 ## Recomputes sun and ambient for the current time without advancing it (setup, time skips).

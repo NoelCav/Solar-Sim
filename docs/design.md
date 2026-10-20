@@ -61,7 +61,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 
 | Layer | Resolution | Model | Ships in |
 |---|---|---|---|
-| Structure | Per tile | Material id + flags + occupying object | M0 |
+| Structure | Per tile | Material id + flags (objects are outlines, not tiles: D20) | M0 |
 | Heat | Per tile (+ object internal nodes) | Conduction between neighbors, convection bias, sky radiation | M1 |
 | Light | Continuous | Ray tracer over polyline geometry | M1 |
 | Objects | Multi-tile entities | Own internal models (cells, lenses, batteries…) | M1+ |
@@ -80,14 +80,15 @@ All allocated at world creation, regardless of milestone (D9).
 | `material` | `PackedInt32Array` (u16 used) | Material id (air is a material) |
 | `temperature` | `PackedFloat32Array` | Kelvin |
 | `integrity` | `PackedFloat32Array` | 0–1, structural health |
-| `flags` | `PackedInt32Array` | Bitfield: burning, wet, supported, dirty-light, background wall… |
-| `object_id` | `PackedInt32Array` | Occupying object, or -1 |
+| `flags` | `PackedInt32Array` | Bitfield: burning, wet, supported… (each bit defined with its system) |
 | `liquid_amount` | `PackedFloat32Array` | 0–1 fill of non-solid tiles |
 | `liquid_type` | `PackedInt32Array` | Material id of the liquid |
 | `smoke` | `PackedFloat32Array` | Density 0–1 |
 | `steam` | `PackedFloat32Array` | Density 0–1 |
 | `energy_in` | `PackedFloat32Array` | Joules deposited this tick (light, fire, electrical losses); consumed by heat step |
 | `wire` | `PackedByteArray` | Conduit layer (D14): 1 where a wire runs. Pipes add their own layer |
+
+An `object_id` occupancy layer existed until 2026-10-20; D20's outline rule (`Placement`) replaced tile occupancy, so it was removed rather than kept in step.
 
 One temperature per tile: liquid in a tile adds its heat capacity to the tile's total rather than having a separate temperature.
 
@@ -233,13 +234,13 @@ Real-ish lens materials:
 - *Planned:* visible beams in haze and smoke come from the display lighting's volumetric stage (§6.8); **heat shimmer** distortion driven by the heat texture.
 - NIR/IR are invisible in normal view but shown in a **light overlay** (false color per bin).
 - **World lighting (D19):** by day everything is lit; after dusk the ambient fades to near black and a block shows only in a thin skin on the faces light lands on (the light engine records light arriving per tile face; the D18 skin will refine that along each face). Moonlight is drawn at a night exposure in a pale-blue tint. All display exposure and night policy lives in `DisplayLight`.
-- **Background props (D19):** stands, wires, machine bodies and power meters are drawn behind the play plane and never enter the optics or the heat field. Today they are drawn unlit; the display lighting (§6.8) lights them.
+- **Background props (D19):** stands, wires, machine bodies and power meters are drawn behind the play plane and never enter the optics or the heat field. Today objects and props only dim with the ambient (to a 12 % floor at night, so they can still be edited); the display lighting (§6.8) lights them by the light that reaches them.
 
 ### 6.8 Display lighting (planned, decided 2026-10-20)
 
 A display-only lighting pass that gives everything depth and makes light feel real. It never feeds back into the sim (D5): the light engine, heat and power are unchanged. One pass, one shared input, built in stages:
 
-1. **Surface depth (normals).** Every tile and object has a normal map. Tiles: generated from the tile shapes (rounded bevels on exposed edges) plus a per-material bump texture. Objects: generated from their geometry (curved glass for lens bodies, a cylinder for a pole, a box for a cabinet). Sun and moon light come from their real direction, so the lit side of a hill or a stand moves through the day. Objects dim at night like tiles.
+1. **Surface depth (normals).** Every tile and object has a normal map. Tiles: generated from the tile shapes (rounded bevels on exposed edges) plus a per-material bump texture. Objects: generated from their geometry (curved glass for lens bodies, a cylinder for a pole, a box for a cabinet). Sun and moon light come from their real direction, so the lit side of a hill or a stand moves through the day.
 2. **Light field.** A grid (about tile resolution) holding how much light reaches each spot and its dominant direction: sky light (shadowed by terrain), the traced beams, and point emitters (lamps, fire, glowing hot tiles). Every pixel lights itself from the field by its normal: a lamp lights the side of a stand facing it, a focus glints on the faces around it. **This field is the one interface** lamps, fire and gases plug into.
 3. **Volumetrics.** With the gas fields (§12), smoke and steam density become a texture; each patch of air glows by density × local light (in-scattering). Beams show as shafts only where there is haze or smoke, a lens's cone shows as smoke drifts through it, shadows streak through the haze. Smoke dimming the light (§6.4) is the sim's part; this is only how it looks.
 
@@ -551,7 +552,8 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Site save** (§18.11) and paused readouts that ask `PowerSystem` directly.
 - **Deferred:** shop, prices and unlocks move after the core systems (batteries, consumers, damage).
 - **Cleanup pass (2026-10-20):** removed tracer-era helpers nothing used; one home for pixels per meter (`SimConst.PX_PER_M`), face area (`ObjectDef.face_area_m2`), game-day compression (`SimConst.DAY_COMPRESSION`) and Stefan–Boltzmann (one per language), all guarded in `tools/check.py`.
-- **Known limits:** stands don't adapt when the ground under them is dug out; probe readings aren't rescaled between passes; wire has no resistance; cells get no diffuse light; objects are drawn unlit (§6.8).
+- **Cohesion pass (2026-10-20):** removed the `object_id` tile layer (superseded by D20 outlines, and wrong where bounding boxes overlapped), unused scaffolding (`SimWorld.ticked`, `rng`, `SimSystem.enabled`, the flag enum, three `MaterialDB` tables nobody read); all renderers are scene nodes; the heat test reads the lens's real contact tiles (`ThermalSystem.object_contact_tiles`), and "no light lands in air" now holds everywhere.
+- **Known limits:** stands don't adapt when the ground under them is dug out; probe readings aren't rescaled between passes; wire has no resistance; cells get no diffuse light; objects only dim with the ambient, they aren't lit by the light reaching them (§6.8).
 
 ## 19. Open questions
 

@@ -185,14 +185,15 @@ func test_lens_heats_itself_not_its_tiles() -> void:
 	light.retrace(world)
 	check(obj.absorbed_w > 1.0, "lens absorbs light (%.1f W)" % obj.absorbed_w)
 	var g := world.grid
+	var heat: ThermalSystem = world.get_system(&"heat")
+	var tiles := heat.object_contact_tiles(world, obj)
 	var host := 0.0
-	for i in obj.footprint(g):
+	for i in tiles:
 		host += light.tile_power[i]
 	check_near(host, 0.0, 1e-6, "no light deposited in the tiles under the lens")
 	for k in 400:
 		world.tick()
 	var air := 0.0
-	var tiles := obj.footprint(g)
 	for i in tiles:
 		air += g.temperature[i]
 	air /= tiles.size()

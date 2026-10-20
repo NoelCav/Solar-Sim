@@ -54,17 +54,3 @@ func incident_spectrum() -> PackedFloat32Array:
 func incident_irradiance() -> float:
 	return Spectrum.total(incident_spectrum())
 
-
-## Tiles whose area the object's bounding box touches.
-func footprint(grid: TileGrid) -> PackedInt32Array:
-	var rect := Rect2(position, Vector2.ZERO)
-	for piece in world_pieces():
-		for p: Vector2 in piece[0]:
-			rect = rect.expand(p)
-	var inv := 1.0 / SimConst.TILE_M
-	var out := PackedInt32Array()
-	for y in range(floori(rect.position.y * inv), floori(rect.end.y * inv) + 1):
-		for x in range(floori(rect.position.x * inv), floori(rect.end.x * inv) + 1):
-			if grid.in_bounds(x, y):
-				out.append(grid.idx(x, y))
-	return out
