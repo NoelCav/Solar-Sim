@@ -23,6 +23,7 @@ const COMMANDS := {
 	"move": "{id, x, y}",
 	"rotate": "{id, angle} absolute or {id, by}",
 	"remove": "{id}",
+	"site": "{op: save|reset}: save the site now (it autosaves every 5 s), or forget it and start fresh",
 	"power": "money, grid price, and each wire network: tiles, grid connection, W sold, cells on it",
 	"wire": "{x0, y0, x1, y1, remove: false}: lay (or remove) wire along an L from (x0, y0) across, then "
 		+ "down/up to (x1, y1)",
@@ -351,6 +352,16 @@ func _cmd_power(_a: Dictionary) -> Dictionary:
 		if n >= 0:
 			nets[n]["objects"].append(obj.id)
 	return {"money": w.money, "price_per_kwh": snappedf(Market.price_per_kwh(w), 0.0001), "networks": nets}
+
+
+func _cmd_site(a: Dictionary) -> Dictionary:
+	match str(a.get("op", "save")):
+		"save":
+			return {"ok": _main.save_site(), "path": ProjectSettings.globalize_path(Main.SAVE_PATH)}
+		"reset":
+			_main.reset_site.call_deferred()
+			return {"ok": true, "note": "fresh site on the next frame"}
+	return {"error": "op is save or reset"}
 
 
 func _cmd_remove(a: Dictionary) -> Dictionary:

@@ -2,6 +2,7 @@ extends TestSuite
 ## World checks: grid layers, ticking, sun and moon motion, commands and undo, determinism.
 
 const LENS_CROWN := preload("res://data/objects/lens_crown.tres")
+const PROBE := preload("res://data/objects/probe.tres")
 
 
 func _make_world(seed_value: int = 7) -> SimWorld:
@@ -179,7 +180,7 @@ func test_floating_needs_creative() -> void:
 	var world := _make_world()
 	world.creative = false
 	var lens := LENS_CROWN
-	var probe: ObjectDef = load("res://data/objects/probe.tres")
+	var probe := PROBE
 	var sky := Mounting.ground_y(world, 16, 0.0) - 2.0
 	world.enqueue(PlaceObjectCommand.new(lens, Vector2(4.0, sky)))
 	world.enqueue(PlaceObjectCommand.new(probe, Vector2(8.0, sky)))
@@ -189,3 +190,33 @@ func test_floating_needs_creative() -> void:
 	for obj: SimObject in world.objects.values():
 		keys.append(obj.def.key)
 	check_eq(keys, [&"probe", &"lens_crown"] as Array[StringName], "floating lens refused")
+
+
+## A saved site (SiteSave) comes back the same: objects with their transforms and mounting,
+## wire, painted terrain, clock and money; a save for another site size is refused.
+func test_site_save_round_trip() -> void:
+	var world := _make_world()
+	var g := world.grid
+	world.enqueue(PlaceObjectCommand.new(LENS_CROWN, Vector2(4.07, Mounting.ground_y(world, 16, 0.0) - 2.1), 0.3, true))
+	world.enqueue(PlaceObjectCommand.new(PROBE, Vector2(9.0, 2.0)))
+	world.enqueue(PaintWiresCommand.new(PackedInt32Array([g.idx(3, 4), g.idx(4, 4)])))
+	world.enqueue(PaintTilesCommand.new(PackedInt32Array([g.idx(10, 2)]), world.materials.id_of(&"copper")))
+	world.flush_commands()
+	world.money = 12.5
+	world.time_s = 1234.5
+	var data := JSON.parse_string(JSON.stringify(SiteSave.capture(world))) as Dictionary
+	var db := ObjectDB.new()
+	db.load_dir()
+	var back := _make_world()
+	check_eq(SiteSave.restore(back, data, db), "", "restored")
+	check_eq(back.grid.material, g.material, "terrain")
+	check_eq(back.grid.wire, g.wire, "wire")
+	check_eq(back.money, 12.5, "money")
+	check_eq(back.time_s, 1234.5, "clock")
+	check_eq(back.objects.size(), 2, "objects")
+	for id in world.objects:
+		var a: SimObject = world.objects[id]
+		var b: SimObject = back.objects[id]
+		check_eq([b.def.key, b.position, b.angle, b.mounted], [a.def.key, a.position, a.angle, a.mounted], "object %d" % id)
+	var small := SimWorld.new(load_materials(), 16, 16, 1)
+	check(SiteSave.restore(small, data, db) != "", "other site size refused")

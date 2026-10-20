@@ -1,10 +1,13 @@
 class_name Main
 extends Node2D
-## Entry point: builds the sim, steps it at a fixed rate, and wires up the views.
+## Entry point: builds the sim (the saved site, or a fresh one with the demo rig), steps it at
+## a fixed rate, autosaves it (SiteSave), and wires up the views.
 
 const WORLD_WIDTH := 300
 const WORLD_HEIGHT := 120
 const SPEEDS: Array[int] = [1, 2, 4, 8, 16]
+const SAVE_PATH := "user://site.json"
+const AUTOSAVE_S := 5.0   ## The editor's stop button kills the game, so save often, not on exit
 
 @export var world_seed := 1
 @export var place_demo_rig := true
@@ -19,6 +22,7 @@ var view := ViewMode.NORMAL
 var wavelength := -1      ## Wavelength filter: one spectral bin, or -1 for all
 
 var _accumulator := 0.0
+var _autosave_timer := AUTOSAVE_S
 var _light: LightSystem
 var _previewed := Vector3(-1, -1, -1)   ## Structure, objects, time of the last paused preview
 
@@ -48,7 +52,10 @@ func _ready() -> void:
 		return
 	world = SimWorld.new(materials, WORLD_WIDTH, WORLD_HEIGHT, world_seed)
 	WorldGen.generate(world)
-	if place_demo_rig:
+	var loaded := SiteSave.load_file(world, SAVE_PATH, object_db)
+	if loaded != "" and loaded != "no save":
+		push_warning("Saved site not loaded (%s); starting fresh" % loaded)
+	if loaded != "" and place_demo_rig:
 		DemoRig.place(world, object_db)
 	_light = world.get_system(&"light")
 	_light.retrace(world)
@@ -81,6 +88,9 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if world == null:
 		return
+	_autosave_timer -= delta
+	if _autosave_timer <= 0.0:
+		save_site()
 	if paused:
 		world.flush_commands()
 		_accumulator = 0.0
@@ -100,6 +110,24 @@ func _process(delta: float) -> void:
 	if steps == SimConst.MAX_TICKS_PER_FRAME * speed:
 		_accumulator = 0.0  # Too far behind; drop time rather than spiral.
 	sim_ms = lerpf(sim_ms, (Time.get_ticks_usec() - start) / 1000.0, 0.1)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and world != null:
+		save_site()
+
+
+## Saves the site now (it also autosaves every AUTOSAVE_S).
+func save_site() -> bool:
+	_autosave_timer = AUTOSAVE_S
+	return SiteSave.save_file(world, SAVE_PATH)
+
+
+## Forgets the saved site and starts a fresh one (new terrain and the demo rig).
+func reset_site() -> void:
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	world = null   # No autosave of the old site while the scene reloads
+	get_tree().reload_current_scene()
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -24,7 +24,15 @@ func _initialize() -> void:
 	for file in DirAccess.get_files_at(TEST_DIR):
 		if not (file.begins_with("test_") and file.ends_with(".gd")):
 			continue
+		counter.errors.clear()
 		var script: GDScript = load(TEST_DIR.path_join(file))
+		if script == null or not script.can_instantiate():
+			# A test file that doesn't load would otherwise drop its tests without a trace.
+			failed.append(file)
+			print("  FAIL  ", file, " (does not load)")
+			for e in counter.errors:
+				print("        error: ", e)
+			continue
 		for method in script.get_script_method_list():
 			var name: String = method["name"]
 			if not name.begins_with("test_"):
