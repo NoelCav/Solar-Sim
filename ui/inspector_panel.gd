@@ -2,8 +2,19 @@ class_name InspectorPanel
 extends PanelContainer
 ## The inspector, fixed at the top right under the top bar: the selected object, or else what
 ## the pointer is over (an object, then the tile under it). A selected object also gets its
-## actions (tilt, level, delete) and, for optics, its full numbers (focus, transmission,
-## material). A hovered probe shows its spectrum.
+## actions (tilt, level, delete) and its full numbers: for optics focus, transmission and
+## material; for a cell its efficiency card (where the light goes, power by color, light
+## straight from the source vs through optics). Hovered objects get the short version. A
+## hovered probe shows its spectrum.
+
+## Where a cell's light goes (SolarCell.analyze keys): label, color. The electrical factors
+## (collection, voltage, temperature, series) are one part.
+const LOSS_PARTS := [["power", "power_w", Color(0.45, 0.9, 0.55)],
+	["reflected", "reflected_w", Color(0.62, 0.72, 0.86)],
+	["below gap", "below_gap_w", Color(0.6, 0.18, 0.14)],
+	["photon excess", "excess_w", Color(0.95, 0.55, 0.2)]]
+const ELECTRICAL_KEYS := ["collection_w", "voltage_w", "temperature_w", "series_w"]
+const ELECTRICAL_COLOR := Color(0.9, 0.8, 0.35)
 
 const WIDTH := 340.0
 
@@ -15,6 +26,8 @@ var _light: LightSystem
 var _power: PowerSystem
 var _text: RichTextLabel
 var _chart: SpectrumChart
+var _losses: StackBar
+var _colors: StackBar
 var _actions: HBoxContainer
 
 
@@ -43,6 +56,10 @@ func setup(p_world: SimWorld, p_tool: ObjectTool, p_brush: CreativeBrush) -> voi
 	col.add_child(_text)
 	_chart = SpectrumChart.new()
 	col.add_child(_chart)
+	_losses = StackBar.new(WIDTH - 24.0)
+	col.add_child(_losses)
+	_colors = StackBar.new(WIDTH - 24.0)
+	col.add_child(_colors)
 	_actions = HBoxContainer.new()
 	_actions.add_theme_constant_override(&"separation", 4)
 	_actions.add_child(UiStyle.button("Tilt −5°", "Rotate counterclockwise (R, Shift for 1°)", tool.rotate_by.bind(-5.0)))
@@ -70,6 +87,11 @@ func update() -> void:
 	_chart.visible = obj != null and obj.def.kind == ObjectDef.Kind.PROBE and obj.incident_irradiance() > 0.0
 	if _chart.visible:
 		_chart.show_spectrum(obj.incident_spectrum(), world.light_spectrum)
+	var card := selected != null and obj == selected and obj.def.kind == ObjectDef.Kind.CELL
+	_losses.visible = card and obj.incident_irradiance() > 0.0
+	_colors.visible = _losses.visible
+	if _losses.visible:
+		_show_cell_bars(obj)
 	reset_size()
 
 
@@ -128,7 +150,7 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 		s += "\n[color=#8a93a0]%s[/color]" % Readout.bands(bands[0], bands[1], bands[2])
 		return s
 	if obj.def.kind == ObjectDef.Kind.CELL:
-		s += _cell_text(obj)
+		s += _cell_text(obj, selected)
 	elif obj.def.kind == ObjectDef.Kind.GRID_TIE:
 		var n := _power.network_of(world, obj)
 		if n < 0:
@@ -142,12 +164,46 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 
 
 ## What a cell makes now (on a network that sells) or could make (not wired to one); read from
-## the light now, so it is right while paused too.
-func _cell_text(obj: SimObject) -> String:
+## the light now, so it is right while paused too. `full` adds its efficiency against rated,
+## and how much of its light came straight from the source.
+func _cell_text(obj: SimObject, full: bool) -> String:
 	var irr := obj.incident_irradiance() * _light.power_scale(world)
 	var watts := SolarCell.object_power(obj, _light.power_scale(world))
-	if not _power.sells(world, obj):
-		return "\ncould make %s  [color=#8a93a0](not wired to a grid connection)[/color]" % Readout.power(watts)
+	var rated := SolarCell.rated_power(obj.def)
 	var eta := watts / (irr * obj.def.size_m * SimConst.DEPTH_M) if irr > 0.0 else 0.0
-	return "\nmaking %s  [color=#8a93a0](%.0f%% of %s)[/color]" % [Readout.power(watts), eta * 100.0,
-		Readout.irradiance(irr)]
+	var s := "\nmaking %s" % Readout.power(watts) if _power.sells(world, obj) \
+		else "\ncould make %s  [color=#8a93a0](not wired to a grid connection)[/color]" % Readout.power(watts)
+	if not full:
+		return s + "  [color=#8a93a0](%.0f%% of %s)[/color]" % [eta * 100.0, Readout.irradiance(irr)]
+	s += "  [color=#8a93a0]of %s rated (%.0f%%)[/color]" % [Readout.power(rated), watts / rated * 100.0]
+	s += "\nefficiency %.1f%%  [color=#8a93a0](rated %.1f%%)[/color]" % [eta * 100.0,
+		SolarCell.rated_efficiency(obj.def) * 100.0]
+	var total := Spectrum.total(obj.incident)
+	if total > 0.0:
+		var direct := Spectrum.total(obj.incident_direct) / total
+		s += "\nlight %s · " % Readout.irradiance(irr)
+		s += "all direct %s" % Readout.light_name(world) if direct > 0.995 \
+			else "%.0f%% direct · %.0f%% through optics" % [direct * 100.0, (1.0 - direct) * 100.0]
+	return s
+
+
+## The selected cell's bars: where its light goes, and its power by color.
+func _show_cell_bars(obj: SimObject) -> void:
+	var a := SolarCell.analyze(obj.def, SolarCell.object_light(obj, _light.power_scale(world)),
+		SolarCell.object_temperature(obj), obj.def.size_m * SimConst.DEPTH_M)
+	var light := 0.0
+	for k: String in ["power_w", "reflected_w", "below_gap_w", "excess_w"] + ELECTRICAL_KEYS:
+		light += a[k]
+	var parts := []
+	for p: Array in LOSS_PARTS:
+		parts.append([p[0], a[p[1]], p[2], "%.0f%%" % (a[p[1]] / light * 100.0)])
+	var electrical := 0.0
+	for k: String in ELECTRICAL_KEYS:
+		electrical += a[k]
+	parts.append(["electrical", electrical, ELECTRICAL_COLOR, "%.0f%%" % (electrical / light * 100.0)])
+	_losses.show_parts("Where the light goes", parts)
+	parts = []
+	for b in Spectrum.BIN_COUNT:
+		parts.append([SpectrumChart.BIN_LABELS[b], a.power_bin_w[b], SpectrumChart.BAR_COLOR[b],
+			Readout.power(a.power_bin_w[b])])
+	_colors.show_parts("Power by color", parts)
