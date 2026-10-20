@@ -82,7 +82,7 @@ enum Category { OPTICS, POWER, MACHINES, TOOLS }
 func build_pieces() -> Array:
 	match kind:
 		Kind.LENS:
-			return OpticsGen.convex_lens(size_m, radius_front_m, radius_back_m, thickness_m, arc_segments)
+			return OpticsGen.lens(size_m, radius_front_m, radius_back_m, thickness_m, arc_segments)
 		Kind.PRISM:
 			return OpticsGen.prism(size_m, apex_angle_deg)
 		Kind.GRID_TIE, Kind.BATTERY, Kind.LAMP:
@@ -110,6 +110,12 @@ func can_rotate() -> bool:
 ## True for objects whose pieces enclose an optical body of `material`.
 func is_body() -> bool:
 	return kind == Kind.LENS or kind == Kind.PRISM
+
+
+## True for bodies whose outline is convex: a concave lens dishes inward, so a ray leaving it can meet
+## it again, which the object cache (identical bodies share their traced paths) assumes it can't.
+func is_convex_body() -> bool:
+	return is_body() and not (kind == Kind.LENS and (radius_front_m < 0.0 or radius_back_m < 0.0))
 
 
 ## True for machines: boxes behind the play plane, outside the optics (D19).

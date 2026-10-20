@@ -7,14 +7,16 @@ extends RefCounted
 ## Corners are hard: each flat or curved face is its own piece.
 
 
-## Biconvex / plano-convex lens with its optical axis along local y (light from -y).
-## A radius of 0 is a flat face. Center thickness grows if the faces would cross.
-static func convex_lens(diameter: float, r_front: float, r_back: float, thickness: float,
+## A lens with its optical axis along local y (light from -y). Radii are signed: positive bulges
+## outward (convex), negative dishes inward (concave), 0 is flat; so this makes biconvex,
+## plano-convex, biconcave, plano-concave, meniscus and flat plates. `thickness` is the center
+## thickness; it grows if the edges would be thinner than 5 mm.
+static func lens(diameter: float, r_front: float, r_back: float, thickness: float,
 		arc_segments: int = 32) -> Array:
 	var half := diameter * 0.5
 	var s1 := _sagitta(r_front, half)
 	var s2 := _sagitta(r_back, half)
-	var t := maxf(thickness, s1 + s2 + 0.005)
+	var t := center_thickness(diameter, r_front, r_back, thickness)
 	var top := _arc_face(half, r_front, -t * 0.5, -1.0, arc_segments)
 	var bottom := _arc_face(half, r_back, t * 0.5, 1.0, arc_segments)
 	var top_edge_y := -t * 0.5 + s1
@@ -29,15 +31,23 @@ static func convex_lens(diameter: float, r_front: float, r_back: float, thicknes
 	]
 
 
-## Focal length of a convex lens built by convex_lens (thick-lens lensmaker's equation; both
-## radii positive for convex faces, 0 for flat), for refractive index n, m. INF if it doesn't focus.
+## The center thickness a lens is built with: `thickness`, or more when the faces would leave the
+## edge thinner than 5 mm.
+static func center_thickness(diameter: float, r_front: float, r_back: float, thickness: float) -> float:
+	var half := diameter * 0.5
+	return maxf(thickness, _sagitta(r_front, half) + _sagitta(r_back, half) + 0.005)
+
+
+## Focal length of a lens built by `lens` (thick-lens lensmaker's equation; radii signed as there,
+## convex positive, 0 for flat), for refractive index n, m: positive converges, negative diverges
+## (its focus is virtual, that far behind the light), INF for none.
 static func focal_length(diameter: float, r_front: float, r_back: float, thickness: float, n: float) -> float:
 	var half := diameter * 0.5
-	var t := maxf(thickness, _sagitta(r_front, half) + _sagitta(r_back, half) + 0.005)
-	var c1 := 1.0 / r_front if r_front > 0.0 else 0.0
-	var c2 := 1.0 / r_back if r_back > 0.0 else 0.0
+	var t := center_thickness(diameter, r_front, r_back, thickness)
+	var c1 := 1.0 / r_front if r_front != 0.0 else 0.0
+	var c2 := 1.0 / r_back if r_back != 0.0 else 0.0
 	var power := (n - 1.0) * (c1 + c2 - (n - 1.0) * t * c1 * c2 / n)
-	return 1.0 / power if power > 0.0 else INF
+	return 1.0 / power if absf(power) > 1e-9 else INF
 
 
 ## Fraction of light a clear body of index n passes at normal incidence: two faces, each
@@ -92,30 +102,35 @@ static func outline(pieces: Array) -> PackedVector2Array:
 	return out
 
 
+## How far a face of radius `radius` (signed: negative dishes inward) bulges at the rim relative to its
+## center, m: positive for convex, negative for concave.
 static func _sagitta(radius: float, half: float) -> float:
-	if radius <= 0.0:
+	if radius == 0.0:
 		return 0.0
-	var r := maxf(radius, half)
-	return r - sqrt(r * r - half * half)
+	var r := maxf(absf(radius), half)
+	return signf(radius) * (r - sqrt(r * r - half * half))
 
 
 ## One lens face from x = -half to +half. `vertex_y` is the face's center; `side` is -1 for
-## the top face (bulging to -y) and +1 for the bottom. Normals point away from the lens.
+## the top face and +1 for the bottom. A positive radius bulges away from the lens, a negative one
+## dishes into it. Normals point away from the lens.
 static func _arc_face(half: float, radius: float, vertex_y: float, side: float, n: int) -> Array:
 	var pts := PackedVector2Array()
 	var nrm := PackedVector2Array()
-	if radius <= 0.0:
+	if radius == 0.0:
 		pts.append_array([Vector2(-half, vertex_y), Vector2(half, vertex_y)])
 		nrm.append_array([Vector2(0, side), Vector2(0, side)])
 		return [pts, nrm]
-	var r := maxf(radius, half)
-	var center := Vector2(0.0, vertex_y - side * r)
+	var concave := radius < 0.0
+	var r := maxf(absf(radius), half)
+	var way := -side if concave else side   # A concave face is the circle on the other side
+	var center := Vector2(0.0, vertex_y - way * r)
 	for k in n + 1:
 		var x := lerpf(-half, half, float(k) / n)
-		var y := center.y + side * sqrt(r * r - x * x)
+		var y := center.y + way * sqrt(r * r - x * x)
 		var p := Vector2(x, y)
 		pts.append(p)
-		nrm.append((p - center).normalized())
+		nrm.append((center - p).normalized() if concave else (p - center).normalized())
 	return [pts, nrm]
 
 

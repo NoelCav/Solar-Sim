@@ -27,9 +27,12 @@ static func item_stats(def: ObjectDef, materials: MaterialDB, full := false) -> 
 	match def.kind:
 		ObjectDef.Kind.LENS:
 			var f := OpticsGen.focal_length(def.size_m, def.radius_front_m, def.radius_back_m, def.thickness_m, n)
+			if is_inf(f):
+				return plate_stats(def, mat, full)
+			var focus := "focus %s" % length(f) if f > 0.0 else "diverges, focus −%s" % length(-f)
 			if not full:
-				return "%s · focus %s" % [length(def.size_m), length(f)]
-			return "%s wide · focus %s · %.0f %% through · %s, n %.2f" % [length(def.size_m), length(f),
+				return "%s · %s" % [length(def.size_m), focus]
+			return "%s wide · %s · %.0f %% through · %s, n %.2f" % [length(def.size_m), focus,
 				OpticsGen.normal_transmission(n) * 100.0, mat.display_name if mat else "?", n]
 		ObjectDef.Kind.MIRROR:
 			return "%s · reflects %.0f %%" % [length(def.size_m), _mean(def.reflectance) * 100.0]
@@ -56,6 +59,22 @@ static func item_stats(def: ObjectDef, materials: MaterialDB, full := false) -> 
 			var held := "%s · %s" % [energy(def.battery_capacity_kwh * Market.J_PER_KWH), power(def.battery_max_w)]
 			return held + " · takes surplus when power is cheap, sells when dear" if full else held
 	return ""
+
+
+## A flat plate (a lens with flat faces: a filter or a window): how much of each color it passes at
+## normal incidence (two faces' reflection and the glass's absorption over its thickness).
+static func plate_stats(def: ObjectDef, mat: MaterialDef, full: bool) -> String:
+	if mat == null:
+		return ""
+	var share := PackedStringArray()
+	var labels := ["UV", "B", "G", "R", "NIR"]
+	for b in labels.size():
+		var n := mat.refractive_index(Spectrum.WAVELENGTH_UM[b])
+		var t := OpticsGen.normal_transmission(n) * exp(-mat.bulk_absorption[b] * maxf(def.thickness_m, 0.005))
+		share.append("%s %.0f %%" % [labels[b], t * 100.0])
+	if not full:
+		return "%s plate · passes %s" % [length(def.size_m), " ".join(share.slice(1, 4))]
+	return "%s plate, %s thick · passes %s" % [length(def.size_m), length(def.thickness_m), " · ".join(share)]
 
 
 ## A length, e.g. "1 m", "25 cm", "1.15 m".

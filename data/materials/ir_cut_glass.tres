@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"ir_cut_glass"
+id = 20
+display_name = "Heat-Absorbing Glass"
+color = Color(0.6, 0.85, 0.8, 0.4)
+density = 2510
+specific_heat = 858
+conductivity = 1.1
+emissivity = 0.9
+transparent = true
+cauchy_a = 1.5046
+cauchy_b = 0.0042
+bulk_absorption = PackedFloat32Array(20, 1, 1, 10, 250, 400)
+surface_absorptivity = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+dn_dt = 2e-06
+hardness = 2
+softening_temp = 830
+melt_temp = 1300
+thermal_shock_limit = 120
+melts_to = &"glass_slag"

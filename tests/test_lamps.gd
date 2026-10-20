@@ -22,14 +22,6 @@ func _probe_watts(p: LightPass, id: int) -> float:
 	return total
 
 
-func _probe_def(length: float) -> ObjectDef:
-	var def := ObjectDef.new()
-	def.key = &"test_probe"
-	def.kind = ObjectDef.Kind.PROBE
-	def.size_m = length
-	return def
-
-
 ## An isotropic lamp over flat ground: every watt it emits (2π × W/rad) is absorbed, escapes,
 ## scatters or is culled, and the ground gets lit.
 func test_lamp_conserves_energy() -> void:

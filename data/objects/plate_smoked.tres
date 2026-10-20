@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ObjectDef" format=3]
+
+[ext_resource type="Script" path="res://sim/objects/object_def.gd" id="1_objdef"]
+
+[resource]
+script = ExtResource("1_objdef")
+key = &"plate_smoked"
+display_name = "Smoked Glass Plate"
+kind = 0
+material = &"smoked_glass"
+color = Color(0.25, 0.25, 0.28, 0.55)
+size_m = 0.5
+thickness_m = 0.01
+radius_front_m = 0.0
+radius_back_m = 0.0

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ObjectDef" format=3]
+
+[ext_resource type="Script" path="res://sim/objects/object_def.gd" id="1_objdef"]
+
+[resource]
+script = ExtResource("1_objdef")
+key = &"plate_uv_cut"
+display_name = "UV-Blocking Plate"
+kind = 0
+material = &"uv_cut_glass"
+color = Color(0.95, 0.95, 0.8, 0.3)
+size_m = 0.5
+thickness_m = 0.01
+radius_front_m = 0.0
+radius_back_m = 0.0

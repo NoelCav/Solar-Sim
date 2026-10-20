@@ -6,15 +6,6 @@ const PRISM_FLINT := preload("res://data/objects/prism_flint.tres")
 const MIRROR_ALUMINUM := preload("res://data/objects/mirror_aluminum.tres")
 
 
-func _tracer(world: SimWorld) -> LightEngine:
-	var light: LightSystem = world.get_system(&"light")
-	light.retrace(world)   # Builds surfaces + buckets
-	light.tracer().Begin()
-	return light.tracer()
-
-
-## A crown lens with a 5 cm probe near its focus (thin lens: f ≈ R / (2(n-1)) ≈ 1.15 m),
-## traced once. Returns the probe.
 func _lens_over_probe(world: SimWorld) -> SimObject:
 	var probe_def := ObjectDef.new()
 	probe_def.key = &"tiny_probe"

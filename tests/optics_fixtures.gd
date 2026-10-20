@@ -49,3 +49,19 @@ func _check_energy_balance(s: Dictionary) -> void:
 	check(s.emitted > 0.0, "light emitted")
 	check_near(out / s.emitted, 1.0, 1e-4, "energy balance")
 	check(s.culled < 0.02 * s.emitted, "culling stays small (%.2f%%)" % [100.0 * s.culled / s.emitted])
+
+
+## The tracer of `world`'s sky pass, set up on the current geometry with its results cleared.
+func _tracer(world: SimWorld) -> LightEngine:
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)   # Builds surfaces + buckets
+	light.tracer().Begin()
+	return light.tracer()
+
+
+func _probe_def(length: float) -> ObjectDef:
+	var def := ObjectDef.new()
+	def.key = &"test_probe"
+	def.kind = ObjectDef.Kind.PROBE
+	def.size_m = length
+	return def

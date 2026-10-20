@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MaterialDef" format=3]
+
+[ext_resource type="Script" path="res://sim/material_def.gd" id="1_matdef"]
+
+[resource]
+script = ExtResource("1_matdef")
+key = &"uv_cut_glass"
+id = 21
+display_name = "UV-Blocking Glass"
+color = Color(0.95, 0.95, 0.8, 0.3)
+density = 2510
+specific_heat = 858
+conductivity = 1.1
+emissivity = 0.9
+transparent = true
+cauchy_a = 1.5046
+cauchy_b = 0.0042
+bulk_absorption = PackedFloat32Array(400, 5, 1, 1, 1, 2)
+surface_absorptivity = PackedFloat32Array(0, 0, 0, 0, 0, 0)
+dn_dt = 2e-06
+hardness = 2
+softening_temp = 830
+melt_temp = 1300
+thermal_shock_limit = 120
+melts_to = &"glass_slag"

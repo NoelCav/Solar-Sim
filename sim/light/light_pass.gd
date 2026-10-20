@@ -259,7 +259,7 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 			first_piece[owner] = mini(first_piece.get(owner, 1 << 30), surfaces.piece[s])
 		var w := grid.width
 		for obj: SimObject in world.objects.values():
-			if not obj.def.is_body():
+			if not obj.def.is_convex_body():
 				continue
 			var ok := true
 			var rect := engine.BodyBounds(obj.id)
