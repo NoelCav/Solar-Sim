@@ -2,7 +2,8 @@ class_name ObjectRenderer
 extends Node2D
 ## Draws placed objects from their optical polylines: lens and prism bodies as tinted
 ## glass, mirrors and cells as a bright face over a dark back, probes as a dashed line (their
-## readings are tags drawn by MapMarkers). Stands (Mounting) are drawn first, behind them.
+## readings are tags drawn by MapMarkers). Stands (Mounting) are drawn first, behind them;
+## power meters (PowerMeters) last, on the cells' poles and in grid connections.
 ## In the heat view, lenses, prisms, mirrors and cells are filled with their own temperature color.
 
 const STAND_COLOR := Color(0.3, 0.31, 0.34)
@@ -68,6 +69,7 @@ func _draw() -> void:
 				var b: Vector2 = pieces[0][0][1] * px
 				draw_line(a, b, Color(0, 0, 0, 0.6), 5.0 if hl else 4.0, true)
 				draw_dashed_line(a, b, def.color, 3.0 if hl else 2.5, 6.0)
+	PowerMeters.draw_all(self, world, Transform2D.IDENTITY.scaled(Vector2.ONE / zoom), px)
 
 
 ## Draws a stand on `ci` (screen units, `px` pixels per meter): a pole from the object center

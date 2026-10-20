@@ -167,6 +167,8 @@ func test_wired_cell_sells_power() -> void:
 		check_eq(power.sells(world, cell), wired, "sells before a tick")
 		check_near(power.output_w(world, power.network_of(world, tie)), could if wired else 0.0, 1e-3,
 			"network output before a tick")
+		check_near(power.rated_w(world, power.network_of(world, tie)),
+			SolarCell.rated_power(cell.def) if wired else 0.0, 1e-3, "network rated power")
 		world.tick()
 		if wired:
 			check(cell.power_w > 30.0, "wired cell delivers %.1f W" % cell.power_w)

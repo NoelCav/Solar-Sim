@@ -49,6 +49,17 @@ func output_w(world: SimWorld, n: int) -> float:
 	return total
 
 
+## The rated power of the cells on network n, W (SolarCell.rated_power summed; 0 without one).
+func rated_w(world: SimWorld, n: int) -> float:
+	sync(world)
+	if n < 0 or n >= networks.count:
+		return 0.0
+	var total := 0.0
+	for id: int in _cells[n]:
+		total += SolarCell.rated_power(world.objects[id].def)
+	return total
+
+
 ## Brings the networks and who is on them up to date with the wires and objects (also while
 ## paused, for the inspector).
 func sync(world: SimWorld) -> void:
