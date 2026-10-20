@@ -164,7 +164,12 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	var incident: Dictionary = e.ObjectIncident()
 	for obj: SimObject in world.objects.values():
 		obj.absorbed_w = absorbed.get(obj.id, 0.0)
-		obj.incident = incident.get(obj.id, Spectrum.make_zero())
+		var split: PackedFloat32Array = incident.get(obj.id, PackedFloat32Array())
+		obj.incident = Spectrum.make_zero()
+		obj.incident_direct = Spectrum.make_zero()
+		for b in Spectrum.BIN_COUNT if split.size() == 2 * Spectrum.BIN_COUNT else 0:
+			obj.incident_direct[b] = split[b]
+			obj.incident[b] = split[b] + split[Spectrum.BIN_COUNT + b]
 	stats = e.Stats()
 	stats.lanes = p.map.count if p.dir != Vector2.ZERO else 0
 	shown_dni = p.dni

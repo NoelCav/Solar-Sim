@@ -309,7 +309,7 @@ func _direct() -> void:
 		if surfaces.coating[s] == SurfaceSet.Coating.PROBE:
 			var n := map.lanes_reaching(surfaces.a[s], surfaces.b[s]).size()
 			for b in Spectrum.BIN_COUNT:
-				engine.AddIncident(surfaces.owner[s], b, spectrum[b] * lane_area * n)
+				engine.AddIncident(surfaces.owner[s], b, spectrum[b] * lane_area * n, true)
 	var far := (grid.width + grid.height) * SimConst.TILE_M
 	for k in range(0, map.count, SHEET_STRIDE):
 		var s_in := map.entry_s(k)

@@ -9,9 +9,9 @@ func _efficiency(def: ObjectDef, suns: float, temp_k: float = SolarCell.T_REF_K)
 	return SolarCell.max_power(def, Spectrum.from_total(watts), temp_k, 1.0) / watts
 
 
-## Crystalline silicon at 1 sun, 25 °C: ≈22 %, like a good commercial panel.
+## The silicon cell panel at 1 sun, 25 °C: ≈22 % (after its coating), like a good commercial panel.
 func test_silicon_at_one_sun() -> void:
-	var eta := _efficiency(ObjectDef.new(), 1.0)
+	var eta := _efficiency(CELL_SI, 1.0)
 	check(eta > 0.21 and eta < 0.23, "Si efficiency %.3f" % eta)
 
 
@@ -19,13 +19,13 @@ func test_silicon_at_one_sun() -> void:
 func test_below_bandgap_makes_nothing() -> void:
 	var s := Spectrum.make_zero()
 	s[Spectrum.BIN_COUNT - 1] = 1000.0   # 0.83 eV infrared, below Si's 1.12 eV
-	check_eq(SolarCell.max_power(ObjectDef.new(), s, SolarCell.T_REF_K, 1.0), 0.0, "IR below Eg")
+	check_eq(SolarCell.max_power(CELL_SI, s, SolarCell.T_REF_K, 1.0), 0.0, "IR below Eg")
 
 
 ## Concentration raises the voltage, then series resistance takes over (§9.1): better at
 ## 20 suns than at 1, nothing left by 500.
 func test_concentration_helps_then_hurts() -> void:
-	var def := ObjectDef.new()
+	var def := CELL_SI
 	var one := _efficiency(def, 1.0)
 	var twenty := _efficiency(def, 20.0)
 	check(twenty > one, "20 suns %.3f > 1 sun %.3f" % [twenty, one])
@@ -59,11 +59,44 @@ func test_cell_reads_the_sun_on_its_front() -> void:
 		check_near(obj.absorbed_w, Spectrum.total(obj.incident) - reflected, 0.01 * arriving, "absorbs 1 − R")
 		var eta := SolarCell.object_power(obj, light.power_scale(world)) / arriving
 		check(eta > 0.17 and eta < 0.24, "efficiency in the noon sun %.3f" % eta)
+		check_near(Spectrum.total(obj.incident_direct), Spectrum.total(obj.incident), 1e-3, "open sun: all direct")
+
+
+## The cell's light budget (SolarCell.analyze) adds up: electricity plus every loss is the light
+## arriving, and electricity per band sums to the total.
+func test_cell_breakdown_adds_up() -> void:
+	var s := Spectrum.from_total(250.0)
+	var r := SolarCell.analyze(CELL_SI, s, SolarCell.T_REF_K + 20.0, 0.25)
+	var sum := 0.0
+	for k in ["power_w", "reflected_w", "below_gap_w", "excess_w", "collection_w", "voltage_w",
+			"temperature_w", "series_w"]:
+		check(r[k] >= 0.0, "%s not negative" % k)
+		sum += r[k]
+	check_near(sum, 250.0, 1e-3, "all light accounted for")
+	check_near(Spectrum.total(r.power_bin_w), r.power_w, 1e-4, "per band sums to the total")
+	check(r.temperature_w > 0.0, "a warm cell loses some to heat")
+
+
+## Light that reached a cell through a lens is not counted as direct (incident_direct).
+func test_light_through_a_lens_is_not_direct() -> void:
+	var world := SimWorld.new(load_materials(), 32, 32, 1)
+	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.tick()
+	world.enqueue(PlaceObjectCommand.new(load("res://data/objects/lens_crown.tres"), Vector2(4.0, 2.0)))
+	world.enqueue(PlaceObjectCommand.new(CELL_SI, Vector2(4.0, 2.9)))
+	world.flush_commands()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	var cell: SimObject = world.objects[2]
+	var total := Spectrum.total(cell.incident)
+	check(total > 0.0, "cell under the lens gets light (%.1f W)" % total)
+	check(Spectrum.total(cell.incident_direct) < 0.2 * total, "mostly through the lens: %.1f of %.1f W direct" % [
+		Spectrum.total(cell.incident_direct), total])
 
 
 ## A hot cell loses voltage: 50 K above 25 °C costs 20 % of its output (β = 0.004/K).
 func test_hot_cell_loses_output() -> void:
-	var def := ObjectDef.new()
+	var def := CELL_SI
 	check_near(_efficiency(def, 1.0, SolarCell.T_REF_K + 50.0) / _efficiency(def, 1.0), 0.8, 1e-4, "η_temp at +50 K")
 
 

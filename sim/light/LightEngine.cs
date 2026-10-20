@@ -80,7 +80,7 @@ public partial class LightEngine : RefCounted
         public int TermTile = -1, TermSide = -1;
         public double Remain = 1.0;
         public readonly List<double> Deps = new();    // (tile, fraction, body, ax, ay, bx, by, tau)…
-        public readonly List<double> Incident = new();  // (owner, power)…
+        public readonly List<double> Incident = new();  // (owner, power, 1 direct / 0 through optics)…
         public readonly List<double> Refls = new();   // (x, y, dx, dy, fraction, medium, body)…
         public D2 ContO, ContD;
         public int ContEvents;
@@ -93,7 +93,7 @@ public partial class LightEngine : RefCounted
         public double SMin;
         public List<double> Deps = new();     // (tile, bin, watts, body)…
         public readonly List<double> Strips = new();   // (strip index, watts arriving, watts absorbed)…
-        public readonly List<double> Incident = new();   // (owner, bin, watts)…
+        public readonly List<double> Incident = new();   // (owner, slot, watts)… slot as in AddIncident
         public double Escaped, Scattered, Culled;
         public Vector2[] SegFrom = Array.Empty<Vector2>(), SegTo = Array.Empty<Vector2>();
         public float[] SegPower = Array.Empty<float>();
@@ -507,9 +507,9 @@ public partial class LightEngine : RefCounted
         var d = new Godot.Collections.Dictionary();
         foreach (var kv in _objIncident)
         {
-            var f = new float[Bins];
-            for (int b = 0; b < Bins; b++)
-                f[b] = (float)kv.Value[b];
+            var f = new float[2 * Bins];
+            for (int k = 0; k < f.Length; k++)
+                f[k] = (float)kv.Value[k];
             d[kv.Key] = f;
         }
         return d;
@@ -602,16 +602,21 @@ public partial class LightEngine : RefCounted
         return Math.Clamp((int)Math.Floor(along * _strips), 0, _strips - 1);
     }
 
-    /// <summary>Adds light arriving on an object's active face (a probe, a cell's front).</summary>
-    public void AddIncident(int owner, int bin, double watts)
+    /// <summary>
+    /// Adds light arriving on an object's active face (a probe, a cell's front): per bin, split by
+    /// whether it came straight from the source (`direct`) or through optics first (refracted or
+    /// reflected on the way). ObjectIncident gives 2 × Bins values: direct bins, then the rest.
+    /// </summary>
+    public void AddIncident(int owner, int bin, double watts, bool direct)
     {
+        int slot = direct ? bin : Bins + bin;
         if (!_objIncident.TryGetValue(owner, out double[] acc))
-            _objIncident[owner] = acc = new double[Bins];
-        acc[bin] += watts;
+            _objIncident[owner] = acc = new double[2 * Bins];
+        acc[slot] += watts;
         if (_log != null)
         {
             _log.Incident.Add(owner);
-            _log.Incident.Add(bin);
+            _log.Incident.Add(slot);
             _log.Incident.Add(watts);
         }
     }
@@ -839,7 +844,7 @@ public partial class LightEngine : RefCounted
         {
             case CoatProbe:
                 for (int b = 0; b < Bins; b++)
-                    AddIncident(owner, b, p[b]);
+                    AddIncident(owner, b, p[b], events == 0);
                 Push(hit + d * Nudge, d, p, medium, body, events + 1);
                 break;
             case CoatMirror:
@@ -847,7 +852,7 @@ public partial class LightEngine : RefCounted
             {
                 if (_coating[s] == CoatCell && fromFront)
                     for (int b = 0; b < Bins; b++)
-                        AddIncident(owner, b, p[b]);
+                        AddIncident(owner, b, p[b], events == 0);
                 var outP = new double[Bins];
                 int tile = TileAt(hit);
                 for (int b = 0; b < Bins; b++)
@@ -1006,9 +1011,11 @@ public partial class LightEngine : RefCounted
                         // either side of its ends still make one beam (no split, no seam).
                         rec.Incident.Add(owner);
                         rec.Incident.Add(p[bin]);
+                        rec.Incident.Add(rec.Sig.Count == 0 ? 1 : 0);
                         o = hit + d * Nudge;
                         continue;
                     }
+                    bool direct = rec.Sig.Count == 0;   // Nothing redirected it before this surface
                     rec.Sig.Add(_piece[s] * 2 + (fromFront ? 0 : 1));
                     if (_coating[s] == CoatMirror || _coating[s] == CoatCell)
                     {
@@ -1016,6 +1023,7 @@ public partial class LightEngine : RefCounted
                         {
                             rec.Incident.Add(owner);
                             rec.Incident.Add(p[bin]);
+                            rec.Incident.Add(direct ? 1 : 0);
                         }
                         double keep = p[bin] * _refl[s * Bins + bin];
                         DepositBin(TileAt(hit), bin, p[bin] - keep, owner, hit, hit);
@@ -1437,7 +1445,10 @@ public partial class LightEngine : RefCounted
             ApplyBin((int)deps[k], (int)deps[k + 1], deps[k + 2], (int)deps[k + 3]);
         var incident = t.Incident;
         for (int k = 0; k < incident.Count; k += 3)
-            AddIncident((int)incident[k], (int)incident[k + 1], incident[k + 2]);
+        {
+            int slot = (int)incident[k + 1];
+            AddIncident((int)incident[k], slot % Bins, incident[k + 2], slot < Bins);
+        }
         var strips = t.Strips;
         for (int k = 0; k < strips.Count; k += 3)
             AddStrip((int)strips[k], (float)strips[k + 1], (float)strips[k + 2]);
@@ -1913,8 +1924,8 @@ public partial class LightEngine : RefCounted
         for (int k = 0; k < deps.Count; k += 8)
             ApplyBin((int)deps[k], bin, watts * deps[k + 1], (int)deps[k + 2]);
         var incident = r.Incident;
-        for (int k = 0; k < incident.Count; k += 2)
-            AddIncident((int)incident[k], bin, watts * incident[k + 1]);
+        for (int k = 0; k < incident.Count; k += 3)
+            AddIncident((int)incident[k], bin, watts * incident[k + 1], incident[k + 2] > 0.5);
         var refls = r.Refls;
         for (int k = 0, idx = 0; k < refls.Count; k += 7, idx++)
         {

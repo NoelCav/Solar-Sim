@@ -41,7 +41,7 @@ enum Mount { STAND, GROUND, FREE }
 ## Fraction of absorbed photons whose carriers reach the contacts.
 @export var cell_collection: float = 0.9
 ## Operating voltage over Eg/q at 1 sun (fill factor and Voc losses together).
-@export var cell_voltage_factor: float = 0.5
+@export var cell_voltage_factor: float = 0.52
 ## Open-circuit voltage at 1 sun, V: sets how much concentration raises the voltage.
 @export var cell_voc_v: float = 0.7
 ## Efficiency lost per K above 25 °C.

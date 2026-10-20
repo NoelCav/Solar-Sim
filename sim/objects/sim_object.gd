@@ -11,9 +11,11 @@ var angle: float
 var mounted := false
 
 ## Written by the light system each trace: power absorbed in the body (W), and for probes and
-## cells the power arriving on the active face per spectral bin (W).
+## cells the power arriving on the active face per spectral bin (W), all of it and the part
+## that came straight from the sun or moon (the rest came through optics: refracted or reflected).
 var absorbed_w := 0.0
 var incident := Spectrum.make_zero()
+var incident_direct := Spectrum.make_zero()
 
 ## Own thermal node (D13), kept by ThermalSystem: temperature (0 until first set to the air
 ## around it) and energy received this tick (light), J.
