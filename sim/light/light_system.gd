@@ -131,14 +131,41 @@ func tracer() -> LightEngine:
 	return sky.tracer()
 
 
-## Light arriving now on surface strip `index` (LightEngine.StripIds layout), W/m².
+## Light arriving now on surface strip `index` (LightEngine.StripIds layout), from every layer, W/m².
 func strip_irradiance(index: int, world: SimWorld) -> float:
-	return sky.strip_irradiance(index, world)
+	var total := 0.0
+	for l in layers():
+		total += l.strip_irradiance(index, world)
+	return total
 
 
-## Light arriving now on the brightest surface strip of tile i, W/m² (0 if none).
+## Light arriving now on the brightest surface strip of tile i, from every layer, W/m² (0 if none).
 func strip_irradiance_max(i: int, world: SimWorld) -> float:
-	return sky.strip_irradiance_max(i, world)
+	var best := 0.0
+	var base := i * 4 * SimConst.SKIN_STRIPS
+	for k in 4 * SimConst.SKIN_STRIPS:
+		best = maxf(best, strip_irradiance(base + k, world))
+	return best
+
+
+## Light absorbed by tile i now, from every layer, W/m² of its face.
+func tile_irradiance(i: int, world: SimWorld) -> float:
+	var total := 0.0
+	for l in layers():
+		if l.tile_power.size() > i:
+			total += l.tile_power[i] * l.irradiance_scale(world)
+	return total
+
+
+## The same split by Spectrum band (UV, visible, infrared), W/m².
+func tile_band_irradiance(i: int, world: SimWorld) -> PackedFloat32Array:
+	var out := PackedFloat32Array([0.0, 0.0, 0.0])
+	for l in layers():
+		if l.band_power.size() > (i + 1) * Spectrum.BAND_COUNT - 1:
+			var scale := l.irradiance_scale(world)
+			for band in Spectrum.BAND_COUNT:
+				out[band] += l.band_power[i * Spectrum.BAND_COUNT + band] * scale
+	return out
 
 
 func _scratch_pass(world: SimWorld) -> LightPass:

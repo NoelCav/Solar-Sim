@@ -189,22 +189,31 @@ static func heat_c(x: float) -> float:
 ## Absorbed light from the published lit tiles only; `band` -1 = all light.
 func _fill_light(band: int, glow: bool) -> void:
 	_bytes.fill(0)
-	var tp := _light.tile_power
-	if tp.size() != world.grid.size():
+	if _light.sky.tile_power.size() != world.grid.size():
 		return
-	var bp := _light.band_power
-	var scale := _light.irradiance_scale(world)
 	var log_lo := log(IRR_MIN)
 	var log_span := log(IRR_MAX) - log_lo
 	var glow_lo := log(GLOW_MIN)
-	var gain := DisplayLight.exposure(world)
-	for i in _light.shown_lit:
-		var w := tp[i] if band < 0 else bp[i * Spectrum.BAND_COUNT + band]
-		var irr := w * scale
+	# Per tile, the light absorbed from every layer (physical W/m²), and as drawn (each layer at its exposure).
+	var physical := {}
+	var shown := {}
+	for layer in _light.layers():
+		var tp := layer.tile_power
+		if tp.size() != world.grid.size():
+			continue
+		var bp := layer.band_power
+		var scale := layer.irradiance_scale(world)
+		var gain := DisplayLight.exposure(world) if layer.lamp_id < 0 else DisplayLight.lamp_exposure(world)
+		for i in layer.shown_lit:
+			var w := tp[i] if band < 0 else bp[i * Spectrum.BAND_COUNT + band]
+			physical[i] = physical.get(i, 0.0) + w * scale
+			shown[i] = shown.get(i, 0.0) + w * scale * gain
+	for i: int in physical:
+		var irr: float = physical[i]
 		if irr > peak_value:
 			peak_value = irr
 			peak_tile = i
-		irr *= gain
+		irr = shown[i]
 		var o := i * 4
 		if glow:
 			# Warm additive glow: invisible at ordinary sunlight, strong at a focus.

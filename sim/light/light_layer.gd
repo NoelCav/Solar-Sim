@@ -31,6 +31,8 @@ var beam_render := PackedFloat32Array()    ## Beam render records (layout in Bea
 var ray_from := PackedVector2Array()       ## Secondary rays (pooled reflections)
 var ray_to := PackedVector2Array()
 var ray_power := PackedFloat32Array()
+var sheet_point := false          ## The sheet is a lamp's wedges, not the sun's parallel lanes
+var shown_source: LightSource   ## The source the published results were traced for
 var stats := {}                 ## emitted/absorbed/escaped/scattered/culled W, rays
 var shown_strength := 0.0       ## Strength of the source the published (displayed) results were traced at
 
@@ -266,6 +268,8 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 				obj.incident_direct[b] = split[b]
 				obj.incident[b] = split[b] + split[Spectrum.BIN_COUNT + b]
 	stats = e.Stats()
+	sheet_point = p.source != null and p.source.kind == LightSource.Kind.POINT
+	shown_source = p.source
 	stats.lanes = p.map.count if p.source != null else 0
 	shown_strength = p.source.strength() if p.source != null else 0.0
 	trace_version += 1

@@ -46,6 +46,12 @@ static func item_stats(def: ObjectDef, materials: MaterialDB, full := false) -> 
 			return "Measures light; blocks nothing"
 		ObjectDef.Kind.GRID_TIE:
 			return "Sells the power of its wire network"
+		ObjectDef.Kind.LAMP:
+			var lamp := "%s · %s of light" % [power(def.lamp_watts), power(def.lamp_light_w())]
+			if not full:
+				return lamp
+			var cone := "all around" if def.lamp_spread_deg >= 360.0 else "a %.0f° cone" % def.lamp_spread_deg
+			return "%s · lights %s" % [lamp, cone]
 		ObjectDef.Kind.BATTERY:
 			var held := "%s · %s" % [energy(def.battery_capacity_kwh * Market.J_PER_KWH), power(def.battery_max_w)]
 			return held + " · takes surplus when power is cheap, sells when dear" if full else held

@@ -78,14 +78,16 @@ func _rebuild_light() -> void:
 	var g := world.grid
 	var n := SimConst.SKIN_STRIPS
 	var row := g.width * n
-	var scale := _light.irradiance_scale(world) * n * DisplayLight.exposure(world) / SimConst.REFERENCE_DNI
-	var ids := _light.strip_ids
-	var arriving := _light.strip_arriving
-	for k in ids.size():
-		var face := ids[k] / n            # tile * 4 + side
-		var tile := face / 4
-		var at := ((tile / g.width) * 4 + face % 4) * row + (tile % g.width) * n + ids[k] % n
-		_light_bytes[at] = int(clampf(arriving[k] * scale, 0.0, 1.0) * 255.0)
+	for layer in _light.layers():
+		var exposure := DisplayLight.exposure(world) if layer.lamp_id < 0 else DisplayLight.lamp_exposure(world)
+		var scale := layer.irradiance_scale(world) * n * exposure / SimConst.REFERENCE_DNI
+		var ids := layer.strip_ids
+		var arriving := layer.strip_arriving
+		for k in ids.size():
+			var face := ids[k] / n            # tile * 4 + side
+			var tile := face / 4
+			var at := ((tile / g.width) * 4 + face % 4) * row + (tile % g.width) * n + ids[k] % n
+			_light_bytes[at] = mini(_light_bytes[at] + int(clampf(arriving[k] * scale, 0.0, 1.0) * 255.0), 255)
 	_light_image.set_data(row, g.height * 4, false, Image.FORMAT_R8, _light_bytes)
 	_light_texture.update(_light_image)
 

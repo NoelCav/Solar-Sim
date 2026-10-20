@@ -91,6 +91,11 @@ static func object_temperature(obj: SimObject) -> float:
 	return obj.temperature_k if obj.temperature_k > 0.0 else T_REF_K
 
 
+## The irradiance on cell object `obj`'s face now, W/m² (the sky's and its lamps').
+static func object_irradiance(obj: SimObject, light_scale: float) -> float:
+	return Spectrum.total(object_light(obj, light_scale)) / obj.def.face_area_m2()
+
+
 ## analyze() for cell object `obj` now: its front light (object_light), temperature and face.
 static func object_analysis(obj: SimObject, light_scale: float) -> Dictionary:
 	return analyze(obj.def, object_light(obj, light_scale), object_temperature(obj), obj.def.face_area_m2())

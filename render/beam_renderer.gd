@@ -26,6 +26,7 @@ var wavelength := -1:               ## Single bin to show, or -1 for all (ViewMo
 var _light: LightSystem
 var _seen_version := -1
 var _rgb: Array[Vector3] = []       ## Per-bin color for the current view, white-balanced
+var _sky_rgb: Array[Vector3] = []   ## The same as the sun or moon shows it (night vision tints moonlight)
 var _old: MeshInstance2D            ## The previous light, fading out after each publish
 var _fade := 1.0                    ## 0 → 1 over FADE_S after a publish
 
@@ -68,7 +69,8 @@ static func tone(c: float) -> float:
 	return BeamGeometry.tone(c)
 
 
-## Per-bin colors for the view, scaled so AM1.5 sunlight across the shown bins is white.
+## Per-bin colors for the view, scaled so AM1.5 sunlight across the shown bins is white. `_rgb`
+## is for lamps, `_sky_rgb` for the sky (tinted pale blue by moonlight).
 func _balance() -> void:
 	var colors := ViewMode.bin_colors(view, wavelength)
 	var white := Vector3.ZERO
@@ -76,6 +78,7 @@ func _balance() -> void:
 		if colors[b].a > 0.0:
 			white += Vector3(colors[b].r, colors[b].g, colors[b].b) * Spectrum.AM15_SHARE[b]
 	_rgb.clear()
+	_sky_rgb.clear()
 	for b in Spectrum.BIN_COUNT:
 		var c := colors[b]
 		var v := Vector3.ZERO
@@ -85,9 +88,9 @@ func _balance() -> void:
 			# A single-band view (UV, IR) has no white to balance against: keep its hue.
 			if v.x + v.y + v.z > 0.0 and _shown_bins(colors) <= 2:
 				v = Vector3(c.r, c.g, c.b) * Spectrum.AM15_SHARE[b] / _shown_share(colors)
-		if world.light_is_moon:
-			v *= DisplayLight.MOON_TINT
-		_rgb.append(v * ViewMode.beam_gain(view))
+		v *= ViewMode.beam_gain(view)
+		_rgb.append(v)
+		_sky_rgb.append(v * DisplayLight.MOON_TINT if world.light_is_moon else v)
 
 
 static func _shown_bins(colors: Array[Color]) -> int:
@@ -113,9 +116,13 @@ func rebuild() -> void:
 	var px := SimConst.PX_PER_M
 	var verts := PackedVector2Array()
 	var cols := PackedColorArray()
-	_build_sheet(verts, cols, px)
-	_build_beams(verts, cols, px)
-	_build_rays(verts, cols, px)
+	for layer in _light.layers():
+		var sky := layer.lamp_id < 0
+		var rgb := _sky_rgb if sky else _rgb
+		var exposure := DisplayLight.exposure(world) if sky else DisplayLight.lamp_exposure(world)
+		_build_sheet(layer, rgb, exposure, verts, cols, px)
+		_build_beams(layer, rgb, exposure, verts, cols, px)
+		_build_rays(layer, rgb, exposure, verts, cols, px)
 	if verts.is_empty():
 		mesh = null
 		return
@@ -128,25 +135,37 @@ func rebuild() -> void:
 	mesh = m
 
 
-func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
-	var from := _light.sheet_from
-	var to := _light.sheet_to
+func _build_sheet(layer: LightLayer, rgb_bins: Array[Vector3], exposure: float, verts: PackedVector2Array,
+		cols: PackedColorArray, px: float) -> void:
+	var from := layer.sheet_from
+	var to := layer.sheet_to
 	if from.is_empty():
 		return
-	# Tint from the current spectrum through the view's colors (reddens at sunset).
+	# Tint from the current spectrum through the view's colors (reddens at sunset); a lamp's from its own.
 	var rgb := Vector3.ZERO
 	var share_sum := 0.0
 	for b in Spectrum.BIN_COUNT:
 		share_sum += Spectrum.AM15_SHARE[b]
-	var spectrum := world.light_spectrum
+	var spectrum := world.light_spectrum if layer.lamp_id < 0 else layer.shown_source.spectrum
 	var total := Spectrum.total(spectrum)
 	if total <= 0.0:
 		return
 	for b in Spectrum.BIN_COUNT:
 		if Spectrum.AM15_SHARE[b] > 0.0:
-			rgb += _rgb[b] * (spectrum[b] / total) / Spectrum.AM15_SHARE[b] * share_sum
-	var level := SHEET_LEVEL * minf(total * DisplayLight.exposure(world) / SimConst.REFERENCE_DNI, 1.0) / VERTEX_SCALE
+			rgb += rgb_bins[b] * (spectrum[b] / total) / Spectrum.AM15_SHARE[b] * share_sum
+	var level := SHEET_LEVEL * minf(total * exposure / SimConst.REFERENCE_DNI, 1.0) / VERTEX_SCALE
 	var c := Color(rgb.x * level, rgb.y * level, rgb.z * level, 1.0)
+	if layer.sheet_point:
+		# A lamp's lanes fan out: one wedge per drawn lane, as wide as the lanes it stands for.
+		var spread := SimConst.LANE_WIDTH_RAD * LightPass.SHEET_STRIDE * 0.5
+		for k in from.size():
+			var a := from[k] * px
+			var b := to[k] * px
+			var side := (b - a).orthogonal() * spread
+			verts.append_array([a, b - side, b + side])
+			for j in 3:
+				cols.append(c)
+		return
 	# One strip per drawn lane, exactly as wide as the lanes it stands for, so neighbours
 	# meet edge to edge whatever their lengths (shadow edges stay crisp, no slits).
 	var half := SimConst.LANE_WIDTH_M * LightPass.SHEET_STRIDE * 0.5 * px
@@ -159,27 +178,28 @@ func _build_sheet(verts: PackedVector2Array, cols: PackedColorArray, px: float) 
 			cols.append(c)
 
 
-func _build_beams(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
-	BeamGeometry.build(_light.beam_render, _rgb, SimConst.REFERENCE_DNI / DisplayLight.exposure(world), px,
-		VERTEX_SCALE, verts, cols)
+func _build_beams(layer: LightLayer, rgb_bins: Array[Vector3], exposure: float, verts: PackedVector2Array,
+		cols: PackedColorArray, px: float) -> void:
+	BeamGeometry.build(layer.beam_render, rgb_bins, SimConst.REFERENCE_DNI / exposure, px, VERTEX_SCALE, verts, cols)
 
 
-func _build_rays(verts: PackedVector2Array, cols: PackedColorArray, px: float) -> void:
-	var from := _light.ray_from
-	var to := _light.ray_to
-	var power := _light.ray_power
+func _build_rays(layer: LightLayer, rgb_bins: Array[Vector3], exposure: float, verts: PackedVector2Array,
+		cols: PackedColorArray, px: float) -> void:
+	var from := layer.ray_from
+	var to := layer.ray_to
+	var power := layer.ray_power
 	# A pooled reflection ray stands for REFL_POOL_M of wavefront, so it is drawn as a soft
 	# strip that wide (bright on its center line, fading to nothing at its edges, same total)
 	# rather than a hairline: weak secondary light reads as haze, not as stray lines.
 	var width_m := SimConst.REFL_POOL_M
 	var half := width_m * 0.5 * px
-	var reference := SimConst.REFERENCE_DNI / DisplayLight.exposure(world)
+	var reference := SimConst.REFERENCE_DNI / exposure
 	for k in from.size():
 		var rgb := Vector3.ZERO
 		for b in Spectrum.BIN_COUNT:
 			var irr := power[k * Spectrum.BIN_COUNT + b] / (width_m * SimConst.DEPTH_M)
 			if irr > 0.0:
-				rgb += _rgb[b] * tone(irr / (reference * Spectrum.AM15_SHARE[b]))
+				rgb += rgb_bins[b] * tone(irr / (reference * Spectrum.AM15_SHARE[b]))
 		if rgb.x + rgb.y + rgb.z < 1e-4:
 			continue
 		var a := from[k] * px

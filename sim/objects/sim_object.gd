@@ -56,7 +56,7 @@ func incident_spectrum() -> PackedFloat32Array:
 	var s := incident.duplicate()
 	var area := def.face_area_m2()
 	for b in Spectrum.BIN_COUNT:
-		s[b] /= area
+		s[b] = (s[b] + lamp_light[b]) / area
 	return s
 
 

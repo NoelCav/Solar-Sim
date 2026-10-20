@@ -136,6 +136,14 @@ func _object_info(obj: SimObject) -> Dictionary:
 		# Unrounded: moonlight readings are mW/m².
 		d["probe_w_m2"] = obj.incident_irradiance()
 		d["spectrum_w_m2"] = Array(obj.incident_spectrum())
+	if obj.def.kind == ObjectDef.Kind.LAMP:
+		d["level"] = snappedf(obj.lamp_level, 0.0001)
+		d["draws_w"] = snappedf(obj.def.lamp_watts * obj.lamp_level, 0.001)
+		d["light_w"] = snappedf(obj.def.lamp_light_w() * obj.lamp_level, 0.001)
+		var layer: LightLayer = (world.get_system(&"light") as LightSystem).lamps.get(obj.id)
+		if layer != null:
+			d["lit_tiles"] = layer.shown_lit.size()
+			d["paths"] = layer.stats.get("rays", 0)
 	if obj.def.kind == ObjectDef.Kind.BATTERY:
 		var cap := obj.def.battery_capacity_kwh * Market.J_PER_KWH
 		d["stored_kwh"] = obj.stored_j / Market.J_PER_KWH

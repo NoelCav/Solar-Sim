@@ -87,7 +87,7 @@ func update() -> void:
 	if _chart.visible:
 		_chart.show_spectrum(obj.incident_spectrum(), world.light_spectrum)
 	var card := selected != null and obj == selected and obj.def.kind == ObjectDef.Kind.CELL
-	_losses.visible = card and obj.incident_irradiance() > 0.0
+	_losses.visible = card and SolarCell.object_irradiance(obj, 1.0) > 0.0
 	_colors.visible = _losses.visible
 	if _losses.visible:
 		_show_cell_bars(obj)
@@ -117,20 +117,18 @@ func _tile_text(i: int, cell: Vector2i) -> String:
 
 
 func _light_text(i: int) -> String:
-	var tp := _light.tile_power
-	if tp.size() != world.grid.size():
+	if _light.sky.tile_power.size() != world.grid.size():
 		return ""
-	var scale := _light.irradiance_scale(world)
-	var irr := tp[i] * scale
+	var irr := _light.tile_irradiance(i, world)
 	if irr <= 0.0:
-		return "[color=#8a93a0]in shadow[/color]" if world.light_is_up else ""
+		return "[color=#8a93a0]in shadow[/color]" if world.light_is_up or not _light.lamps.is_empty() else ""
 	var suns := Readout.times_light(world, _light.strip_irradiance_max(i, world))
-	var o := i * Spectrum.BAND_COUNT
-	var bp := _light.band_power
-	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, Readout.light_name(world)] if suns >= 1.5 \
-		else "in " + Readout.light_name(world) + "light"
+	var bands := _light.tile_band_irradiance(i, world)
+	var source := Readout.light_name(world) if _light.sky.tile_power[i] > 0.0 else "lamp"
+	var head := "[color=#ffd873]≈%.0f× %s[/color]" % [suns, source] if suns >= 1.5 \
+		else "in " + source + "light"
 	return "%s · absorbing %s\n[color=#8a93a0]%s[/color]" % [head, Readout.irradiance(irr),
-		Readout.bands(bp[o] * scale, bp[o + 1] * scale, bp[o + 2] * scale)]
+		Readout.bands(bands[0], bands[1], bands[2])]
 
 
 func _object_text(obj: SimObject, selected: bool) -> String:
@@ -150,6 +148,8 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 		return s
 	if obj.def.kind == ObjectDef.Kind.CELL:
 		s += _cell_text(obj, selected)
+	elif obj.def.kind == ObjectDef.Kind.LAMP:
+		return s + _lamp_text(obj)
 	elif obj.def.kind == ObjectDef.Kind.BATTERY:
 		return s + _battery_text(obj)
 	elif obj.def.kind == ObjectDef.Kind.GRID_TIE:
@@ -161,6 +161,18 @@ func _object_text(obj: SimObject, selected: bool) -> String:
 	s += "\nabsorbing %.1f W" % obj.absorbed_w
 	if obj.temperature_k > 0.0:
 		s += " · %.1f °C" % SimConst.k_to_c(obj.temperature_k)
+	return s
+
+
+## A lamp's brightness, what it draws and what it gives as light.
+func _lamp_text(obj: SimObject) -> String:
+	if _power.network_of(world, obj) < 0:
+		return "\n[color=#8a93a0]not wired: run wire to its foot[/color]"
+	var def := obj.def
+	var s := "\n%.0f %% bright · %s drawn · %s of light" % [obj.lamp_level * 100.0, Readout.power(def.lamp_watts * obj.lamp_level),
+		Readout.power(def.lamp_light_w() * obj.lamp_level)]
+	if obj.lamp_level < 0.99:
+		s += "\n[color=#8a93a0]its network can't supply it (no grid connection, or too little power)[/color]"
 	return s
 
 
@@ -183,7 +195,7 @@ func _battery_text(obj: SimObject) -> String:
 ## the light now, so it is right while paused too. `full` adds its efficiency against rated,
 ## and how much of its light came straight from the source.
 func _cell_text(obj: SimObject, full: bool) -> String:
-	var irr := obj.incident_irradiance() * _light.power_scale(world)
+	var irr := SolarCell.object_irradiance(obj, _light.power_scale(world))
 	var watts := SolarCell.object_power(obj, _light.power_scale(world))
 	var rated := SolarCell.rated_power(obj.def)
 	var eta := watts / (irr * obj.def.face_area_m2()) if irr > 0.0 else 0.0
@@ -194,9 +206,9 @@ func _cell_text(obj: SimObject, full: bool) -> String:
 	s += "  [color=#8a93a0]of %s rated (%.0f%%)[/color]" % [Readout.power(rated), watts / rated * 100.0]
 	s += "\nefficiency %.1f%%  [color=#8a93a0](rated %.1f%%)[/color]" % [eta * 100.0,
 		SolarCell.rated_efficiency(obj.def) * 100.0]
-	var total := Spectrum.total(obj.incident)
+	var total := Spectrum.total(SolarCell.object_light(obj, 1.0))
 	if total > 0.0:
-		var direct := Spectrum.total(obj.incident_direct) / total
+		var direct := Spectrum.total(SolarCell.object_light(obj, 1.0, true)) / total
 		s += "\nlight %s · " % Readout.irradiance(irr)
 		s += "all direct %s" % Readout.light_name(world) if direct > 0.995 \
 			else "%.0f%% direct · %.0f%% through optics" % [direct * 100.0, (1.0 - direct) * 100.0]

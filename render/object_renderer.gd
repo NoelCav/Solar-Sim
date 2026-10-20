@@ -45,13 +45,18 @@ func _draw() -> void:
 		var pieces := obj.world_pieces()
 		var hl := obj.id == highlighted_id or obj.id == selected_id
 		match def.kind:
-			ObjectDef.Kind.LENS, ObjectDef.Kind.PRISM, ObjectDef.Kind.GRID_TIE, ObjectDef.Kind.BATTERY:
+			ObjectDef.Kind.LENS, ObjectDef.Kind.PRISM, ObjectDef.Kind.GRID_TIE, ObjectDef.Kind.BATTERY, \
+					ObjectDef.Kind.LAMP:
 				var outline := OpticsGen.outline(pieces)
 				var pts := PackedVector2Array()
 				for p in outline:
 					pts.append(p * px)
 				if pts.size() >= 3:
-					draw_colored_polygon(pts, _heat_color(obj) if heat else def.color)
+					var fill := _heat_color(obj) if heat else def.color
+					if def.kind == ObjectDef.Kind.LAMP and not heat:
+						fill = def.color.darkened(0.6).lerp(def.color.lightened(0.3), obj.lamp_level)
+						draw_circle(obj.position * px, def.size_m * px * 1.5, Color(1.0, 0.9, 0.6, 0.25 * obj.lamp_level))
+					draw_colored_polygon(pts, fill)
 					pts.append(pts[0])
 					var edge := Color(0.9, 0.97, 1.0, 0.9 if hl else 0.6)
 					if obj.id == selected_id:

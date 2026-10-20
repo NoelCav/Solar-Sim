@@ -10,6 +10,7 @@ extends RefCounted
 
 const MOON_EXPOSURE := 0.35                  ## A full moon draws at this fraction of daylight
 const MOON_TINT := Vector3(0.62, 0.74, 1.0)  ## Night vision: moonlight reads pale blue
+const LAMP_EXPOSURE := 100.0                ## At night a lamp's light is drawn this many times brighter than traced
 const NIGHT_AMBIENT := 0.002                 ## Brightness of unlit things at night (linear; ~4 % on screen)
 
 
@@ -17,6 +18,12 @@ const NIGHT_AMBIENT := 0.002                 ## Brightness of unlit things at ni
 ## full moon draws at MOON_EXPOSURE of daylight.
 static func exposure(world: SimWorld) -> float:
 	return MOON_EXPOSURE / SimConst.MOON_FULL_RATIO if world.light_is_moon else 1.0
+
+
+## Display gain for lamp light: the eye adapts to the dark, so lamps are drawn at LAMP_EXPOSURE
+## at night and at their true level by day (when they can't compete with the sun).
+static func lamp_exposure(world: SimWorld) -> float:
+	return lerpf(LAMP_EXPOSURE, 1.0, ambient(world))
 
 
 ## How lit everything is without direct light: 1 by day, fading through dusk to

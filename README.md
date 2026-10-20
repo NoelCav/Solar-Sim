@@ -76,7 +76,7 @@ python tools/test.py --bench --only=demo    # one scenario
 python tools/test.py --baseline             # record a new baseline (after an intended change)
 ```
 
-**Test scenarios** (`sim/scenarios.gd`) are named sites the benchmark and the game load identically (top bar → Site menu, or SimProbe `site`; a scenario is never saved over your site): `demo`, `lens_field`, `power_farm`, `optics_mix`, `night`, `dug_terrain`, `edge_optics` (awkward optics: lenses in series, a mirror V, light sent back up through a lens, a half-shaded lens, a lens in water, grazing angles).
+**Test scenarios** (`sim/scenarios.gd`) are named sites the benchmark and the game load identically (top bar → Site menu, or SimProbe `site`; a scenario is never saved over your site): `demo`, `lens_field`, `power_farm`, `optics_mix`, `night`, `dug_terrain`, `lamp_lab` (LED and spot lamps: a collimated beam from a lamp at a lens's focus), `edge_optics` (awkward optics: lenses in series, a mirror V, light sent back up through a lens, a half-shaded lens, a lens in water, grazing angles).
 
 **The benchmark** (`tests/bench.gd`, ~45 s) runs every scenario at its hours and reports:
 - **Checks** (a failure is a bug; exit code 1): energy balance; no NaN or impossible values; cells never deliver more than reaches them; power and money add up; an incremental light pass matches a fresh one; two runs are identical; a save restores the same site; probes block nothing; ground truth (plain rays vs beams) and popping (the sun stepped 0.1° at a time) within sanity limits; a symmetric rig is symmetric.
