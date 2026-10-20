@@ -37,7 +37,10 @@ const MOON_START_PHASE := 0.45      ## Phase at world start (0 new, 0.5 full): a
 const MOON_FULL_RATIO := 2.2e-6     ## Full-moon irradiance / sunlight, both above the atmosphere
 
 # --- Light (§6.4) ---
-const LANE_WIDTH_M := 0.02          ## Sun-map lane width across the sun direction
+const LANE_WIDTH_M := 0.02          ## Lane width of a parallel source's map, across its direction
+const LANE_WIDTH_RAD := 0.002       ## Lane width of a lamp's map (0.02 m at 10 m)
+const BEAM_SPACING_M := 0.1         ## Sample rays start this far apart across a beam (a lamp's: at LAMP_RANGE_M)
+const LAMP_RANGE_M := 10.0          ## How far a lamp's light typically travels (sets its cull thresholds)
 const MIN_CHILD_W := 0.02           ## Reflected child rays below this power are culled
 const MIN_RAY_W := 1e-4           ## Any ray below this is culled
 const REFL_POOL_M := 0.25          ## Pooled Fresnel reflections: one secondary ray per this much wavefront (at most)

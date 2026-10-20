@@ -13,7 +13,7 @@ public partial class LightEngine
 
     /// <summary>Grid size, constants and per-material optical tables (BIN_COUNT values per material).</summary>
     public void Setup(int width, int height, double tileM, double depthM, int maxRayEvents, double minChildW,
-        double minRayW, double reflPoolM, byte[] opaque, byte[] dispersive, byte[] hasBulk, float[] index,
+        double minRayW, double reflPoolM, double beamSpacingM, byte[] opaque, byte[] dispersive, byte[] hasBulk, float[] index,
         float[] bulk, float[] surfAbs, int skinStrips)
     {
         _strips = skinStrips;
@@ -25,6 +25,7 @@ public partial class LightEngine
         _minChildW = _baseChildW = minChildW;
         _minRayW = _baseRayW = minRayW;
         _reflPool = reflPoolM;
+        _baseSpacing = beamSpacingM;
         _opaque = opaque;
         _dispersive = dispersive;
         _hasBulk = hasBulk;

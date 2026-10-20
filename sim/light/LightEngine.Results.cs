@@ -210,22 +210,20 @@ public partial class LightEngine
     }
 
     /// <summary>
-    /// Stage 1 (direct light): every lane emits; lanes ending on an opaque face (kind == opaqueKind,
+    /// Stage 1 (direct light, after SetParallelSource or SetPointSource): every lane emits; lanes ending on an opaque face (kind == opaqueKind,
     /// refs = tile) deposit there, lanes that hit nothing (noneKind) escape. Consecutive lanes on
     /// the same surface strip are settled together.
     /// </summary>
-    /// Lanes are at u = u0 + (k + 0.5) laneW across `perp`; lane k's first hit is `depth[k]`
-    /// along `dir`. A lane covers laneW / |perp · t| of a face with tangent t, spread over the
+    /// Lane k (u = U0 + (k + 0.5) LaneW, see the source) has its first hit at `depth[k]` along its
+    /// ray. A lane covers its width over |perp · t| of a face with tangent t, spread over the
     /// strips it overlaps (lanes and strips differ in width; whole lanes per strip would alias),
     /// including those of the neighbouring tile's face where the surface continues there.
-    public void DirectDeposit(byte[] kind, int[] refs, byte[] sides, float[] depth, double u0, double laneW,
-        Vector2 perp, Vector2 dir, float[] spectrum, double laneArea, int opaqueKind, int noneKind)
+    public void DirectDeposit(byte[] kind, int[] refs, byte[] sides, float[] depth, int opaqueKind, int noneKind)
     {
         double total = 0;
         for (int b = 0; b < Bins; b++)
-            total += spectrum[b];
-        _emitted += total * laneArea * kind.Length;
-        D2 pv = D2.From(perp), dv = D2.From(dir);
+            total += _src.LaneWatts[b];
+        _emitted += total * kind.Length;
         var lanes = new Dictionary<int, double>();   // Strip index (see StripIds) -> lanes landing
         var order = new List<int>();
         int none = 0;
@@ -236,10 +234,12 @@ public partial class LightEngine
             if (kind[k] != opaqueKind)
                 continue;
             int t = refs[k], side = sides[k];
-            D2 hit = pv * (u0 + (k + 0.5) * laneW) + dv * depth[k];
+            double lu = _src.U0 + (k + 0.5) * _src.LaneW;
+            D2 hit = _src.At(lu, depth[k]);
+            D2 pv = _src.LanePerp(lu);
             bool horizontal = side <= 1;
             double along = horizontal ? hit.X / _tm - t % _w : hit.Y / _tm - t / _w;   // In tiles
-            double half = 0.5 * laneW / Math.Max(Math.Abs(horizontal ? pv.X : pv.Y), 1e-6) / _tm;
+            double half = 0.5 * _src.LaneWidthAt(depth[k]) / Math.Max(Math.Abs(horizontal ? pv.X : pv.Y), 1e-6) / _tm;
             if (half <= 1e-12)
             {
                 AddLanes(lanes, order, (t * 4 + side) * _strips + StripAt(t, side, hit), 1.0);
@@ -274,8 +274,8 @@ public partial class LightEngine
         }
         int perFace = _strips, perTile = 4 * _strips;
         foreach (int f in order)
-            AbsorbOpaqueSpectrum(f / perTile, f / perFace % 4, f % perFace, spectrum, lanes[f] * laneArea);
-        _escaped += total * laneArea * none;
+            AbsorbOpaqueSpectrum(f / perTile, f / perFace % 4, f % perFace, lanes[f]);
+        _escaped += total * none;
     }
 
     /// Whether `tile`, `o` tiles from `from` along the line of face `side`, continues that face:
@@ -300,13 +300,13 @@ public partial class LightEngine
         }
     }
 
-    void AbsorbOpaqueSpectrum(int i, int side, int strip, float[] spectrum, double scale)
+    void AbsorbOpaqueSpectrum(int i, int side, int strip, double lanes)
     {
         int m = _mat[i];
         double total = 0, absorbed = 0;
         for (int b = 0; b < Bins; b++)
         {
-            double w = spectrum[b] * scale;
+            double w = _src.LaneWatts[b] * lanes;
             double a = w * _surfAbs[m * Bins + b];
             _bandPower[i * Bands + BandOf[b]] += (float)a;
             absorbed += a;

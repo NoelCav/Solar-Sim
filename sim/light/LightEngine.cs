@@ -25,7 +25,6 @@ public partial class LightEngine : RefCounted
     const double UEps = 1e-6;      // Along-segment tolerance for hits (watertight vertices)
     const int AirDistCap = 16;
     const int MaxRenderSegments = 60000;
-    const double BaseSpacing = 0.1;   // Initial sample spacing across a run, m
     const double MinSpacing = 0.02;   // Narrowest interval worth refining, m
     const double LandingTol = 0.35;   // Same-path rays landing this close count as one beam
     // Flat record layouts (lists of doubles): the number of values per entry.
@@ -168,6 +167,7 @@ public partial class LightEngine : RefCounted
 
     // --- Settings and tables ---------------------------------------------------------------
     int _w, _h, _maxEvents, _strips = 1;
+    double _baseSpacing;   // Initial sample spacing across a beam, m (a point source's: at 1 m)
     double _tm, _depth, _minChildW, _minRayW, _reflPool;
     double _baseChildW, _baseRayW;   // Cull thresholds for full sunlight (SetCullScale)
     byte[] _opaque = Array.Empty<byte>(), _dispersive = Array.Empty<byte>(), _hasBulk = Array.Empty<byte>();

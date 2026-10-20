@@ -1,10 +1,10 @@
 class_name LightPass
 extends RefCounted
-## One complete trace of sunlight for the sun and geometry at its start (design doc §6.4.1):
-## stage 1 settles direct light with the sun map in one go; stage 2 traces each optical run
-## in each spectral bin as beams, a few tasks per call so it can be spread over ticks.
+## One complete trace of one source's light (the sun or moon, or a lamp) over the geometry at its
+## start (design doc §6.4.1, §6.11): stage 1 settles direct light with the lane map in one go;
+## stage 2 traces each optical run in each spectral bin as beams, a few tasks per call so it can be spread over ticks.
 ## The ray work runs in compiled code (LightEngine, C#); this class builds the geometry
-## (SurfaceSet, SunMap), decides what can be reused, and drives the engine.
+## (SurfaceSet, LaneMap), decides what can be reused, and drives the engine.
 ## A pass owns a snapshot of the geometry (optical surfaces, tile materials), so edits made
 ## while it runs don't disturb it; they are picked up by the next pass.
 ##
@@ -16,7 +16,7 @@ extends RefCounted
 const SHEET_STRIDE := 2   ## Draw the direct-light sheet from every Nth lane
 
 var engine := LightEngine.new()
-var map := SunMap.new()
+var map := LaneMap.new()
 var surfaces := SurfaceSet.new()
 var grid: TileGrid
 var opaque := PackedByteArray()        ## Per material: blocks light (for the sun map)
@@ -24,9 +24,9 @@ var material := PackedInt32Array()     ## Tile materials as of this pass's geome
 var structure_version := -1            ## Geometry this pass traces
 var objects_version := -1
 
-var dir := Vector2.ZERO          ## Sun direction this pass traced (ZERO = sun down)
+var source: LightSource         ## What this pass traced (null: nothing was up)
+var dir := Vector2.ZERO          ## Sky pass: sun direction this pass traced (ZERO = sun down)
 var dni := 0.0
-var spectrum := Spectrum.make_zero()
 var done := true
 var incremental := false         ## This pass reuses the previous one (geometry-only pass)
 var ms := 0.0                    ## CPU time spent on this pass so far
@@ -72,15 +72,16 @@ func _init(p_grid: TileGrid, materials: MaterialDB) -> void:
 			if def.bulk_absorption[b] > 0.0:
 				has_bulk[id] = 1
 	engine.Setup(grid.width, grid.height, SimConst.TILE_M, SimConst.DEPTH_M, SimConst.MAX_RAY_EVENTS,
-		SimConst.MIN_CHILD_W, SimConst.MIN_RAY_W, SimConst.REFL_POOL_M, opaque, dispersive, has_bulk,
+		SimConst.MIN_CHILD_W, SimConst.MIN_RAY_W, SimConst.REFL_POOL_M, SimConst.BEAM_SPACING_M, opaque, dispersive, has_bulk,
 		index, bulk, surf, SimConst.SKIN_STRIPS)
 
 
-## Begins a pass over the world as it is now. With `prev` (the last completed pass), tasks
-## the edits since then can't have affected are replayed from it instead of traced. An
-## `edit_only` pass keeps prev's sun even if the sun has since drifted a little further
-## (up to RESTART_ANGLE_DEG), so edits show quickly; a later pass catches up with the sun.
-func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
+## Begins a pass over the world as it is now, for the sky (sun or moon) or, with `lamp`, for
+## that source. With `prev` (the last completed pass), tasks the edits since then can't have
+## affected are replayed from it instead of traced. An `edit_only` sky pass keeps prev's sun
+## even if the sun has since drifted a little further (up to RESTART_ANGLE_DEG), so edits show
+## quickly; a later pass catches up with the sun.
+func start(world: SimWorld, prev: LightPass = null, edit_only := false, lamp: LightSource = null) -> void:
 	var t0 := Time.get_ticks_usec()
 	structure_version = world.grid.structure_version
 	if objects_version != world.objects_version:
@@ -97,26 +98,33 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 	stage_ms = {"map": 0.0, "direct": 0.0, "beams": 0.0}
 	dir = Vector2.ZERO
 	dni = 0.0
-	spectrum = Spectrum.make_zero()
+	source = null
 	var objects_now := _object_states(world)
-	if world.light_is_up and world.light_dni > 0.0 and world.light_direction.y > 1e-3:
+	var reuse := false
+	if lamp != null:
+		source = lamp
+		reuse = prev != null and lamp.same_as(prev.source)
+	elif world.light_is_up and world.light_dni > 0.0 and world.light_direction.y > 1e-3:
 		var max_drift := SimConst.RESTART_ANGLE_DEG if edit_only else SimConst.RETRACE_ANGLE_DEG
-		var reuse := prev != null and prev.dir != Vector2.ZERO \
+		reuse = prev != null and prev.dir != Vector2.ZERO \
 			and absf(world.light_direction.angle_to(prev.dir)) < deg_to_rad(max_drift) \
 			and absf(world.light_dni / prev.dni - 1.0) < (0.25 if edit_only else 0.1)
-		incremental = reuse
 		if reuse:
 			# A geometry-only pass keeps the sun the previous pass traced, so unaffected tasks
 			# can be replayed exactly; the next sun-triggered pass catches up.
-			dir = prev.dir
-			dni = prev.dni
-			spectrum = prev.spectrum.duplicate()
+			source = prev.source
 		else:
-			dir = world.light_direction
-			dni = world.light_dni
-			spectrum = world.light_spectrum.duplicate()
-		engine.SetCullScale(minf(dni / SimConst.REFERENCE_DNI, 1.0))
-		map.build(grid, opaque, surfaces, dir, SimConst.LANE_WIDTH_M)
+			source = LightSource.parallel(world.light_direction, world.light_spectrum, world.light_dni)
+		dir = source.direction
+		dni = source.dni
+	if source != null:
+		incremental = reuse
+		engine.SetCullScale(source.cull_scale())
+		map.build(grid, opaque, surfaces, source)
+		if source.kind == LightSource.Kind.POINT:
+			engine.SetPointSource(source.spectrum, map.u0, map.lane_w, source.position)
+		else:
+			engine.SetParallelSource(source.spectrum, map.u0, map.lane_w, map.perp, map.dir)
 		var t1 := Time.get_ticks_usec()
 		stage_ms.map = (t1 - t0) / 1000.0
 		_direct()
@@ -130,8 +138,7 @@ func start(world: SimWorld, prev: LightPass = null, edit_only := false) -> void:
 		if reuse:
 			for r: Rect2 in _changed_areas(prev, objects_now):
 				areas.append_array([r.position.x, r.position.y, r.size.x, r.size.y])
-		engine.StartBeams(runs, s_mins, spectrum, map.u0, map.lane_w, map.perp, map.dir,
-			_object_cache_info(world), prev.engine if prev != null else null, areas, reuse)
+		engine.StartBeams(runs, s_mins, _object_cache_info(world), prev.engine if prev != null else null, areas, reuse)
 	_objects = objects_now
 	ms = (Time.get_ticks_usec() - t0) / 1000.0
 	done = engine.TaskCount() == 0
@@ -264,6 +271,8 @@ func _sync_surfaces(world: SimWorld) -> void:
 ## object's surfaces (tiles inside a body don't matter: rays inside ignore them).
 ## id → [definition index, angle key, first piece, position, u of its center, s of its start line]
 func _object_cache_info(world: SimWorld) -> Dictionary:
+	if source.kind == LightSource.Kind.POINT:
+		return {}   # The cache needs identical incoming rays: parallel light only
 	if _cacheable_version != world.objects_version:
 		_cacheable.clear()
 		var first_piece := {}
@@ -306,17 +315,15 @@ func _object_cache_info(world: SimWorld) -> Dictionary:
 ## Stage 1: lanes that end on opaque faces deposit directly; lanes that hit nothing escape.
 ## Probes read the lanes that cross them before their first hit.
 func _direct() -> void:
-	var lane_area := map.lane_w * SimConst.DEPTH_M
-	engine.DirectDeposit(map.kind, map.ref, map.side, map.depth, map.u0, map.lane_w, map.perp, map.dir, spectrum,
-		lane_area, SunMap.Hit.OPAQUE, SunMap.Hit.NONE)
+	engine.DirectDeposit(map.kind, map.ref, map.side, map.depth, LaneMap.Hit.OPAQUE, LaneMap.Hit.NONE)
 	for s in surfaces.count():
 		if surfaces.coating[s] == SurfaceSet.Coating.PROBE:
 			var n := map.lanes_reaching(surfaces.a[s], surfaces.b[s]).size()
 			for b in Spectrum.BIN_COUNT:
-				engine.AddIncident(surfaces.owner[s], b, spectrum[b] * lane_area * n, true)
+				engine.AddIncident(surfaces.owner[s], b, engine.LaneWatts(b) * n, true)
 	var far := (grid.width + grid.height) * SimConst.TILE_M
 	for k in range(0, map.count, SHEET_STRIDE):
 		var s_in := map.entry_s(k)
-		var s_end := map.depth[k] if map.kind[k] != SunMap.Hit.NONE else s_in + far
+		var s_end := map.depth[k] if map.kind[k] != LaneMap.Hit.NONE else s_in + far
 		sheet_from.append(map.lane_point(k, s_in))
 		sheet_to.append(map.lane_point(k, s_end))
