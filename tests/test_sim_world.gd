@@ -253,3 +253,18 @@ func test_only_some_objects_rotate() -> void:
 		check_eq(Mounting.snap_angle(db.get_by_key(key), 0.7), 0.0, "%s snaps level" % key)
 	for key in [&"lamp_led", &"lens_crown", &"cell_si", &"mirror_aluminum"]:
 		check(db.get_by_key(key).can_rotate(), "%s turns" % key)
+
+
+## A wire line (CreativeBrush.line_path) is straight along a row or column and has one bend
+## otherwise, covering each tile once, whichever way it is drawn.
+func test_wire_line_path() -> void:
+	var straight := CreativeBrush.line_path(Vector2i(2, 5), Vector2i(6, 5))
+	check_eq(straight.size(), 5, "a horizontal line")
+	check_eq(CreativeBrush.line_path(Vector2i(6, 5), Vector2i(2, 5)).size(), 5, "backwards too")
+	var bent := CreativeBrush.line_path(Vector2i(1, 1), Vector2i(4, 3))
+	check_eq(bent.size(), 3 + 1 + 2, "horizontal 3 more, then down 2: 6 tiles")
+	check_eq(bent[3], Vector2i(4, 1), "the bend is at the target column")
+	check_eq(bent.back(), Vector2i(4, 3), "ends at the target")
+	var up := CreativeBrush.line_path(Vector2i(1, 1), Vector2i(4, 3), true)
+	check_eq(up[2], Vector2i(1, 3), "vertical first bends at the start column")
+	check_eq(CreativeBrush.line_path(Vector2i(3, 3), Vector2i(3, 3)).size(), 1, "a click is one tile")
