@@ -7,8 +7,11 @@ extends Node2D
 ## copper when it is on a network, grey when nothing is connected. Redrawn only when something
 ## it shows changes.
 
-const COLOR := Color(0.85, 0.5, 0.25, 0.85)
-const CELL_COLOR := Color(0.7, 0.42, 0.22, 0.7)
+const CHANNEL_COLORS: Array[Color] = [Color(0.85, 0.5, 0.25), Color(0.35, 0.62, 1.0), Color(0.4, 0.85, 0.45),
+	Color(0.76, 0.5, 1.0)]
+const CHANNEL_NAMES := ["Copper", "Blue", "Green", "Violet"]
+const ALPHA := 0.85
+const CELL_ALPHA := 0.7              ## A surface cell's foot, drawn dimmer than laid wire
 const LOOSE := Color(0.55, 0.55, 0.6, 0.9)
 const WIDTH_TILES := 0.12
 
@@ -41,15 +44,20 @@ func _draw() -> void:
 	for i in g.size():
 		if conducts[i] == 0:
 			continue
-		var color := COLOR if g.wire[i] != 0 else CELL_COLOR
 		var x := i % g.width
 		var y := i / g.width
 		var c := (Vector2(x, y) + Vector2(0.5, 0.5)) * px
-		if x < g.width - 1 and conducts[i + 1] != 0:
-			draw_line(c, c + Vector2(px, 0.0), color, width)
-		if y < g.height - 1 and conducts[i + g.width] != 0:
-			draw_line(c, c + Vector2(0.0, px), color, width)
-		draw_circle(c, width * 0.75, color)
+		for channel in ConduitNetworks.CHANNELS:
+			var bit := 1 << channel
+			if conducts[i] & bit == 0:
+				continue
+			var color := Color(CHANNEL_COLORS[channel], ALPHA if g.wire[i] & bit != 0 else CELL_ALPHA)
+			var at := c + Vector2.ONE * channel * width * 0.5   # Crossing wires sit side by side
+			if x < g.width - 1 and conducts[i + 1] & bit != 0:
+				draw_line(at, at + Vector2(px, 0.0), color, width)
+			if y < g.height - 1 and conducts[i + g.width] & bit != 0:
+				draw_line(at, at + Vector2(0.0, px), color, width)
+			draw_circle(at, width * 0.75, color)
 	for obj: SimObject in world.objects.values():
 		if obj.def.kind in [ObjectDef.Kind.CELL, ObjectDef.Kind.BATTERY, ObjectDef.Kind.GRID_TIE, ObjectDef.Kind.LAMP]:
 			_draw_lug(obj, px, width)
@@ -64,6 +72,11 @@ func _draw_lug(obj: SimObject, px: float, width: float) -> void:
 	var tile := ports[0]
 	var top := (Vector2(tile % world.grid.width, tile / world.grid.width) + Vector2(0.5, 0.5)) * px
 	var foot := Vector2(obj.position.x * SimConst.PX_PER_M, (Mounting.stand_base(world, obj.position)) * SimConst.PX_PER_M)
-	var color := COLOR if _power.network_of(world, obj) >= 0 else LOOSE
+	var channel := 0
+	for k in ConduitNetworks.CHANNELS:
+		if _power.networks.at(tile, k) >= 0:
+			channel = k
+			break
+	var color := Color(CHANNEL_COLORS[channel], ALPHA) if _power.network_of(world, obj) >= 0 else LOOSE
 	draw_line(foot, top, color, width)
 	draw_circle(foot, width * 1.1, color)

@@ -14,10 +14,10 @@ static func capture(world: SimWorld) -> Dictionary:
 	for obj: SimObject in world.objects.values():
 		objects.append({"key": str(obj.def.key), "x": obj.position.x, "y": obj.position.y,
 			"angle": obj.angle, "mounted": obj.mounted, "stored_j": obj.stored_j})
-	var wires := []
+	var wires := []   # [tile, channels] pairs
 	for i in world.grid.size():
 		if world.grid.wire[i] != 0:
-			wires.append(i)
+			wires.append([i, world.grid.wire[i]])
 	var g := world.grid
 	var materials := g.material.to_byte_array()
 	return {"version": VERSION, "width": g.width, "height": g.height, "time_s": world.time_s,
@@ -40,9 +40,11 @@ static func restore(world: SimWorld, data: Dictionary, defs: ObjectDB) -> String
 	g.material = materials
 	g.mark_structure_changed()
 	g.wire.fill(0)
-	for i: int in data.get("wires", []):
+	for w: Variant in data.get("wires", []):
+		# [tile, channels]; older saves hold a bare tile index (channel 0)
+		var i := int(w[0]) if w is Array else int(w)
 		if i >= 0 and i < g.size():
-			g.wire[i] = 1
+			g.wire[i] = int(w[1]) if w is Array else 1
 	g.conduit_version += 1
 	world.time_s = float(data.get("time_s", world.time_s))
 	world.money = float(data.get("money", 0.0))

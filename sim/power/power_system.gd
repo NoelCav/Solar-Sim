@@ -11,8 +11,9 @@ extends SimSystem
 ## system (a lamp's brightness is what its network gave it the tick before) and before heat.
 
 var networks := ConduitNetworks.new()
-## What conducts: the wire layer, and the foot of every surface cell (a cell is a piece of wire,
-## so a row of them is one network without any laid between them).
+## What conducts: the wire layer (a bit per channel, ConduitNetworks), and the foot of every surface cell
+## (a cell is a piece of wire, so a row of them is one network without any laid between them; it
+## conducts in the channel of the wire under it, else the first).
 var conducts := PackedByteArray()
 ## Surface cell sets: cells whose feet touch, left to right, as lists of object ids; one meter each.
 var sets := []
@@ -158,8 +159,8 @@ func delivers(world: SimWorld, obj: SimObject) -> bool:
 func network_of(world: SimWorld, obj: SimObject) -> int:
 	_sync_networks(world)
 	for i in Mounting.port_tiles(world, obj):
-		if networks.at(i) >= 0:
-			return networks.at(i)
+		if networks.any_at(i) >= 0:
+			return networks.any_at(i)
 	return -1
 
 
@@ -171,8 +172,14 @@ func _sync_networks(world: SimWorld) -> void:
 		conducts = g.wire.duplicate()
 		for obj: SimObject in world.objects.values():
 			if _is_surface_cell(obj):
-				for i in Mounting.port_tiles(world, obj):
-					conducts[i] = 1
+				var ports := Mounting.port_tiles(world, obj)
+				var bit := 1
+				for i in ports:
+					if g.wire[i] != 0:
+						bit = g.wire[i] & -g.wire[i]   # The lowest channel there
+						break
+				for i in ports:
+					conducts[i] |= bit
 		_build_sets(world)
 		_conducts_key = key
 	networks.sync(g, conducts, g.conduit_version * 1048576 + world.objects_version)

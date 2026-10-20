@@ -12,6 +12,7 @@ var selected_index := 0
 var brush_radius := 0
 var enabled := false     ## True while the Paint or Wire tool is active
 var wire := false        ## Paints the wire layer instead of materials
+var wire_channel := 0    ## The color (channel) wire is drawn in
 var pointer := Vector2(-1e6, -1e6)   ## Last pointer position, viewport pixels (set by ObjectTool)
 var on_map := true                   ## False while the pointer is over a panel (set by ObjectTool)
 
@@ -111,7 +112,7 @@ func _lay_line(erase: bool) -> void:
 			cells.append(g.idx(c.x, c.y))
 	if cells.is_empty():
 		return
-	var cmd := PaintWiresCommand.new(cells, 0 if erase else 1)
+	var cmd := PaintWiresCommand.new(cells, 0 if erase else 1, wire_channel)
 	cmd.group = _stroke
 	world.enqueue(cmd)
 
@@ -174,7 +175,7 @@ func _draw() -> void:
 ## The wire line being drawn (or, before the press, the tile it would start on).
 func _draw_line_preview() -> void:
 	var erase := _painting_button == MOUSE_BUTTON_RIGHT
-	var color := Color(1.0, 0.45, 0.35, 0.6) if erase else Color(0.95, 0.7, 0.35, 0.6)
+	var color := Color(1.0, 0.45, 0.35, 0.6) if erase else Color(WireRenderer.CHANNEL_COLORS[wire_channel], 0.6)
 	var tiles: Array[Vector2i] = [_snapped(hovered_cell())]
 	if _painting_button != MOUSE_BUTTON_NONE:
 		tiles = current_line()

@@ -72,3 +72,32 @@ func test_a_set_has_one_meter() -> void:
 	var rightmost: SimObject = world.objects[set.back()]
 	check(r.center.x > rightmost.position.x, "it sits right of the rightmost cell")
 	check_eq(shown, 3, "each cell finds the same meter when hovered")
+
+
+## Wires of different channels (colors) cross: on a shared tile they stay separate networks, and a
+## device joins the network at its foot.
+func test_wires_of_different_colors_cross() -> void:
+	var world := SimWorld.new(load_materials(), 16, 8, 1)
+	var g := world.grid
+	var across := PackedInt32Array()
+	var down := PackedInt32Array()
+	for k in range(2, 9):
+		across.append(g.idx(k, 4))
+		down.append(g.idx(5, k - 1))
+	world.enqueue(PaintWiresCommand.new(across, 1, 0))
+	world.enqueue(PaintWiresCommand.new(down, 1, 1))
+	world.flush_commands()
+	var nets := ConduitNetworks.new()
+	nets.sync(g, g.wire)
+	check_eq(nets.count, 2, "two wires, two networks, though they share a tile")
+	var tile := g.idx(5, 4)
+	check(nets.at(tile, 0) >= 0 and nets.at(tile, 1) >= 0 and nets.at(tile, 0) != nets.at(tile, 1), "the shared tile is in both")
+	check_eq(g.wire[tile], 3, "both channels in one byte")
+	world.enqueue(UndoCommand.new())
+	world.flush_commands()
+	check_eq(g.wire[tile], 1, "undo takes the blue wire off the shared tile and leaves the copper")
+	var same := PaintWiresCommand.new(across, 1, 0)
+	world.enqueue(same)
+	world.flush_commands()
+	nets.sync(g, g.wire, 99)
+	check_eq(nets.count, 1, "painting the same channel again changes nothing")

@@ -393,7 +393,7 @@ func _cmd_power(_a: Dictionary) -> Dictionary:
 	power.sync(w)
 	var nets := []
 	for n in power.networks.count:
-		nets.append({"network": n, "tiles": power.networks.network.count(n), "grid": power.network_grid[n] == 1
+		nets.append({"network": n, "tiles": power.networks.tiles_in(n), "grid": power.network_grid[n] == 1
 			if n < power.network_grid.size() else false,
 			"sold_w": snappedf(power.output_w(w, n), 0.001),
 			"stance": Market.Stance.keys()[Market.stance(w)],

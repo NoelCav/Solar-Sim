@@ -79,6 +79,7 @@ func _rebuild() -> void:
 			_build_paint()
 		ObjectTool.Mode.WIRE:
 			_content.add_child(UiStyle.label("Wire", 16))
+			_build_wire_palette()
 			_add_hint("Drag a line: it bends once (Shift flips the bend). Right-drag erases. Press on a device "
 				+ "to start at its foot. Surface cells conduct, so touching cells need one connection.")
 
@@ -249,6 +250,25 @@ func _build_paint() -> void:
 	_content.add_child(UiStyle.label(brush.selected().display_name if brush.selected() else "", 14, UiStyle.ACCENT))
 	_add_brush_size()
 	_add_hint("LMB paint · RMB erase · Q / E material · [ ] size")
+
+
+## The colors wire can be drawn in: wires of different colors cross without touching.
+func _build_wire_palette() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", 6)
+	var group := ButtonGroup.new()
+	for c in ConduitNetworks.CHANNELS:
+		var tip := "%s wire: wires of different colors cross without touching" % WireRenderer.CHANNEL_NAMES[c]
+		var b := UiStyle.toggle("", tip, func() -> void: brush.wire_channel = c, group)
+		b.set_pressed_no_signal(c == brush.wire_channel)
+		b.custom_minimum_size = Vector2(44, 34)
+		var chip := ColorRect.new()
+		chip.color = WireRenderer.CHANNEL_COLORS[c]
+		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(chip)
+		chip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+		row.add_child(b)
+	_content.add_child(row)
 
 
 func _add_brush_size() -> void:
