@@ -37,6 +37,8 @@ func tick(world: SimWorld, dt: float) -> void:
 		obj.power_w = 0.0
 		obj.flow_w = 0.0
 		obj.lamp_level = 0.0   # A lamp on no network gets nothing
+		if obj.def.kind == ObjectDef.Kind.CELL:   # Heat wears a cell down whether or not it delivers
+			obj.health = maxf(obj.health - SolarCell.damage_rate(obj.def, SolarCell.object_temperature(obj)) * dt, 0.0)
 	for n in networks.count:
 		var f := flows(world, n, dt)
 		for id: int in _lamps[n]:

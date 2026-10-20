@@ -27,11 +27,12 @@ static func max_power(def: ObjectDef, spectrum: PackedFloat32Array, temp_k: floa
 ## Where the light arriving on a cell goes, W (the terms add up to the light arriving):
 ## power_w (electricity), reflected_w (by the coating), below_gap_w (photons under Eg),
 ## excess_w (photon energy above Eg), collection_w, voltage_w, temperature_w, series_w (the
-## factors' losses, in that order); and power_bin_w, electricity per spectral bin.
+## factors' losses, in that order); damage_w (0 here: object_analysis fills it); and power_bin_w,
+## electricity per spectral bin.
 static func analyze(def: ObjectDef, spectrum: PackedFloat32Array, temp_k: float, area_m2: float) -> Dictionary:
 	var out := {"power_w": 0.0, "reflected_w": 0.0, "below_gap_w": 0.0, "excess_w": 0.0,
 		"collection_w": 0.0, "voltage_w": 0.0, "temperature_w": 0.0, "series_w": 0.0,
-		"power_bin_w": Spectrum.make_zero()}
+		"damage_w": 0.0, "power_bin_w": Spectrum.make_zero()}
 	var total := Spectrum.total(spectrum)
 	if total <= 0.0 or area_m2 <= 0.0:
 		return out
@@ -61,6 +62,18 @@ static func analyze(def: ObjectDef, spectrum: PackedFloat32Array, temp_k: float,
 		left = kept
 	out.power_w = left
 	return out
+
+
+## How fast a hot cell loses health, per game second: nothing below its degrade temperature, then
+## growing with the square of how far it is toward its failure temperature (about 0.2 % a second
+## at 94 °C, 5 % at 132 °C, and the whole cell in 5 s at 180 °C). Permanent: a cell that cooled
+## down stays as worn as it got.
+static func damage_rate(def: ObjectDef, temp_k: float) -> float:
+	var c := temp_k - 273.15
+	if c <= def.cell_degrade_c:
+		return 0.0
+	var x := minf((c - def.cell_degrade_c) / (def.cell_fail_c - def.cell_degrade_c), 1.5)
+	return 0.2 * x * x
 
 
 ## A cell's rated power, W: what it makes face-on to plain sunlight (AM1.5,
@@ -98,7 +111,13 @@ static func object_irradiance(obj: SimObject, light_scale: float) -> float:
 
 ## analyze() for cell object `obj` now: its front light (object_light), temperature and face.
 static func object_analysis(obj: SimObject, light_scale: float) -> Dictionary:
-	return analyze(obj.def, object_light(obj, light_scale), object_temperature(obj), obj.def.face_area_m2())
+	var a := analyze(obj.def, object_light(obj, light_scale), object_temperature(obj), obj.def.face_area_m2())
+	if obj.health < 1.0:   # What heat damage took off the output is heat in the cell instead
+		a.damage_w = a.power_w * (1.0 - obj.health)
+		a.power_w -= a.damage_w
+		for b in Spectrum.BIN_COUNT:
+			a.power_bin_w[b] *= obj.health
+	return a
 
 
 ## What cell object `obj` could deliver now, W.

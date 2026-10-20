@@ -13,7 +13,8 @@ static func capture(world: SimWorld) -> Dictionary:
 	var objects := []
 	for obj: SimObject in world.objects.values():
 		objects.append({"key": str(obj.def.key), "x": obj.position.x, "y": obj.position.y,
-			"angle": obj.angle, "mounted": obj.mounted, "stored_j": obj.stored_j})
+			"angle": obj.angle, "mounted": obj.mounted, "stored_j": obj.stored_j,
+			"health": obj.health})
 	var wires := []   # [tile, channels] pairs
 	for i in world.grid.size():
 		if world.grid.wire[i] != 0:
@@ -57,6 +58,7 @@ static func restore(world: SimWorld, data: Dictionary, defs: ObjectDB) -> String
 		var obj := SimObject.new(world.next_object_id, def, Vector2(float(o.x), float(o.y)), float(o.angle))
 		obj.mounted = bool(o.get("mounted", false))
 		obj.stored_j = float(o.get("stored_j", 0.0))
+		obj.health = float(o.get("health", 1.0))
 		world.add_object(obj)
 	world.refresh_environment()
 	return ""

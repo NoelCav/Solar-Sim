@@ -153,6 +153,7 @@ func _object_info(obj: SimObject) -> Dictionary:
 	if obj.def.kind == ObjectDef.Kind.CELL:
 		var light: LightSystem = world.get_system(&"light")
 		d["front_w_m2"] = snappedf(obj.incident_irradiance() * light.power_scale(world), 0.01)
+		d["health"] = snappedf(obj.health, 0.0001)
 		d["could_make_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(world)), 0.001)
 		d["delivering_w"] = snappedf(obj.power_w, 0.001)
 		d["front_direct_w_m2"] = snappedf(Spectrum.total(obj.incident_direct) * light.power_scale(world)

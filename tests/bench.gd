@@ -357,6 +357,7 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 	var cells := 0
 	var selling := 0
 	var cell_hi := 0.0
+	var health_min := 1.0
 	var stored := 0.0
 	for obj: SimObject in world.objects.values():
 		if obj.def.kind == ObjectDef.Kind.BATTERY:
@@ -367,6 +368,8 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 		if obj.def.kind != ObjectDef.Kind.CELL:
 			continue
 		cells += 1
+		_check(obj.health >= 0.0 and obj.health <= 1.0, "cell %d health %.3f" % [obj.id, obj.health])
+		health_min = minf(health_min, obj.health)
 		var arriving := Spectrum.total(SolarCell.object_light(obj, light.power_scale(world)))
 		cell_hi = maxf(cell_hi, obj.temperature_k)
 		_check(obj.power_w >= 0.0 and obj.power_w <= arriving + 1e-6,
@@ -394,6 +397,7 @@ func _power(world: SimWorld, f: Dictionary) -> void:
 		% [Readout.power(sold), selling, cells, power.networks.count, grids]
 		+ "· cells max %.1f °C · $%.6f" % [SimConst.k_to_c(cell_hi), world.money])
 	f.sold_w = sold
+	f.cell_health_min = health_min
 	f.stored_j = stored
 	f.cell_max_k = cell_hi
 

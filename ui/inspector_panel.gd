@@ -12,7 +12,8 @@ extends PanelContainer
 const LOSS_PARTS := [["power", "power_w", Color(0.45, 0.9, 0.55)],
 	["reflected", "reflected_w", Color(0.62, 0.72, 0.86)],
 	["below gap", "below_gap_w", Color(0.6, 0.18, 0.14)],
-	["photon excess", "excess_w", Color(0.95, 0.55, 0.2)]]
+	["photon excess", "excess_w", Color(0.95, 0.55, 0.2)],
+	["heat damage", "damage_w", Color(0.45, 0.45, 0.5)]]
 const ELECTRICAL_KEYS := ["collection_w", "voltage_w", "temperature_w", "series_w"]
 const ELECTRICAL_COLOR := Color(0.9, 0.8, 0.35)
 
@@ -216,6 +217,8 @@ func _cell_text(obj: SimObject, full: bool) -> String:
 	var eta := watts / (irr * obj.def.face_area_m2()) if irr > 0.0 else 0.0
 	var s := "\nmaking %s" % Readout.power(watts) if _power.delivers(world, obj) \
 		else "\ncould make %s  [color=#8a93a0](not wired to a grid connection)[/color]" % Readout.power(watts)
+	if obj.health < 1.0:
+		s += "  [color=#e0735a]%s[/color]" % ("FAILED" if obj.health <= 0.0 else "%.0f%% health" % (obj.health * 100.0))
 	if not full:
 		return s + "  [color=#8a93a0](%.0f%% of %s)[/color]" % [eta * 100.0, Readout.irradiance(irr)]
 	s += "  [color=#8a93a0]of %s rated (%.0f%%)[/color]" % [Readout.power(rated), watts / rated * 100.0]
@@ -234,7 +237,7 @@ func _cell_text(obj: SimObject, full: bool) -> String:
 func _show_cell_bars(obj: SimObject) -> void:
 	var a := SolarCell.object_analysis(obj, _light.power_scale(world))
 	var light := 0.0
-	for k: String in ["power_w", "reflected_w", "below_gap_w", "excess_w"] + ELECTRICAL_KEYS:
+	for k: String in ["power_w", "reflected_w", "below_gap_w", "excess_w", "damage_w"] + ELECTRICAL_KEYS:
 		light += a[k]
 	var parts := []
 	for p: Array in LOSS_PARTS:

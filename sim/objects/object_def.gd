@@ -72,6 +72,10 @@ enum Category { OPTICS, POWER, MACHINES, TOOLS }
 @export var cell_temp_coeff: float = 0.004
 ## Resistive loss per sun of concentration (η_series = 1 − r·C).
 @export var cell_series_r: float = 0.002
+## Heat damage (§9.1): above the first temperature a cell slowly loses health (its output); at the
+## second it is lost within seconds (solder and encapsulant).
+@export var cell_degrade_c: float = 85.0
+@export var cell_fail_c: float = 180.0
 
 
 ## Local-space optical pieces (see OpticsGen).

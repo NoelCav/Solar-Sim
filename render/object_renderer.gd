@@ -73,7 +73,10 @@ func _draw() -> void:
 				var back := Vector2.from_angle(obj.angle + PI * 0.5) * clampf(0.004 * px, 1.5, 12.0)
 				draw_line(a + back, b + back, _heat_color(obj) if heat else _shade(Color(0.15, 0.15, 0.18), lit),
 					clampf(0.006 * px, 2.0, 16.0), true)
-				draw_line(a, b, _shade(def.color, lit) if not hl else Color.WHITE, 2.0, true)
+				var face := def.color
+				if def.kind == ObjectDef.Kind.CELL:   # A worn cell darkens
+					face = face.lerp(Color(0.18, 0.1, 0.08), 1.0 - obj.health)
+				draw_line(a, b, _shade(face, lit) if not hl else Color.WHITE, 2.0, true)
 			ObjectDef.Kind.PROBE:
 				var a: Vector2 = pieces[0][0][0] * px
 				var b: Vector2 = pieces[0][0][1] * px
