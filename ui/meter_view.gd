@@ -11,6 +11,7 @@ var obj: SimObject
 
 func _init() -> void:
 	custom_minimum_size = SIZE
+	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 
@@ -23,5 +24,5 @@ func show_meter(p_world: SimWorld, p_obj: SimObject) -> void:
 
 
 func _draw() -> void:
-	if visible:
+	if visible and world != null and obj != null:
 		PowerMeters.draw_enlarged(self, world, obj, SIZE)
