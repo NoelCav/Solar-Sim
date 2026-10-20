@@ -2,7 +2,8 @@ class_name TopBar
 extends PanelContainer
 ## The strip along the top of the screen: the clock and sky on the left; pause, speed (− / +
 ## steps through Main.SPEEDS), time jumps and Set time; money, what the site is selling and
-## the grid price on the right; then the view and wavelength. Actions go to Main.
+## the grid price on the right; then the view and wavelength, and the Site menu (the player's
+## site or a test scenario). Actions go to Main.
 
 ## Clock jumps: [hours, label, tooltip]. They move the sun without simulating the time between.
 const JUMPS := [[-1.0, "−1 h", "Back an hour (,)"], [0.5, "+30 m", "Forward half an hour"],
@@ -63,6 +64,7 @@ func setup(p_world: SimWorld, p_runner: Main) -> void:
 	row.add_child(_price)
 	row.add_child(VSeparator.new())
 	row.add_child(_view_controls())
+	row.add_child(_site_menu())
 
 
 func update() -> void:
@@ -166,6 +168,24 @@ func _open_set_time() -> void:
 	_hour_label.text = Readout.clock(_hour.value)
 	var at := get_viewport().get_mouse_position()
 	_set_time.popup(Rect2i(Vector2i(int(at.x) - 140, int(UiStyle.TOP_BAR_H) + 4), Vector2i.ZERO))
+
+
+## The site shown: the player's own, or a test scenario (Scenarios; never saved).
+func _site_menu() -> MenuButton:
+	var menu := MenuButton.new()
+	menu.flat = false
+	menu.focus_mode = Control.FOCUS_NONE
+	menu.text = "Site ▾" if Main.scenario == "" else "Test: %s ▾" % Main.scenario
+	menu.tooltip_text = "Your site, or a test scenario (benchmarks and checks use the same ones; never saved)"
+	var popup := menu.get_popup()
+	popup.add_item("Your site", 0)
+	popup.add_separator("Test scenarios")
+	var names := Scenarios.names()
+	for k in names.size():
+		popup.add_item(names[k], k + 1)
+		popup.set_item_tooltip(popup.get_item_index(k + 1), Scenarios.LIST[names[k]].about)
+	popup.id_pressed.connect(func(id: int) -> void: runner.load_site("" if id == 0 else names[id - 1]))
+	return menu
 
 
 func _view_controls() -> Control:

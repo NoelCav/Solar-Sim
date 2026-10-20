@@ -17,7 +17,7 @@ The goal is a codebase that stays easy to change as it grows: one way to do each
 | `sim/` | World state and physics, SI units (D5, D8), deterministic (D7), mutated only through commands (D6). `*.cs`: compiled hot loops behind a small API; GDScript orchestrates | `sim/`, `data/` | Reference `render/`, `ui/`, `scenes/`, `debug/` (checked) |
 | `render/` | Draws sim state. Display policy for light: `DisplayLight` (exposure, night, tint); beam tone: `BeamGeometry` | `sim/` (read only) | Mutate sim state |
 | `ui/` | Input → commands, panels, text. All value formatting through `Readout`; colors, sizes and widgets through `UiStyle` | `sim/` (read), `render/`, commands | Mutate sim state directly |
-| `debug/` | `SimProbe`: agent tooling. Extend it with every new system | Public APIs only | Reach into private members |
+| `debug/` | `SimProbe` (in the game and headless: `tools/probe.py`), `LightChecks`: agent tooling. Extend it with every new system, and add a command instead of writing a one-off script | Public APIs only | Reach into private members |
 | `tests/` | Headless checks (`run_tests.gd`) and the benchmark (`bench.gd`) | Public APIs | |
 | `data/` | Content as `.tres` (D11, D15) | | Hold logic |
 | `tools/` | Project scripts (`check.py`) | | |
@@ -42,7 +42,7 @@ The goal is a codebase that stays easy to change as it grows: one way to do each
 ```
 python tools/check.py           # gdlint + house rules
 python tools/test.py            # tests (re-registers new class_name scripts first)
-python tools/test.py --bench    # also the benchmark, if it touches light, heat or meshes
+python tools/test.py --bench    # also the benchmark and bug sweep, if it touches the sim or meshes
 ```
 
-Every new system brings: SimProbe commands to read it, tests for its physics, and a note in the design doc (§18 pass notes, decisions in §3). Keep each file's existing line endings (mixed endings are flagged).
+Every new system brings: SimProbe commands to read it, tests for its physics, a scenario (or a part of one) that exercises it in the benchmark with checks of its invariants, and a note in the design doc (§18 pass notes, decisions in §3). Keep each file's existing line endings (mixed endings are flagged).

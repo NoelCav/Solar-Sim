@@ -1,18 +1,30 @@
 extends Node
-## Agent tools for the running game, called through the Godot MCP's game_eval, e.g.
-## `return SimProbe.run("state", {})` or `return SimProbe.run("help", {})`.
-## Answers with plain dictionaries of sim state; action commands go through the world's
-## command queue like player input (D6). Positions are meters (x right, y down), angles degrees.
+## Agent tools that read and drive the sim. Two ways in:
+## - The running game, through the Godot MCP's game_eval: `return SimProbe.run("state", {})`
+##   (an autoload; it finds Main's world). Action commands queue like player input (D6) and apply
+##   on the next tick.
+## - Headless, on a test scenario or the saved site: `python tools/probe.py <scenario|site>
+##   [--hour H] cmd 'cmd {json args}' …` (debug/probe_cli.gd). Commands apply at once there; the
+##   game-only ones (GAME_ONLY: view, camera, pause…) say so.
+## Answers are plain dictionaries. Positions are meters (x right, y down), angles degrees.
+## Extend it with every new system, so behaviour can be checked by numbers, not screenshots.
 
 const ASCII := " .:-=+*#%@"
 ## Commands: name -> arguments and what it returns (`help` lists them). Each is handled by
 ## `_cmd_<name>(args)`.
 const COMMANDS := {
 	"state": "time, sun, moon (phase, lit), traced light, ambient, speed/pause, view, light and heat stats",
+	"scenarios": "the test scenarios (Scenarios.LIST): name, start hour, what each is for",
 	"objects": "all placed objects: id, key, kind, position, angle, absorbed W, probe reading and spectrum "
 		+ "(W/m² per bin, UV..IR)",
 	"defs": "object definitions that can be placed (keys)",
 	"object": "{id}: one object with its bounds",
+	"analyze": "{id}: a cell's full breakdown now (SolarCell.analyze): power, each loss, power per bin, rated",
+	"retrace": "{fresh: true}: trace the light now and publish it (fresh: reuse nothing, as after a full pass)",
+	"truth": "{spacing: 0.005, x0, x1, top: 10}: ground truth: plain rays vs the beam pass, tile by tile (LightChecks)",
+	"steady": "{steps: 8}: step the sun 0.1° at a time; biggest jump and kink of a tile's light (popping)",
+	"symmetry": "{about}: light either side of the tile column at `about` m from the middle (flat ground, "
+		+ "light straight down)",
 	"tile": "{x, y} meters (or {tx, ty} tiles): material, temperature, absorbed light, and per skinned face "
 		+ "(top/bottom/left/right) its surface strips' temperature (°C) and arriving light (W/m²)",
 	"region": "{x0, y0, x1, y1, layer: light|heat|material|wire, cols?: 60}: ASCII map plus summary",
@@ -23,7 +35,9 @@ const COMMANDS := {
 	"move": "{id, x, y}",
 	"rotate": "{id, angle} absolute or {id, by}",
 	"remove": "{id}",
-	"site": "{op: save|reset}: save the site now (it autosaves every 5 s), or forget it and start fresh",
+	"site": "{op: save|reset|scenario|load, name}: save the player's site now (it autosaves every 5 s), "
+		+ "forget it and start fresh, show test scenario `name` (Scenarios.LIST; never saved), or go back to "
+		+ "the player's site",
 	"power": "money, grid price, and each wire network: tiles, grid connection, W sold, cells on it",
 	"wire": "{x0, y0, x1, y1, remove: false}: lay (or remove) wire along an L from (x0, y0) across, then "
 		+ "down/up to (x1, y1)",
@@ -33,7 +47,7 @@ const COMMANDS := {
 	"view": "{name: Normal|Light|Heat}",
 	"wavelength": "{bin: -1..5}",
 	"camera": "{x, y, zoom}: centre the view on a point (for screenshots)",
-	"step": "{n: 1}: pause, then advance exactly n sim ticks (light passes run within ticks)",
+	"step": "{n: 1}: pause (in the game), then advance exactly n sim ticks (light passes run within ticks)",
 	"fan": "{x0, y0, x1, y1 start line, n: 400, sun_offset_deg: 0, bin: 2, box: [bx0, by0, bx1, by1], "
 		+ "hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the traced "
 		+ "light (rotated by sun_offset_deg) from the start line; histogram of directions of legs "
@@ -45,16 +59,31 @@ const COMMANDS := {
 		+ "sorted by peak C",
 }
 
+## Commands that need the running game (its view, camera, clock control or saved site).
+const GAME_ONLY := ["pause", "speed", "view", "wavelength", "camera", "site"]
+
+var world: SimWorld              ## The world the commands read and drive
+var object_db: ObjectDB
+var headless := false            ## Set by probe_cli: world and object_db are given, no game
+
 var _main: Main
 
 
 func run(cmd: String, a: Dictionary = {}) -> Dictionary:
-	_main = get_tree().current_scene as Main
-	if _main == null or _main.world == null:
-		return {"error": "game not ready"}
+	if not headless:
+		_main = get_tree().current_scene as Main
+		if _main == null or _main.world == null:
+			return {"error": "game not ready"}
+		world = _main.world
+		object_db = _main.object_db
 	if cmd != "help" and not COMMANDS.has(cmd):
 		return {"error": "unknown cmd '%s'; try help" % cmd}
-	return call("_cmd_" + cmd, a)
+	if headless and cmd in GAME_ONLY:
+		return {"error": "'%s' needs the running game" % cmd}
+	var out: Dictionary = call("_cmd_" + cmd, a)
+	if headless:
+		world.flush_commands()   # No ticks between commands here: apply edits at once
+	return out
 
 
 func _cmd_help(_a: Dictionary) -> Dictionary:
@@ -62,14 +91,13 @@ func _cmd_help(_a: Dictionary) -> Dictionary:
 
 
 func _cmd_state(_a: Dictionary) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var light: LightSystem = w.get_system(&"light")
 	var heat: ThermalSystem = w.get_system(&"heat")
 	var tod := w.time_of_day() * 24.0
-	return {
+	var out := {
+		"scenario": Main.scenario if _main != null else "(headless)",
 		"day": w.day_number() + 1, "hour": snappedf(tod, 0.01), "time_s": snappedf(w.time_s, 0.01),
-		"paused": _main.paused, "speed": _main.speed, "view": ViewMode.NAMES[_main.view],
-		"wavelength": _main.wavelength,
 		"sun": {"up": w.sun_is_up, "elevation_deg": snappedf(rad_to_deg(w.sun_elevation), 0.1),
 			"direction": _v(w.sun_direction), "dni_w_m2": snappedf(w.sun_dni, 0.1)},
 		"moon": {"up": w.moon_is_up, "elevation_deg": snappedf(rad_to_deg(w.moon_elevation), 0.1),
@@ -81,13 +109,17 @@ func _cmd_state(_a: Dictionary) -> Dictionary:
 		"objects": w.objects.size(),
 		"light": _round_dict(light.stats).merged({"last_pass_ms": snappedf(light.last_trace_ms, 0.01)}),
 		"heat_ms": snappedf(heat.last_step_ms, 0.01),
-		"fps": Engine.get_frames_per_second(), "sim_ms_per_frame": snappedf(_main.sim_ms, 0.01),
 	}
+	if _main != null:
+		out.merge({"paused": _main.paused, "speed": _main.speed, "view": ViewMode.NAMES[_main.view],
+			"wavelength": _main.wavelength, "fps": Engine.get_frames_per_second(),
+			"sim_ms_per_frame": snappedf(_main.sim_ms, 0.01)})
+	return out
 
 
 func _cmd_objects(_a: Dictionary) -> Dictionary:
 	var out := []
-	for obj: SimObject in _main.world.objects.values():
+	for obj: SimObject in world.objects.values():
 		out.append(_object_info(obj))
 	return {"objects": out}
 
@@ -103,25 +135,25 @@ func _object_info(obj: SimObject) -> Dictionary:
 		d["probe_w_m2"] = obj.incident_irradiance()
 		d["spectrum_w_m2"] = Array(obj.incident_spectrum())
 	if obj.def.kind == ObjectDef.Kind.CELL:
-		var light: LightSystem = _main.world.get_system(&"light")
-		d["front_w_m2"] = snappedf(obj.incident_irradiance() * light.power_scale(_main.world), 0.01)
-		d["could_make_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(_main.world)), 0.001)
+		var light: LightSystem = world.get_system(&"light")
+		d["front_w_m2"] = snappedf(obj.incident_irradiance() * light.power_scale(world), 0.01)
+		d["could_make_w"] = snappedf(SolarCell.object_power(obj, light.power_scale(world)), 0.001)
 		d["delivering_w"] = snappedf(obj.power_w, 0.001)
-		d["front_direct_w_m2"] = snappedf(Spectrum.total(obj.incident_direct) * light.power_scale(_main.world)
+		d["front_direct_w_m2"] = snappedf(Spectrum.total(obj.incident_direct) * light.power_scale(world)
 			/ (obj.def.face_area_m2()), 0.01)
 	return d
 
 
 func _cmd_defs(_a: Dictionary) -> Dictionary:
 	var out := []
-	for def: ObjectDef in _main.object_db.defs:
+	for def: ObjectDef in object_db.defs:
 		out.append({"key": str(def.key), "name": def.display_name, "kind": ObjectDef.Kind.keys()[def.kind],
 			"size_m": def.size_m})
 	return {"defs": out}
 
 
 func _cmd_object(a: Dictionary) -> Dictionary:
-	var obj: SimObject = _main.world.objects.get(int(a.get("id", -1)))
+	var obj: SimObject = world.objects.get(int(a.get("id", -1)))
 	if obj == null:
 		return {"error": "no object %s" % a.get("id")}
 	var d := _object_info(obj)
@@ -144,14 +176,14 @@ func _cell(a: Dictionary) -> Vector2i:
 
 func _cmd_tile(a: Dictionary) -> Dictionary:
 	var c := _cell(a)
-	var g := _main.world.grid
+	var g := world.grid
 	if not g.in_bounds(c.x, c.y):
 		return {"error": "out of bounds"}
 	return _tile_info(g.idx(c.x, c.y))
 
 
 func _tile_info(i: int) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var g := w.grid
 	var light: LightSystem = w.get_system(&"light")
 	var def := w.materials.get_def(g.material[i])
@@ -187,7 +219,7 @@ func _tile_info(i: int) -> Dictionary:
 
 ## An ASCII map of a region (log-scaled for light and heat) and a summary.
 func _cmd_region(a: Dictionary) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var g := w.grid
 	var light: LightSystem = w.get_system(&"light")
 	var layer := str(a.get("layer", "light"))
@@ -247,7 +279,7 @@ func _cmd_region(a: Dictionary) -> Dictionary:
 
 
 func _cmd_peaks(a: Dictionary) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var g := w.grid
 	var light: LightSystem = w.get_system(&"light")
 	var n := clampi(int(a.get("n", 10)), 1, 100)
@@ -270,7 +302,7 @@ func _cmd_peaks(a: Dictionary) -> Dictionary:
 ## One test ray through the current geometry on the preview pass (the sim's own passes are
 ## untouched).
 func _cmd_trace(a: Dictionary) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var light: LightSystem = w.get_system(&"light")
 	var dir := Vector2(float(a.get("dx", 0)), float(a.get("dy", 1)))
 	if a.has("angle"):
@@ -292,40 +324,40 @@ func _cmd_trace(a: Dictionary) -> Dictionary:
 			"power": snappedf(pw[k * Spectrum.BIN_COUNT + bin], 0.0001),
 			"angle_deg": snappedf(rad_to_deg((to[k] - from[k]).angle()), 0.01)})
 	var s: Dictionary = e.Stats()
-	_main.invalidate_preview()
+	_invalidate_preview()
 	return {"segments": segs, "absorbed": snappedf(s.absorbed, 0.0001), "escaped": snappedf(s.escaped, 0.0001),
 		"scattered": snappedf(s.scattered, 0.0001), "culled": snappedf(s.culled, 0.0001)}
 
 
 func _cmd_place(a: Dictionary) -> Dictionary:
-	var def := _main.object_db.get_by_key(StringName(str(a.get("key", ""))))
+	var def := object_db.get_by_key(StringName(str(a.get("key", ""))))
 	if def == null:
 		return {"error": "no def '%s'; see defs" % a.get("key")}
-	_main.world.enqueue(PlaceObjectCommand.new(def, Vector2(float(a.get("x", 0)), float(a.get("y", 0))),
+	world.enqueue(PlaceObjectCommand.new(def, Vector2(float(a.get("x", 0)), float(a.get("y", 0))),
 		deg_to_rad(float(a.get("angle", 0))), not bool(a.get("free", false))))
 	return {"ok": true, "queued": "applies on the next tick (see objects; refused if occupied or no ground)"}
 
 
 func _cmd_move(a: Dictionary) -> Dictionary:
-	var obj: SimObject = _main.world.objects.get(int(a.get("id", -1)))
+	var obj: SimObject = world.objects.get(int(a.get("id", -1)))
 	if obj == null:
 		return {"error": "no object"}
-	_main.world.enqueue(TransformObjectCommand.new(obj.id,
+	world.enqueue(TransformObjectCommand.new(obj.id,
 		Vector2(float(a.get("x", obj.position.x)), float(a.get("y", obj.position.y))), obj.angle))
 	return {"ok": true}
 
 
 func _cmd_rotate(a: Dictionary) -> Dictionary:
-	var obj: SimObject = _main.world.objects.get(int(a.get("id", -1)))
+	var obj: SimObject = world.objects.get(int(a.get("id", -1)))
 	if obj == null:
 		return {"error": "no object"}
 	var angle := deg_to_rad(float(a.angle)) if a.has("angle") else obj.angle + deg_to_rad(float(a.get("by", 0)))
-	_main.world.enqueue(TransformObjectCommand.new(obj.id, obj.position, angle))
+	world.enqueue(TransformObjectCommand.new(obj.id, obj.position, angle))
 	return {"ok": true}
 
 
 func _cmd_wire(a: Dictionary) -> Dictionary:
-	var g := _main.world.grid
+	var g := world.grid
 	var c0 := _cell({"x": a.get("x0", 0), "y": a.get("y0", 0)})
 	var c1 := _cell({"x": a.get("x1", 0), "y": a.get("y1", 0)})
 	var cells := PackedInt32Array()
@@ -335,12 +367,12 @@ func _cmd_wire(a: Dictionary) -> Dictionary:
 	for y in range(mini(c0.y, c1.y), maxi(c0.y, c1.y) + 1):
 		if g.in_bounds(c1.x, y):
 			cells.append(g.idx(c1.x, y))
-	_main.world.enqueue(PaintWiresCommand.new(cells, 0 if bool(a.get("remove", false)) else 1))
+	world.enqueue(PaintWiresCommand.new(cells, 0 if bool(a.get("remove", false)) else 1))
 	return {"ok": true, "tiles": cells.size()}
 
 
 func _cmd_power(_a: Dictionary) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var power: PowerSystem = w.get_system(&"power")
 	power.networks.sync(w.grid, w.grid.wire)
 	var nets := []
@@ -363,16 +395,25 @@ func _cmd_site(a: Dictionary) -> Dictionary:
 		"reset":
 			_main.reset_site.call_deferred()
 			return {"ok": true, "note": "fresh site on the next frame"}
-	return {"error": "op is save or reset"}
+		"scenario":
+			var name := str(a.get("name", ""))
+			if not Scenarios.LIST.has(name):
+				return {"error": "name is one of %s" % ", ".join(Scenarios.names())}
+			_main.load_site.call_deferred(name)
+			return {"ok": true, "note": "scenario '%s' on the next frame (call state again first)" % name}
+		"load":
+			_main.load_site.call_deferred("")
+			return {"ok": true, "note": "the player's site on the next frame"}
+	return {"error": "op is save, reset, scenario or load"}
 
 
 func _cmd_remove(a: Dictionary) -> Dictionary:
-	_main.world.enqueue(RemoveObjectCommand.new(int(a.get("id", -1))))
+	world.enqueue(RemoveObjectCommand.new(int(a.get("id", -1))))
 	return {"ok": true}
 
 
 func _cmd_time(a: Dictionary) -> Dictionary:
-	_main.set_hour(float(a.get("hour", 12)))
+	world.enqueue(SetTimeCommand.at_hour(world, float(a.get("hour", 12))))
 	return {"ok": true}
 
 
@@ -412,9 +453,9 @@ func _cmd_camera(a: Dictionary) -> Dictionary:
 
 
 func _cmd_step(a: Dictionary) -> Dictionary:
-	if not _main.paused:
+	if _main != null and not _main.paused:
 		_main.toggle_pause()
-	var w := _main.world
+	var w := world
 	var light: LightSystem = w.get_system(&"light")
 	var before := light.trace_version
 	for k in clampi(int(a.get("n", 1)), 1, 2000):
@@ -425,7 +466,7 @@ func _cmd_step(a: Dictionary) -> Dictionary:
 
 
 func _cmd_fan(a: Dictionary) -> Dictionary:
-	var w := _main.world
+	var w := world
 	var light: LightSystem = w.get_system(&"light")
 	var dir := w.light_direction.rotated(deg_to_rad(float(a.get("sun_offset_deg", 0))))
 	var p0 := Vector2(float(a.get("x0", 0)), float(a.get("y0", 0)))
@@ -460,7 +501,7 @@ func _cmd_fan(a: Dictionary) -> Dictionary:
 	for key in keys:
 		if hist[key] > 0.002:
 			rows.append([key, snappedf(hist[key], 0.0001)])
-	_main.invalidate_preview()
+	_invalidate_preview()
 	return {"sun_dir_deg": snappedf(rad_to_deg(dir.angle()), 0.001), "leaving_box_w": snappedf(out_w, 0.0001),
 		"histogram_deg_w": rows}
 
@@ -468,7 +509,7 @@ func _cmd_fan(a: Dictionary) -> Dictionary:
 ## Beam records (BeamGeometry layout) touching a box: how many, their power and a coarse
 ## fingerprint (sum of record points), to see whether consecutive passes changed shape.
 func _cmd_beams(a: Dictionary) -> Dictionary:
-	var light: LightSystem = _main.world.get_system(&"light")
+	var light: LightSystem = world.get_system(&"light")
 	var box := Rect2(Vector2(float(a.get("x0", 0)), float(a.get("y0", 0))), Vector2.ZERO)
 	box = box.expand(Vector2(float(a.get("x1", 1e9)), float(a.get("y1", 1e9))))
 	var buf := light.beam_render
@@ -509,7 +550,7 @@ func _cmd_beams(a: Dictionary) -> Dictionary:
 
 
 func _cmd_strips(a: Dictionary) -> Dictionary:
-	var light: LightSystem = _main.world.get_system(&"light")
+	var light: LightSystem = world.get_system(&"light")
 	var box := Rect2(Vector2(float(a.get("x0", 0)), float(a.get("y0", 0))), Vector2.ZERO)
 	box = box.expand(Vector2(float(a.get("x1", 1e9)), float(a.get("y1", 1e9))))
 	var want := int(a.get("bin", 2))
@@ -560,6 +601,60 @@ func _cmd_strips(a: Dictionary) -> Dictionary:
 			"peak_C": snappedf(peak, 0.01), "legs": legs})
 	out.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return x.peak_C > y.peak_C)
 	return {"count": out.size(), "records": out.slice(0, int(a.get("max", 40)))}
+
+
+func _cmd_scenarios(_a: Dictionary) -> Dictionary:
+	var out := []
+	for name: String in Scenarios.names():
+		var e: Dictionary = Scenarios.LIST[name]
+		out.append({"name": name, "start_hour": e.hour, "bench_hours": e.bench, "about": e.about})
+	return {"scenarios": out}
+
+
+func _cmd_analyze(a: Dictionary) -> Dictionary:
+	var obj: SimObject = world.objects.get(int(a.get("id", -1)))
+	if obj == null or obj.def.kind != ObjectDef.Kind.CELL:
+		return {"error": "id must be a cell (see objects)"}
+	var light: LightSystem = world.get_system(&"light")
+	var out := _round_dict(SolarCell.object_analysis(obj, light.power_scale(world)))
+	out["power_bin_w"] = Array(SolarCell.object_analysis(obj, light.power_scale(world)).power_bin_w)
+	out["rated_w"] = snappedf(SolarCell.rated_power(obj.def), 0.001)
+	out["rated_efficiency"] = snappedf(SolarCell.rated_efficiency(obj.def), 0.0001)
+	out["temp_c"] = snappedf(SimConst.k_to_c(SolarCell.object_temperature(obj)), 0.01)
+	out["arriving_w"] = snappedf(Spectrum.total(SolarCell.object_light(obj, light.power_scale(world))), 0.001)
+	out["direct_w"] = snappedf(Spectrum.total(SolarCell.object_light(obj, light.power_scale(world), true)), 0.001)
+	return out
+
+
+func _cmd_retrace(a: Dictionary) -> Dictionary:
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world, bool(a.get("fresh", true)))
+	_invalidate_preview()
+	return {"version": light.trace_version, "pass_ms": snappedf(light.last_trace_ms, 0.01),
+		"stats": _round_dict(light.stats)}
+
+
+func _cmd_truth(a: Dictionary) -> Dictionary:
+	var out := LightChecks.ground_truth(world, float(a.get("spacing", 0.005)), float(a.get("x0", 0.0)),
+		float(a.get("x1", INF)), int(a.get("top", 10)))
+	_invalidate_preview()
+	return out
+
+
+func _cmd_steady(a: Dictionary) -> Dictionary:
+	var out := LightChecks.steady(world, clampi(int(a.get("steps", 8)), 2, 100))
+	_invalidate_preview()
+	return out
+
+
+func _cmd_symmetry(a: Dictionary) -> Dictionary:
+	return LightChecks.symmetry(world, float(a.get("about", 0.0)), int(a.get("half_width", 8)))
+
+
+## The game shows a fresh preview next frame after a command used the preview engine.
+func _invalidate_preview() -> void:
+	if _main != null:
+		_main.invalidate_preview()
 
 
 static func _v(p: Vector2) -> Array:

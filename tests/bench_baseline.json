@@ -1,0 +1,691 @@
+{
+	"engine": "4.7.2-stable (official)",
+	"recorded": "2026-10-20T00:35:44",
+	"results": {
+		"demo": {
+			"a": {
+				"replay_worst_w": 0.0
+			},
+			"f": {
+				"state_hash": 219105876.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 18
+			}
+		},
+		"demo@09:00": {
+			"a": {
+				"steady_kink": 0.136688159670475,
+				"truth_l1": 0.0148265498455692
+			},
+			"f": {
+				"absorbed_w": 10971.3064230131,
+				"cell_max_k": 314.465168820911,
+				"emitted_w": 16446.5131015301,
+				"light_strips": 10715.6110290214,
+				"light_tiles": 500760.45895122,
+				"money": 0.00112402128254006,
+				"object_absorbed_w": 255.69556877249,
+				"object_incident_w": 144.055117338896,
+				"object_max_k": 314.465168820911,
+				"peak_concentration": 0.257300742030144,
+				"skin_max_k": 373.846130371094,
+				"sold_w": 33.3422878654383,
+				"tile_max_k": 313.108154296875,
+				"tile_mean_k": 292.520318205092,
+				"truth_ratio": 1.00090171543455
+			},
+			"t": {
+				"beams_ms": 3.441,
+				"direct_ms": 2.353,
+				"drag_tick_ms": 7.67276666666667,
+				"drag_worst_ms": 10.23,
+				"heat_band_ms": 0.209993333333334,
+				"map_ms": 0.565,
+				"mesh_ms": 1.995,
+				"pass_ms": 6.397,
+				"skin_ms": 0.20819,
+				"tick_ms": 2.07821334441503,
+				"tick_p95_ms": 7.95300006866455,
+				"tick_worst_ms": 9.16300010681152
+			},
+			"w": {
+				"beam_floats": 15712,
+				"cache_misses": 513,
+				"drag_passes": 60,
+				"heat_subcycles": 300,
+				"lanes": 3713,
+				"lit_strips": 3328,
+				"lit_tiles": 319,
+				"mesh_vertices": 39474,
+				"passes": 67,
+				"paths": 958,
+				"secondary_rays": 373,
+				"skin_faces": 350,
+				"truth_ray_paths": 25584
+			}
+		},
+		"demo@12:00": {
+			"a": {
+				"steady_kink": 0.0403579852848132,
+				"truth_l1": 0.00801103569616623
+			},
+			"f": {
+				"absorbed_w": 15219.324939038,
+				"cell_max_k": 325.118499089542,
+				"emitted_w": 18163.569688797,
+				"light_strips": 14758.312007291,
+				"light_tiles": 690080.255435094,
+				"money": 0.000696214114943044,
+				"object_absorbed_w": 461.012336846056,
+				"object_incident_w": 397.24180752039,
+				"object_max_k": 325.118499089542,
+				"peak_concentration": 0.967204189300537,
+				"skin_max_k": 660.899963378906,
+				"sold_w": 43.4147897459728,
+				"tile_max_k": 307.861724853516,
+				"tile_mean_k": 294.024195025974,
+				"truth_ratio": 1.00051726139554
+			},
+			"t": {
+				"beams_ms": 1.737,
+				"direct_ms": 1.891,
+				"drag_tick_ms": 9.93918333333333,
+				"drag_worst_ms": 15.752,
+				"heat_band_ms": 0.22125,
+				"map_ms": 0.579,
+				"mesh_ms": 1.509,
+				"pass_ms": 4.236,
+				"skin_ms": 0.223103333333333,
+				"tick_ms": 1.93523667216301,
+				"tick_p95_ms": 6.40100002288818,
+				"tick_worst_ms": 8.57400035858154
+			},
+			"w": {
+				"beam_floats": 10023,
+				"cache_misses": 359,
+				"drag_passes": 47,
+				"heat_subcycles": 300,
+				"lanes": 3750,
+				"lit_strips": 2858,
+				"lit_tiles": 292,
+				"mesh_vertices": 28032,
+				"passes": 63,
+				"paths": 1003,
+				"secondary_rays": 471,
+				"skin_faces": 350,
+				"truth_ray_paths": 24863
+			}
+		},
+		"dug_terrain": {
+			"a": {
+				"replay_worst_w": 0.0679359436035156
+			},
+			"f": {
+				"state_hash": 945638477.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 22
+			}
+		},
+		"dug_terrain@09:00": {
+			"a": {
+				"steady_kink": 0.119796846163014,
+				"truth_l1": 0.0251458704393148
+			},
+			"f": {
+				"absorbed_w": 10785.2024674761,
+				"emitted_w": 16446.5131015301,
+				"light_strips": 10305.9601973764,
+				"light_tiles": 475498.851353501,
+				"money": 0.0,
+				"object_absorbed_w": 479.242395940725,
+				"object_incident_w": 0.0,
+				"object_max_k": 294.367442669556,
+				"skin_max_k": 344.401702880859,
+				"tile_max_k": 311.109161376953,
+				"tile_mean_k": 292.532810316298,
+				"truth_ratio": 1.00238878695591
+			},
+			"t": {
+				"beams_ms": 16.346,
+				"direct_ms": 3.199,
+				"drag_tick_ms": 13.5368833333333,
+				"drag_worst_ms": 17.578,
+				"heat_band_ms": 0.25865,
+				"map_ms": 1.354,
+				"mesh_ms": 8.511,
+				"pass_ms": 21.021,
+				"skin_ms": 0.513053333333333,
+				"tick_ms": 6.46496666967869,
+				"tick_p95_ms": 12.2530002593994,
+				"tick_worst_ms": 30.4360008239746
+			},
+			"w": {
+				"beam_floats": 63762,
+				"cache_misses": 642,
+				"drag_passes": 30,
+				"heat_subcycles": 300,
+				"lanes": 3713,
+				"lit_strips": 3713,
+				"lit_tiles": 356,
+				"mesh_vertices": 158328,
+				"passes": 66,
+				"paths": 3023,
+				"secondary_rays": 1001,
+				"skin_faces": 668,
+				"truth_ray_paths": 40946
+			}
+		},
+		"edge_optics": {
+			"a": {
+				"replay_worst_w": 0.0000209808349609375,
+				"symmetry": 0.0299999576961465
+			},
+			"f": {
+				"state_hash": 236266805.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 58
+			}
+		},
+		"edge_optics@09:00": {
+			"a": {
+				"steady_kink": 0.155248734283387,
+				"truth_l1": 0.0211083098207504
+			},
+			"f": {
+				"absorbed_w": 9413.02194468638,
+				"emitted_w": 16446.5131015301,
+				"light_strips": 8529.27644295116,
+				"light_tiles": 452732.235516871,
+				"money": 0.0,
+				"object_absorbed_w": 490.893243628919,
+				"object_incident_w": 75.5182588100433,
+				"object_max_k": 298.035854782298,
+				"skin_max_k": 334.730529785156,
+				"tile_max_k": 308.314758300781,
+				"tile_mean_k": 292.457385520087,
+				"truth_ratio": 1.00195815159341
+			},
+			"t": {
+				"beams_ms": 11.708,
+				"direct_ms": 2.775,
+				"drag_tick_ms": 12.1542333333333,
+				"drag_worst_ms": 16.403,
+				"heat_band_ms": 0.255893333333333,
+				"map_ms": 1.102,
+				"mesh_ms": 5.751,
+				"pass_ms": 15.674,
+				"skin_ms": 0.30626,
+				"tick_ms": 5.70976000547409,
+				"tick_p95_ms": 11.6379995346069,
+				"tick_worst_ms": 26.1359996795654
+			},
+			"w": {
+				"beam_floats": 40734,
+				"cache_misses": 613,
+				"drag_passes": 30,
+				"heat_subcycles": 300,
+				"lanes": 3713,
+				"lit_strips": 3419,
+				"lit_tiles": 391,
+				"mesh_vertices": 85626,
+				"passes": 66,
+				"paths": 3027,
+				"secondary_rays": 1478,
+				"skin_faces": 342,
+				"truth_ray_paths": 45542
+			}
+		},
+		"edge_optics@12:00": {
+			"a": {
+				"steady_kink": 0.239922823635547,
+				"truth_l1": 0.0137231802785264
+			},
+			"f": {
+				"absorbed_w": 12947.6374165702,
+				"emitted_w": 18163.569688797,
+				"light_strips": 11908.1383877608,
+				"light_tiles": 610341.019995466,
+				"money": 0.0,
+				"object_absorbed_w": 519.852646803824,
+				"object_incident_w": 166.265078723431,
+				"object_max_k": 301.851118108947,
+				"skin_max_k": 361.211029052734,
+				"tile_max_k": 305.52734375,
+				"tile_mean_k": 293.935045688205,
+				"truth_ratio": 1.0011554576932
+			},
+			"t": {
+				"beams_ms": 7.362,
+				"direct_ms": 2.814,
+				"drag_tick_ms": 11.3976,
+				"drag_worst_ms": 13.884,
+				"heat_band_ms": 0.27847,
+				"map_ms": 1.111,
+				"mesh_ms": 5.425,
+				"pass_ms": 11.37,
+				"skin_ms": 0.329446666666667,
+				"tick_ms": 4.3734700024128,
+				"tick_p95_ms": 9.08300018310547,
+				"tick_worst_ms": 18.9950008392334
+			},
+			"w": {
+				"beam_floats": 26024,
+				"cache_misses": 348,
+				"drag_passes": 30,
+				"heat_subcycles": 300,
+				"lanes": 3750,
+				"lit_strips": 2887,
+				"lit_tiles": 352,
+				"mesh_vertices": 67500,
+				"passes": 63,
+				"paths": 3135,
+				"secondary_rays": 1987,
+				"skin_faces": 342,
+				"truth_ray_paths": 44377
+			}
+		},
+		"lens_field": {
+			"a": {
+				"replay_worst_w": 0.0255889892578125
+			},
+			"f": {
+				"state_hash": 687333073.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 96
+			}
+		},
+		"lens_field@09:00": {
+			"a": {
+				"steady_kink": 0.0808580757098075,
+				"truth_l1": 0.0379483768012902
+			},
+			"f": {
+				"absorbed_w": 10909.4254457519,
+				"emitted_w": 16446.5131015301,
+				"light_strips": 9096.31991154549,
+				"light_tiles": 420889.065446987,
+				"money": 0.0,
+				"object_absorbed_w": 1813.10565210637,
+				"object_incident_w": 0.0,
+				"object_max_k": 294.371225241151,
+				"skin_max_k": 357.934814453125,
+				"tile_max_k": 313.255554199219,
+				"tile_mean_k": 292.505974205865,
+				"truth_ratio": 1.00890992547638
+			},
+			"t": {
+				"beams_ms": 50.805,
+				"direct_ms": 3.13,
+				"drag_tick_ms": 11.3001666666667,
+				"drag_worst_ms": 22.478,
+				"heat_band_ms": 0.241293333333333,
+				"map_ms": 2.451,
+				"mesh_ms": 25.042,
+				"pass_ms": 56.665,
+				"skin_ms": 0.341383333333334,
+				"tick_ms": 7.11279333015283,
+				"tick_p95_ms": 13.0600004196167,
+				"tick_worst_ms": 25.5440006256104
+			},
+			"w": {
+				"beam_floats": 182507,
+				"cache_misses": 1378,
+				"drag_passes": 14,
+				"heat_subcycles": 300,
+				"lanes": 3713,
+				"lit_strips": 3460,
+				"lit_tiles": 331,
+				"mesh_vertices": 447258,
+				"passes": 25,
+				"paths": 10641,
+				"secondary_rays": 5076,
+				"skin_faces": 350,
+				"truth_ray_paths": 98086
+			}
+		},
+		"lens_field@12:00": {
+			"a": {
+				"steady_kink": 0.1310469656987,
+				"truth_l1": 0.0225336647248425
+			},
+			"f": {
+				"absorbed_w": 15263.2727476664,
+				"emitted_w": 18163.569688797,
+				"light_strips": 13451.0182579462,
+				"light_tiles": 637279.122236252,
+				"money": 0.0,
+				"object_absorbed_w": 1812.25415006769,
+				"object_incident_w": 0.0,
+				"object_max_k": 294.620322824845,
+				"skin_max_k": 362.803924560547,
+				"tile_max_k": 308.694274902344,
+				"tile_mean_k": 294.011496660021,
+				"truth_ratio": 1.00109942081247
+			},
+			"t": {
+				"beams_ms": 18.126,
+				"direct_ms": 2.651,
+				"drag_tick_ms": 8.79808333333333,
+				"drag_worst_ms": 17.714,
+				"heat_band_ms": 0.233736666666667,
+				"map_ms": 1.716,
+				"mesh_ms": 15.547,
+				"pass_ms": 22.664,
+				"skin_ms": 0.30064,
+				"tick_ms": 4.21398666401704,
+				"tick_p95_ms": 8.55000019073486,
+				"tick_worst_ms": 25.4750003814697
+			},
+			"w": {
+				"beam_floats": 47565,
+				"cache_misses": 142,
+				"drag_passes": 15,
+				"heat_subcycles": 300,
+				"lanes": 3750,
+				"lit_strips": 2995,
+				"lit_tiles": 300,
+				"mesh_vertices": 225600,
+				"passes": 32,
+				"paths": 8433,
+				"secondary_rays": 6030,
+				"skin_faces": 350,
+				"truth_ray_paths": 90360
+			}
+		},
+		"night": {
+			"a": {
+				"replay_worst_w": 0.0
+			},
+			"f": {
+				"state_hash": 368092402.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 14
+			}
+		},
+		"night@00:00": {
+			"a": {
+				"steady_kink": 0.0640123691963148,
+				"truth_l1": 0.00822021613058384
+			},
+			"f": {
+				"absorbed_w": 0.0312869540379146,
+				"cell_max_k": 290.085993514867,
+				"emitted_w": 0.0409774245183144,
+				"light_strips": 0.0303086624647104,
+				"light_tiles": 1.42943688549747,
+				"money": 0.00000000323439858431528,
+				"object_absorbed_w": 0.000978291400297743,
+				"object_incident_w": 0.000686042179665947,
+				"object_max_k": 292.809790043313,
+				"peak_concentration": 0.00000193188420962542,
+				"skin_max_k": 289.330200195313,
+				"sold_w": 0.0000649499896478331,
+				"tile_max_k": 291.123779296875,
+				"tile_mean_k": 290.628564652337,
+				"truth_ratio": 1.00037463608054
+			},
+			"t": {
+				"beams_ms": 2.974,
+				"direct_ms": 3.208,
+				"drag_tick_ms": 11.34355,
+				"drag_worst_ms": 16.014,
+				"heat_band_ms": 0.312183333333334,
+				"map_ms": 0.921,
+				"mesh_ms": 1.999,
+				"pass_ms": 7.142,
+				"skin_ms": 0.340416666666667,
+				"tick_ms": 2.79098999758561,
+				"tick_p95_ms": 11.7049999237061,
+				"tick_worst_ms": 21.0690002441406
+			},
+			"w": {
+				"beam_floats": 11487,
+				"cache_misses": 401,
+				"drag_passes": 60,
+				"heat_subcycles": 300,
+				"lanes": 4030,
+				"lit_strips": 3371,
+				"lit_tiles": 328,
+				"mesh_vertices": 29478,
+				"passes": 59,
+				"paths": 999,
+				"secondary_rays": 430,
+				"skin_faces": 350,
+				"truth_ray_paths": 24534
+			}
+		},
+		"optics_mix": {
+			"a": {
+				"replay_worst_w": 0.00002288818359375
+			},
+			"f": {
+				"state_hash": 411115366.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 24
+			}
+		},
+		"optics_mix@10:30": {
+			"a": {
+				"steady_kink": 0.191993426894338,
+				"truth_l1": 0.0128195013165647
+			},
+			"f": {
+				"absorbed_w": 14302.6101817073,
+				"emitted_w": 19243.6106872749,
+				"light_strips": 13631.2666985673,
+				"light_tiles": 655237.172978073,
+				"money": 0.0,
+				"object_absorbed_w": 243.401693213659,
+				"object_incident_w": 109.582332372665,
+				"object_max_k": 299.291834381635,
+				"skin_max_k": 530.401184082031,
+				"tile_max_k": 308.343719482422,
+				"tile_mean_k": 293.347325098673,
+				"truth_ratio": 1.00037783910858
+			},
+			"t": {
+				"beams_ms": 3.913,
+				"direct_ms": 3.119,
+				"drag_tick_ms": 9.40643333333333,
+				"drag_worst_ms": 18.999,
+				"heat_band_ms": 0.29318,
+				"map_ms": 1.011,
+				"mesh_ms": 2.259,
+				"pass_ms": 8.097,
+				"skin_ms": 0.31932,
+				"tick_ms": 3.17927000085513,
+				"tick_p95_ms": 9.2480001449585,
+				"tick_worst_ms": 16.6860008239746
+			},
+			"w": {
+				"beam_floats": 16910,
+				"cache_misses": 422,
+				"drag_passes": 48,
+				"heat_subcycles": 300,
+				"lanes": 4039,
+				"lit_strips": 3433,
+				"lit_tiles": 366,
+				"mesh_vertices": 33060,
+				"passes": 64,
+				"paths": 1403,
+				"secondary_rays": 548,
+				"skin_faces": 358,
+				"truth_ray_paths": 30143
+			}
+		},
+		"optics_mix@15:00": {
+			"a": {
+				"steady_kink": 0.25500389130166,
+				"truth_l1": 0.0132056512420472
+			},
+			"f": {
+				"absorbed_w": 10737.227741448,
+				"emitted_w": 16446.5131015301,
+				"light_strips": 10170.3291691474,
+				"light_tiles": 490759.794725098,
+				"money": 0.0,
+				"object_absorbed_w": 217.373172430594,
+				"object_incident_w": 75.8108403682709,
+				"object_max_k": 299.965173156862,
+				"skin_max_k": 358.058868408203,
+				"tile_max_k": 312.591522216797,
+				"tile_mean_k": 294.494019547357,
+				"truth_ratio": 1.00113003957828
+			},
+			"t": {
+				"beams_ms": 4.977,
+				"direct_ms": 2.821,
+				"drag_tick_ms": 9.75186666666666,
+				"drag_worst_ms": 19.122,
+				"heat_band_ms": 0.252713333333333,
+				"map_ms": 0.889,
+				"mesh_ms": 2.586,
+				"pass_ms": 8.743,
+				"skin_ms": 0.31568,
+				"tick_ms": 3.41718332181374,
+				"tick_p95_ms": 9.94299983978271,
+				"tick_worst_ms": 17.3169994354248
+			},
+			"w": {
+				"beam_floats": 19711,
+				"cache_misses": 488,
+				"drag_passes": 40,
+				"heat_subcycles": 300,
+				"lanes": 3713,
+				"lit_strips": 3275,
+				"lit_tiles": 353,
+				"mesh_vertices": 38940,
+				"passes": 66,
+				"paths": 1412,
+				"secondary_rays": 519,
+				"skin_faces": 358,
+				"truth_ray_paths": 33462
+			}
+		},
+		"power_farm": {
+			"a": {
+				"replay_worst_w": 0.0
+			},
+			"f": {
+				"state_hash": 356269160.0
+			},
+			"t": {},
+			"w": {
+				"replayed": 72
+			}
+		},
+		"power_farm@12:00": {
+			"a": {
+				"steady_kink": 0.151886031049306,
+				"truth_l1": 0.0101880187728201
+			},
+			"f": {
+				"absorbed_w": 15548.7558042613,
+				"cell_max_k": 332.101674892139,
+				"emitted_w": 18163.569688797,
+				"light_strips": 11952.5483547832,
+				"light_tiles": 523267.27766927,
+				"money": 0.00885931290271104,
+				"object_absorbed_w": 3596.20693238466,
+				"object_incident_w": 3686.58960029483,
+				"object_max_k": 332.101674892139,
+				"peak_concentration": 2.66101105260849,
+				"skin_max_k": 469.049468994141,
+				"sold_w": 489.177258978376,
+				"tile_max_k": 308.558227539063,
+				"tile_mean_k": 294.026551651849,
+				"truth_ratio": 1.00069904126424
+			},
+			"t": {
+				"beams_ms": 6.192,
+				"direct_ms": 3.198,
+				"drag_tick_ms": 10.4058833333333,
+				"drag_worst_ms": 12.898,
+				"heat_band_ms": 0.2666,
+				"map_ms": 1.04,
+				"mesh_ms": 4.195,
+				"pass_ms": 10.531,
+				"skin_ms": 0.332453333333333,
+				"tick_ms": 4.12600333869457,
+				"tick_p95_ms": 9.4370002746582,
+				"tick_worst_ms": 21.5540008544922
+			},
+			"w": {
+				"beam_floats": 30477,
+				"cache_misses": 183,
+				"drag_passes": 30,
+				"heat_subcycles": 300,
+				"lanes": 3750,
+				"lit_strips": 2452,
+				"lit_tiles": 262,
+				"mesh_vertices": 61818,
+				"passes": 63,
+				"paths": 2571,
+				"secondary_rays": 1176,
+				"skin_faces": 350,
+				"truth_ray_paths": 39261
+			}
+		},
+		"power_farm@17:30": {
+			"a": {
+				"steady_kink": 0.214977050812803
+			},
+			"f": {
+				"absorbed_w": 881.530668613214,
+				"cell_max_k": 296.179747235217,
+				"emitted_w": 2317.28841188908,
+				"light_strips": 793.188556342742,
+				"light_tiles": 41485.0502276198,
+				"money": 0.000408926923481858,
+				"object_absorbed_w": 88.3421159972055,
+				"object_incident_w": 75.2853454719444,
+				"object_max_k": 296.179747235217,
+				"peak_concentration": 0.0452017046064138,
+				"skin_max_k": 294.087615966797,
+				"sold_w": 0.0,
+				"tile_max_k": 295.792907714844,
+				"tile_mean_k": 293.882882658217
+			},
+			"t": {
+				"beams_ms": 5.249,
+				"direct_ms": 1.486,
+				"drag_tick_ms": 3.43813333333333,
+				"drag_worst_ms": 13.553,
+				"heat_band_ms": 0.3054,
+				"map_ms": 0.678,
+				"mesh_ms": 1.889,
+				"pass_ms": 7.489,
+				"skin_ms": 0.345246666666667,
+				"tick_ms": 3.05513667484125,
+				"tick_p95_ms": 8.98999977111816,
+				"tick_worst_ms": 16.7679996490479
+			},
+			"w": {
+				"beam_floats": 19990,
+				"cache_misses": 234,
+				"drag_passes": 53,
+				"heat_subcycles": 300,
+				"lanes": 1977,
+				"lit_strips": 1898,
+				"lit_tiles": 196,
+				"mesh_vertices": 33540,
+				"passes": 76,
+				"paths": 1280,
+				"secondary_rays": 512,
+				"skin_faces": 350
+			}
+		}
+	}
+}

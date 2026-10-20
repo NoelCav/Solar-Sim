@@ -29,6 +29,7 @@ var ambient_enabled := true
 var quiet_rows_enabled := true   ## Skip rows that exchange nothing (see above)
 
 var last_step_ms := 0.0         ## CPU time of the last band (or full step)
+var last_skin_ms := 0.0         ## CPU time of the last surface-skin solve
 var subcycles := 1
 var _max_rate := 0.0            ## max ΣG/C over tiles, 1/s
 
@@ -68,6 +69,7 @@ func step(world: SimWorld, h: float) -> void:
 
 ## Solves the surface skin for `h` seconds: its light becomes heat in the tiles around it.
 func step_skin(world: SimWorld, h: float) -> void:
+	var start := Time.get_ticks_usec()
 	var skin := world.skin
 	skin.sync(world)
 	if _capacity.is_empty():
@@ -82,6 +84,7 @@ func step_skin(world: SimWorld, h: float) -> void:
 	skin.temperature = out[0]
 	g.energy_in = out[1]
 	skin.face_energy_in = out[2]
+	last_skin_ms = (Time.get_ticks_usec() - start) / 1000.0
 
 
 ## One heat step of `h` seconds for the pairs owned by rows [row0, row1).

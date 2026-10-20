@@ -239,7 +239,7 @@ func test_no_stray_deposits_in_open_air() -> void:
 	WorldGen.generate(world)
 	var objects := ObjectDB.new()
 	objects.load_dir()
-	DemoRig.place(world, objects)
+	Scenarios.build(world, objects, "demo")
 	var light: LightSystem = world.get_system(&"light")
 	var g := world.grid
 	var stray := 0

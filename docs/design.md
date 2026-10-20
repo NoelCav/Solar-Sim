@@ -555,11 +555,23 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **Cohesion pass (2026-10-20):** removed the `object_id` tile layer (superseded by D20 outlines, and wrong where bounding boxes overlapped), unused scaffolding (`SimWorld.ticked`, `rng`, `SimSystem.enabled`, the flag enum, three `MaterialDB` tables nobody read); all renderers are scene nodes; the heat test reads the lens's real contact tiles (`ThermalSystem.object_contact_tiles`), and "no light lands in air" now holds everywhere.
 - **Known limits:** stands don't adapt when the ground under them is dug out; probe readings aren't rescaled between passes; wire has no resistance; cells get no diffuse light; objects only dim with the ambient, they aren't lit by the light reaching them (§6.8).
 
+### 18.13 Test scenarios, benchmark and bug sweep, headless probe (2026-10-20)
+
+- **Scenarios** (`Scenarios`, replacing `DemoRig`): named sites built deterministically through commands on fresh terrain; the benchmark and the game load the same ones (top bar Site menu, SimProbe `site`; never saved over the player's site): demo, lens_field, power_farm, optics_mix, night, dug_terrain, edge_optics (awkward optics on flat ground).
+- **Benchmark and bug sweep** (`tests/bench.gd`, `python tools/test.py --bench`): per scenario and hour, timings by stage (advisory), machine-independent work counts, fingerprints and checks (see README); once per scenario incremental = fresh, determinism, save round trip, probes block nothing, noon symmetry. Light is checked against independent references (`LightChecks`): dense plain rays (ground truth) and small sun steps (popping). Accuracy measures are ratcheted against `tests/bench_baseline.json`.
+- **SimProbe headless** (`tools/probe.py`, `debug/probe_cli.gd`): any command on a scenario or the saved site without the game; new commands `scenarios`, `analyze`, `retrace`, `truth`, `steady`, `symmetry`. `SetTimeCommand.at_hour` is the one home of "jump to an hour".
+- **Fixed by it:** saves dropped float precision (objects came back slightly moved; now full precision, `SiteSave.to_text`).
+- **Found, open (see §19):** light in water flickers (a spectral bin's deposit drops out of a surface tile as the sun moves); incremental passes replay pooled reflections an edit changed (≤ 0.2 % of a tile until the next full pass); beams spread ~2 % of a sharp focus into its neighbours, unevenly (3 % asymmetry under a symmetric lens).
+- **Learned:** crown glass absorbs ~25 % of what crosses a 24 cm lens (data 5–50× real BK7, presumably for visible lens heating); a fixed lens walks its focus ~16 cm in 15 s of game time (12-minute day), so concentrators need tracking or wide targets.
+
 ## 19. Open questions
 
 - Art direction: pixel art at 16 px (fits scale) vs. clean vector? Light rendering looks good either way.
 - Working title: *Bandgap*, *Heliolab*, *Photon Farm*, *Sunsink*…
 - Tuning: ray count/spacing, heat-capacity scale, dn/dT exaggeration.
 - Wind and weather depth.
+- **Light bugs from the bench (18.13):** water flicker (spectral-bin deposits in strongly absorbing tile media); incremental replay of changed pooled reflections; beam focus-edge spread and asymmetry.
+- **Glass absorption:** keep crown glass at 5–50× real absorption (lenses heat visibly, but a crown lens loses ~25 % of its light) or move nearer real values?
+- **Sun speed vs focus:** the 12-minute day moves a fixed focus ~1 cm/s: sun tracking (§6.5) becomes core for concentrators, or wider receivers.
 - ~~GDScript vs. C#/GDExtension port~~ — done in C# (§18.4).
 - ~~Thermal tuning~~ — solid/liquid heat capacity now scales with the day compression (DAY_LENGTH_S / 86400 ≈ 1/120), so ground warms and cools on a realistic daily cycle (dirt surface ~16 → 49 °C, subsurface lags by hours) and focal spots heat ~6× faster than before.

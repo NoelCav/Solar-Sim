@@ -35,9 +35,20 @@ Controls (the window opens maximized and the interface scales with it; every key
 | F1, or ? on the rail | Hide/show the help line |
 | Ctrl+Z, or the rail's undo | Undo |
 
-## Agent tools (inspect the running game)
+## Agent tools (inspect and drive the sim)
 
-`debug/sim_probe.gd` is an autoload (`SimProbe`) that answers questions about the live sim and sends commands without a mouse. Call it through the Godot MCP's `game_eval`:
+`debug/sim_probe.gd` (`SimProbe`) answers questions about the sim and sends commands without a mouse. Two ways in.
+
+Headless, on a test scenario or the saved site (no game window; commands apply at once, in order, on one world):
+
+```bash
+python tools/probe.py power_farm --hour 12 state objects 'analyze {"id": 20}'
+python tools/probe.py edge_optics 'truth {"x0": 10, "x1": 17.25}' 'symmetry {"about": -24}' 'steady {"steps": 8}'
+python tools/probe.py saved 'tile {"x": 40, "y": 20}'      # the player's site, left unchanged
+python tools/probe.py demo help
+```
+
+In the running game, through the Godot MCP's `game_eval`:
 
 ```gdscript
 return SimProbe.run("help")                    # list commands
@@ -49,21 +60,30 @@ return SimProbe.run("step", {"n": 5})          # pause, then advance exactly 5 t
 return SimProbe.run("fan", {...})              # dense plain-ray ground truth (exit-angle histogram)
 ```
 
-Other commands: `state` (sun, moon, traced light), `power` (money, price, wire networks), `wire`, `site` (save, reset), `defs`, `object`, `tile`, `peaks`, `beams`, `strips` (beam widths and concentration per leg), `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`). Prefer these over screenshots when checking behaviour: they return exact numbers and cost far less.
+Other commands: `state` (sun, moon, traced light), `scenarios`, `power` (money, price, wire networks), `wire`, `site` (save, reset, show a scenario, back to your site), `defs`, `object`, `analyze` (a cell's loss breakdown), `tile`, `peaks`, `retrace`, `truth` (plain rays vs beams), `steady` (popping as the sun steps), `symmetry`, `beams`, `strips` (beam widths and concentration per leg), `place`, `move`, `remove`, `time`, `pause`, `speed`, `view`, `wavelength`, `camera` (see `help`; the last few need the game). Prefer these over screenshots or one-off scripts: they return exact numbers and cost far less.
 
 Positions are meters (x right, y down), angles degrees. Commands go through the sim's command queue like player input.
 
 ## Tests
 
-Headless sim tests (a test also fails on any script error raised while it runs). Build the C# project first if it changed; `tools/test.py` re-registers new `class_name` scripts first (an open editor rewrites the class cache) and uses `$GODOT` (the `_console.exe` on Windows) or `godot` on the PATH:
+Headless sim tests (a test also fails on any script error raised while it runs). Build the C# project first if it changed; `tools/test.py` re-registers new `class_name` scripts first (an open editor rewrites the class cache) and finds Godot through `$GODOT`, `godot` on the PATH, or a `Godot_v*_console.exe` under your home folder:
 
 ```bash
 dotnet build "Solar Sim.csproj"
-python tools/test.py            # tests
-python tools/test.py --bench    # tests, then the benchmark
+python tools/test.py                        # tests
+python tools/test.py --bench                # tests, then the benchmark and bug sweep vs the baseline
+python tools/test.py --bench --only=demo    # one scenario
+python tools/test.py --baseline             # record a new baseline (after an intended change)
 ```
 
-The benchmark gives per-system timings on a full-size site (demo rig and a 30-lens field; full passes, mesh build, heat, ticks, dragging a lens), with a checksum to confirm optimizations don't change results.
+**Test scenarios** (`sim/scenarios.gd`) are named sites the benchmark and the game load identically (top bar → Site menu, or SimProbe `site`; a scenario is never saved over your site): `demo`, `lens_field`, `power_farm`, `optics_mix`, `night`, `dug_terrain`, `edge_optics` (awkward optics: lenses in series, a mirror V, light sent back up through a lens, a half-shaded lens, a lens in water, grazing angles).
+
+**The benchmark** (`tests/bench.gd`, ~45 s) runs every scenario at its hours and reports:
+- **Checks** (a failure is a bug; exit code 1): energy balance; no NaN or impossible values; cells never deliver more than reaches them; power and money add up; an incremental light pass matches a fresh one; two runs are identical; a save restores the same site; probes block nothing; ground truth (plain rays vs beams) and popping (the sun stepped 0.1° at a time) within sanity limits; a symmetric rig is symmetric.
+- **Less accurate**: the light checks' error measures, ratcheted against the baseline (worse by 25 % fails).
+- **Results changed**: fingerprints (sums of light, temperatures, power) vs `tests/bench_baseline.json`. Expected after a physics change: look, then `--baseline`.
+- **More work**: machine-independent counts (ray paths, cache misses, lanes, lit tiles and strips, secondary rays, beam memory, mesh vertices, passes per 300 ticks, heat subcycles). The reliable performance signal: they don't depend on the machine or its power plan.
+- **Slower / faster**: timings, advisory only.
 
 ## Code rules
 
@@ -85,9 +105,9 @@ It runs gdlint (`gdlintrc`) plus the house rules: the sim never uses render/UI c
   - `thermal/` also holds the surface skin (`SkinKernel.cs`) and object thermal nodes
 - `data/materials/`, `data/objects/` — content definitions (`.tres`, SI units)
 - `render/`, `ui/` — Nodes that read sim state and send commands (`BeamMesh.cs` builds beam triangles; `DisplayLight` holds exposure and night policy, `PowerMeters` draws the meters, `Readout` formats values, `UiStyle` holds the interface's look, `Hud` assembles the panels)
-- `debug/` — `SimProbe`, agent tooling for the running game
+- `debug/` — `SimProbe` (agent tooling), `probe_cli.gd` (it headless), `LightChecks` (ground truth, popping, symmetry)
 - `scenes/` — entry scene
 - `tests/` — headless tests and benchmark
-- `tools/` — `check.py` (lint and house rules), `test.py` (tests and benchmark)
+- `tools/` — `check.py` (lint and house rules), `test.py` (tests and benchmark), `probe.py` (SimProbe headless)
 - `docs/` — design document, style guide, run reports (`runs/`)
 - `addons/godot_ai/` — Godot AI MCP plugin (v4.3.0)

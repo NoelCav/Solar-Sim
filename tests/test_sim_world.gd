@@ -204,7 +204,7 @@ func test_site_save_round_trip() -> void:
 	world.flush_commands()
 	world.money = 12.5
 	world.time_s = 1234.5
-	var data := JSON.parse_string(JSON.stringify(SiteSave.capture(world))) as Dictionary
+	var data := JSON.parse_string(SiteSave.to_text(world)) as Dictionary
 	var db := ObjectDB.new()
 	db.load_dir()
 	var back := _make_world()

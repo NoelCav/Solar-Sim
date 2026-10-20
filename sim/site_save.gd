@@ -59,12 +59,17 @@ static func restore(world: SimWorld, data: Dictionary, defs: ObjectDB) -> String
 	return ""
 
 
+## The site as JSON text, floats at full precision (a reload puts every object exactly back).
+static func to_text(world: SimWorld) -> String:
+	return JSON.stringify(capture(world), "", true, true)
+
+
 ## Writes the site to `path` (JSON).
 static func save_file(world: SimWorld, path: String) -> bool:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
-	f.store_string(JSON.stringify(capture(world)))
+	f.store_string(to_text(world))
 	return true
 
 

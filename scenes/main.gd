@@ -1,13 +1,18 @@
 class_name Main
 extends Node2D
-## Entry point: builds the sim (the saved site, or a fresh one with the demo rig), steps it at
-## a fixed rate, autosaves it (SiteSave), and wires up the views.
+## Entry point: builds the sim (the saved site, or a fresh one with the demo; or a test
+## scenario), steps it at a fixed rate, autosaves the player's site (SiteSave), and wires up the
+## views.
 
 const WORLD_WIDTH := 300
 const WORLD_HEIGHT := 120
 const SPEEDS: Array[int] = [1, 2, 4, 8, 16]
 const SAVE_PATH := "user://site.json"
 const AUTOSAVE_S := 5.0   ## The editor's stop button kills the game, so save often, not on exit
+
+## A test scenario (Scenarios) shown instead of the player's site, kept across the scene reload
+## that loads it; "" is the player's site. A scenario is never saved over the player's site.
+static var scenario := ""
 
 @export var world_seed := 1
 @export var place_demo_rig := true
@@ -54,11 +59,16 @@ func _ready() -> void:
 		return
 	world = SimWorld.new(materials, WORLD_WIDTH, WORLD_HEIGHT, world_seed)
 	WorldGen.generate(world)
-	var loaded := SiteSave.load_file(world, SAVE_PATH, object_db)
-	if loaded != "" and loaded != "no save":
-		push_warning("Saved site not loaded (%s); starting fresh" % loaded)
-	if loaded != "" and place_demo_rig:
-		DemoRig.place(world, object_db)
+	if scenario != "":
+		err = Scenarios.build(world, object_db, scenario)
+		if err != "":
+			push_warning(err)
+	else:
+		var loaded := SiteSave.load_file(world, SAVE_PATH, object_db)
+		if loaded != "" and loaded != "no save":
+			push_warning("Saved site not loaded (%s); starting fresh" % loaded)
+		if loaded != "" and place_demo_rig:
+			Scenarios.build(world, object_db, "demo")
 	_light = world.get_system(&"light")
 	_light.retrace(world)
 
@@ -115,15 +125,24 @@ func _notification(what: int) -> void:
 		save_site()
 
 
-## Saves the site now (it also autosaves every AUTOSAVE_S).
+## Saves the player's site now (it also autosaves every AUTOSAVE_S); not while a scenario shows.
 func save_site() -> bool:
 	_autosave_timer = AUTOSAVE_S
-	return SiteSave.save_file(world, SAVE_PATH)
+	return scenario == "" and SiteSave.save_file(world, SAVE_PATH)
 
 
-## Forgets the saved site and starts a fresh one (new terrain and the demo rig).
+## Shows test scenario `name` (Scenarios), or the player's site for "" (saving it first).
+func load_site(name: String) -> void:
+	save_site()
+	scenario = name
+	world = null   # No autosave while the scene reloads
+	get_tree().reload_current_scene()
+
+
+## Forgets the saved site and starts a fresh one (new terrain and the demo).
 func reset_site() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	scenario = ""
 	world = null   # No autosave of the old site while the scene reloads
 	get_tree().reload_current_scene()
 
@@ -186,8 +205,7 @@ func set_speed(n: int) -> void:
 
 ## Moves the clock to `hours` (0–24) of the current day (the sun follows even while paused).
 func set_hour(hours: float) -> void:
-	var day_start := floorf(world.time_s / SimConst.DAY_LENGTH_S) * SimConst.DAY_LENGTH_S
-	world.enqueue(SetTimeCommand.new(day_start + hours / 24.0 * SimConst.DAY_LENGTH_S))
+	world.enqueue(SetTimeCommand.at_hour(world, hours))
 
 
 ## Moves the clock by whole hours (the sun follows even while paused).

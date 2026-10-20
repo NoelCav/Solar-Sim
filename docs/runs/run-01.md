@@ -171,6 +171,21 @@ panel and spacer helpers in `UiStyle`. Then a cohesion pass over the whole codeb
 boxes overlapped), scaffolding nothing used (a tick signal, an RNG, per-system enable flags, a flag
 enum, three material tables), and made every renderer a scene node. Tests and benchmark unchanged.
 
+### Tooling: scenarios, benchmark and bug sweep, headless probe (design §18.13)
+
+**What it does.** Seven named test scenarios you can load in the game (top bar → Site; your site
+is saved first and never overwritten) and that the benchmark runs headless. The benchmark checks
+physics invariants, compares the beam engine with plain rays and with small sun steps, compares
+everything with a recorded baseline, and counts work in machine-independent units (ray paths,
+cache misses, mesh vertices…) so a laptop on battery doesn't look like a regression. SimProbe now
+runs headless too (`python tools/probe.py <scenario> cmd …`), so investigating needs no throwaway
+scripts.
+
+**Found.** Saves lost float precision (fixed). Open: light in water flickers as the sun moves (a
+spectral bin drops out of one surface tile at a time); beams spread a sharp focus slightly
+unevenly; incremental passes keep changed pooled reflections briefly. Also: crown glass absorbs a
+quarter of a big lens's light, and a fixed lens loses a 25 cm target within seconds of game time.
+
 ## Open questions
 
 - ~~The editor has to be reloaded whenever a run adds a new `class_name` script.~~ Solved without a
