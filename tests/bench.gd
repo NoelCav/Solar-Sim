@@ -189,7 +189,7 @@ func _light(world: SimWorld, light: LightSystem, t: Dictionary, w: Dictionary, f
 	f.emitted_w = emitted
 	f.absorbed_w = s.get("absorbed", 0.0)
 	# Brightest light on a cell, in suns, right after the pass (fixed lenses lose their target as
-	# the sun moves: in a 12-minute day a focus walks ~16 cm in 15 s).
+	# the sun moves: in a 24-minute day a focus walks ~8 cm in 15 s).
 	var best_c := 0.0
 	for obj: SimObject in world.objects.values():
 		if obj.def.kind == ObjectDef.Kind.CELL:

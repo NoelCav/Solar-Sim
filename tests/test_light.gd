@@ -376,9 +376,11 @@ func test_incremental_pass_matches_full_trace() -> void:
 	var fresh := worlds[1]
 	var light: LightSystem = edited.get_system(&"light")
 	light.retrace(edited)
-	# Move one lens and paint a tile far from the others, in both worlds.
+	# Move the outermost lens and paint a tile beyond it, in both worlds. (Tasks whose recorded
+	# paths, reflections included, reach an edit are traced again; the lenses at the other end
+	# stay replayable.)
 	for world in worlds:
-		var obj: SimObject = world.objects.values()[1]
+		var obj: SimObject = world.objects.values()[4]
 		world.enqueue(TransformObjectCommand.new(obj.id, obj.position + Vector2(0.3, 0.2), 0.1))
 		world.enqueue(PaintTilesCommand.new(PackedInt32Array([world.grid.idx(70, 29)]),
 			world.materials.id_of(&"stone")))

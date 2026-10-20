@@ -33,7 +33,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 | D7 | **Fixed tick, 20 Hz**, deterministic, seeded RNG | Never use frame delta in the sim |
 | D8 | **Sim uses SI units internally** (m, kg, s, W, J, K) | Display converts (°C, kWh, etc.). One constants file for unit/scale |
 | D9 | **Every tile layer exists in the data from day one**, even if its system ships later | This is how we avoid a rebuild |
-| D10 | **Physics time = sim time.** The sun moves faster than reality; physics does not | A 12-min day compresses the sun's path, not heat flow |
+| D10 | **Physics time = sim time.** The sun moves faster than reality; physics does not | A 24-min day compresses the sun's path, not heat flow |
 | D11 | **Data-driven content**: materials and objects are Godot `Resource`s (`.tres`) | New content without code |
 | D12 | **Destruction leaves debris tiles**; objects cannot be repaired in place | Must be mined/deconstructed and rebuilt |
 | D13 | **Objects own internal thermal nodes** coupled to their footprint tiles by contact conductance | One mechanism for cells (M3), lens slices (M7), batteries, heatsinks. Replaces "lens absorption heats host air tiles" |
@@ -51,7 +51,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 - **Tile:** 16 px = **0.25 m**.
 - **2D slice depth:** the world is a slice **0.25 m deep** (one tile). Tile volume = 0.25³ = 0.0156 m³. All mass/heat capacity derives from this.
 - **Site size (initial):** 300 × 120 tiles (75 m × 30 m). Configurable per site.
-- **Day length:** 12 real minutes at 1× (tunable). Roughly 8 min daylight, 4 min night; varies by site latitude/season.
+- **Day length:** 24 real minutes at 1× (`SimConst.DAY_LENGTH_S`; was 12 until 2026-10-20, too fast to aim optics). Half of it daylight for now; latitude and seasons later.
 - **Time controls:** pause, speed 1–16× (several ticks per frame), clock jumps (−1 h, +30 min, +1 h, +6 h) and Set time. Jumps move the sun without simulating the time between.
 - **Coordinates:** tile index `i = y * W + x`, y increasing downward (Godot convention). World positions in meters for the sim; pixels only in rendering.
 
@@ -210,7 +210,7 @@ Lenses are not rigid props — they have internal state:
 
 - Each lens is divided into **thermal slices** (8–16 across its width), each with a temperature, coupled to each other and to surrounding air.
 - **Absorption** (especially IR in glass, UV in acrylic) heats slices where the beam passes.
-- **Thermal lensing:** index shifts with temperature (`dn/dT`) per slice → focal point drifts. Real effect, exaggerated by a tuning dial.
+- **Thermal lensing:** index shifts with temperature (`dn/dT`) per slice → focal point drifts. Real values, no exaggeration: lens heating must be accurate.
 - **Softening:** above the material's softening temperature, polyline vertices sag (gravity + viscosity) → surface warps → focus degrades and moves.
 - **Thermal shock:** if the gradient between adjacent slices exceeds the material limit, the lens **cracks**: new internal surfaces are inserted with perturbed normals → stray focal points outside the normal zone, which can ignite things or damage the lens itself.
 - **Melting:** lens becomes **glass slag** debris tiles.
@@ -263,7 +263,7 @@ Self-lit things (meter LCDs and lamps, glowing hot tiles) are emissive and stay 
 
 - Identity: `id`, `name`, `phase` (solid / powder / liquid / gas), `color`, `texture`
 - Thermal: `density`, `specific_heat`, `conductivity`, `emissivity`
-- Optical: `transparent`, `cauchy_a`, `cauchy_b`, `absorption_per_bin[6]` (bulk, per m), `surface_absorptivity_per_bin[6]`, `dn_dt`
+- Optical: `transparent`, `cauchy_a`, `cauchy_b`, `absorption_per_bin[6]` (bulk, per m: measured internal transmittance, averaged over each bin weighted by sunlight; glasses from Schott N-BK7 / N-F2 and fused-silica data, acrylic from clear PMMA, water from Hale & Querry — no gameplay exaggeration), `surface_absorptivity_per_bin[6]`, `dn_dt`
 - Mechanical: `hardness` (mining time), `softening_temp`, `melt_temp`, `melts_to`, `thermal_shock_limit`, `falls_when_unsupported` (sand, ash)
 - Fire: `flammable`, `ignition_temp`, `burn_rate`, `burn_energy`, `smoke_rate`, `burns_to`
 - Liquid/gas: `boil_temp`, `boils_to`, `condense_temp`, `condenses_to`, `viscosity`
@@ -562,7 +562,7 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **SimProbe headless** (`tools/probe.py`, `debug/probe_cli.gd`): any command on a scenario or the saved site without the game; new commands `scenarios`, `analyze`, `retrace`, `truth`, `steady`, `symmetry`. `SetTimeCommand.at_hour` is the one home of "jump to an hour".
 - **Fixed by it:** saves dropped float precision (objects came back slightly moved; now full precision, `SiteSave.to_text`).
 - **Found, open (see §19):** light in water flickers (a spectral bin's deposit drops out of a surface tile as the sun moves); incremental passes replay pooled reflections an edit changed (≤ 0.2 % of a tile until the next full pass); beams spread ~2 % of a sharp focus into its neighbours, unevenly (3 % asymmetry under a symmetric lens).
-- **Learned:** crown glass absorbs ~25 % of what crosses a 24 cm lens (data 5–50× real BK7, presumably for visible lens heating); a fixed lens walks its focus ~16 cm in 15 s of game time (12-minute day), so concentrators need tracking or wide targets.
+- **Learned:** crown glass absorbed ~25 % of what crossed a 24 cm lens (data 5–50× real BK7); a fixed lens walked its focus ~16 cm in 15 s of game time. Decided: real absorption for every optical material, and a 24-minute day (focus drift halves).
 
 ## 19. Open questions
 
@@ -571,7 +571,6 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - Tuning: ray count/spacing, heat-capacity scale, dn/dT exaggeration.
 - Wind and weather depth.
 - **Light bugs from the bench (18.13):** water flicker (spectral-bin deposits in strongly absorbing tile media); incremental replay of changed pooled reflections; beam focus-edge spread and asymmetry.
-- **Glass absorption:** keep crown glass at 5–50× real absorption (lenses heat visibly, but a crown lens loses ~25 % of its light) or move nearer real values?
-- **Sun speed vs focus:** the 12-minute day moves a fixed focus ~1 cm/s: sun tracking (§6.5) becomes core for concentrators, or wider receivers.
+- **Sun speed vs focus:** even with the 24-minute day a fixed focus moves ~0.5 cm/s: sun tracking (§6.5) is core for concentrators, or wider receivers.
 - ~~GDScript vs. C#/GDExtension port~~ — done in C# (§18.4).
 - ~~Thermal tuning~~ — solid/liquid heat capacity now scales with the day compression (DAY_LENGTH_S / 86400 ≈ 1/120), so ground warms and cools on a realistic daily cycle (dirt surface ~16 → 49 °C, subsurface lags by hours) and focal spots heat ~6× faster than before.

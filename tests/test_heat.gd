@@ -172,10 +172,12 @@ func test_quiet_rows_match_full_conduction() -> void:
 
 
 ## Light absorbed inside a lens heats the lens's own thermal node (D13), not the air tiles
-## it sits in; the lens then warms that air by convection.
+## it sits in; the lens then warms that air by convection. With real acrylic absorption the lens
+## takes ~15 W, has ~870 J/K and loses ~8 W/K to the air: it heats toward ~2 K over the air with a
+## time constant near 110 s. Run at 15:00, when the air's daily swing peaks (steady), for 100 s.
 func test_lens_heats_itself_not_its_tiles() -> void:
 	var world := SimWorld.new(load_materials(), 40, 30, 1)
-	world.time_s = 0.5 * SimConst.DAY_LENGTH_S
+	world.time_s = 0.625 * SimConst.DAY_LENGTH_S
 	world.tick()
 	var lens: ObjectDef = load("res://data/objects/lens_acrylic.tres")
 	world.enqueue(PlaceObjectCommand.new(lens, Vector2(5.0, 3.0), 0.0))
@@ -191,11 +193,11 @@ func test_lens_heats_itself_not_its_tiles() -> void:
 	for i in tiles:
 		host += light.tile_power[i]
 	check_near(host, 0.0, 1e-6, "no light deposited in the tiles under the lens")
-	for k in 400:
+	for k in 2000:
 		world.tick()
 	var air := 0.0
 	for i in tiles:
 		air += g.temperature[i]
 	air /= tiles.size()
-	check(obj.temperature_k > air + 0.5, "lens warms above the air around it (%.2f K over)"
+	check(obj.temperature_k > air + 0.3, "lens warms above the air around it (%.2f K over)"
 		% (obj.temperature_k - air))

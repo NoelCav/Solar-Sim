@@ -13,7 +13,7 @@ const TILE_VOLUME_M3 := TILE_M * TILE_M * DEPTH_M
 # --- Time ---
 const TICK_RATE := 20               ## Sim ticks per second at 1x (D7)
 const DT := 1.0 / TICK_RATE         ## Seconds per tick
-const DAY_LENGTH_S := 720.0         ## One full day at 1x (12 real minutes)
+const DAY_LENGTH_S := 1440.0        ## One full day at 1x (24 real minutes)
 ## Real seconds one game second stands for: a game day is 24 h (heat capacity, energy sold).
 const DAY_COMPRESSION := 86400.0 / DAY_LENGTH_S
 const START_TIME_OF_DAY := 0.30     ## 0 = midnight, 0.5 = noon
@@ -42,7 +42,7 @@ const MIN_CHILD_W := 0.02           ## Reflected child rays below this power are
 const MIN_RAY_W := 1e-4           ## Any ray below this is culled
 const REFL_POOL_M := 0.25          ## Pooled Fresnel reflections: one secondary ray per this much wavefront (at most)
 const MAX_RAY_EVENTS := 24          ## Surface interactions along one ray path, children included
-const RETRACE_ANGLE_DEG := 0.1      ## Re-trace when the sun has moved this far (≈0.27 s at 1×), so light moves smoothly
+const RETRACE_ANGLE_DEG := 0.1      ## Re-trace when the sun has moved this far (≈0.4 s at 1×), so light moves smoothly
 const RESTART_ANGLE_DEG := 3.0      ## Abandon a pass in progress if the sun jumps this far
 
 # --- Heat (§7) ---
