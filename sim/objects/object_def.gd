@@ -4,7 +4,7 @@ extends Resource
 ## probe, cell) and machines (grid connection; later batteries and consumers). Machines are
 ## boxes behind the play plane (D19): no optics, and they only collide with other machines.
 
-enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE, BATTERY }
+enum Kind { LENS, MIRROR, PRISM, PROBE, CELL, GRID_TIE, BATTERY, LAMP }
 ## How it stands in the world (Mounting): on a stand, flat on the ground, or floating.
 enum Mount { STAND, GROUND, FREE }
 ## Where it is listed in the build catalog.
@@ -45,6 +45,18 @@ enum Category { OPTICS, POWER, MACHINES, TOOLS }
 ## The rest is lost; machines have no thermal node (D19), so it is not tracked as heat.
 @export var battery_efficiency: float = 0.95
 
+@export_group("Lamp")
+## Electrical power at full brightness, W, and the share of it that leaves as light (the rest
+## is heat in the lamp). A lamp is a line source along the slice (design §6.11): its watts of
+## light go out in the plane.
+@export var lamp_watts: float = 20.0
+@export var lamp_efficiency: float = 0.3
+## Share of its light per spectral bin (sums to 1): a warm white LED has no UV and almost no IR.
+@export var lamp_spectrum: PackedFloat32Array = PackedFloat32Array([0.0, 0.10, 0.30, 0.45, 0.15, 0.0])
+## Width of the cone it lights, degrees (360: all around). It points along the object's angle,
+## down at angle 0.
+@export var lamp_spread_deg: float = 360.0
+
 @export_group("Cell")
 ## Solar cell parameters (§9.1, SolarCell). Defaults: crystalline silicon, calibrated to ≈22 %
 ## at 1 sun and 25 °C.
@@ -69,10 +81,15 @@ func build_pieces() -> Array:
 			return OpticsGen.convex_lens(size_m, radius_front_m, radius_back_m, thickness_m, arc_segments)
 		Kind.PRISM:
 			return OpticsGen.prism(size_m, apex_angle_deg)
-		Kind.GRID_TIE, Kind.BATTERY:
+		Kind.GRID_TIE, Kind.BATTERY, Kind.LAMP:
 			return OpticsGen.box(size_m, thickness_m)
 		_:
 			return OpticsGen.flat_strip(size_m)
+
+
+## The light a lamp gives at full brightness, W.
+func lamp_light_w() -> float:
+	return lamp_watts * lamp_efficiency
 
 
 ## Area of the active face (cell, probe, mirror): its width times the slice depth, m².
@@ -87,7 +104,7 @@ func is_body() -> bool:
 
 ## True for machines: boxes behind the play plane, outside the optics (D19).
 func is_machine() -> bool:
-	return kind == Kind.GRID_TIE or kind == Kind.BATTERY
+	return kind == Kind.GRID_TIE or kind == Kind.BATTERY or kind == Kind.LAMP
 
 
 ## True when the shape is a closed outline (bodies and machines), not an open surface.

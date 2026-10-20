@@ -27,6 +27,12 @@ var power_w := 0.0
 ## − in from it).
 var stored_j := 0.0
 var flow_w := 0.0
+## Lamp: how bright it is, 0 to 1 (the share of its rated power it gets; PowerSystem).
+var lamp_level := 1.0
+## Cells and probes: light from lamps arriving on the active face now, W per bin, all of it and
+## the part straight from the lamp (the sky's is in `incident`, scaled by LightLayer.power_scale).
+var lamp_light := Spectrum.make_zero()
+var lamp_direct := Spectrum.make_zero()
 
 
 func _init(p_id: int, p_def: ObjectDef, p_position: Vector2, p_angle: float) -> void:

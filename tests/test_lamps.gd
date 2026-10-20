@@ -90,3 +90,88 @@ func test_lamp_at_focus_makes_a_parallel_beam() -> void:
 	check_near(far_mid / near_mid, 1.0, 0.08, "same irradiance 2 m further on")
 	check_near(_probe_watts(p, probes[Vector2(0.15, 7.0)]) / far_mid, 1.0, 0.15, "even across the beam")
 	check(_probe_watts(p, probes[Vector2(0.9, 7.0)]) < 0.03 * far_mid, "nothing outside the lens's width")
+
+
+# --- Lamp objects (the lamp layer) -----------------------------------------------------------------
+
+const LAMP := preload("res://data/objects/lamp_led.tres")
+const CELL_SI := preload("res://data/objects/cell_si.tres")
+
+
+## Stone ground below row 15; an LED lamp on a stand 1.5 m above it at x = 5 m and a cell panel
+## 0.75 m above it right under the lamp.
+func _lamp_world() -> SimWorld:
+	var world := _flat_world(40, 20, 15)
+	world.tick()
+	world.enqueue(PlaceObjectCommand.new(LAMP, Vector2(5.0, 2.25), 0.0, true))
+	world.enqueue(PlaceObjectCommand.new(CELL_SI, Vector2(5.0, 3.0), 0.0, true))
+	world.flush_commands()
+	var light: LightSystem = world.get_system(&"light")
+	light.retrace(world)
+	return world
+
+
+func _object_of_kind(world: SimWorld, kind: ObjectDef.Kind) -> SimObject:
+	for obj: SimObject in world.objects.values():
+		if obj.def.kind == kind:
+			return obj
+	return null
+
+
+## A lamp object lights the world through a layer of its own: all the light it gives is emitted,
+## and the cell below it receives intensity × the angle the cell subtends.
+func test_lamp_object_lights_a_cell() -> void:
+	var world := _lamp_world()
+	var light: LightSystem = world.get_system(&"light")
+	var lamp := _object_of_kind(world, ObjectDef.Kind.LAMP)
+	var cell := _object_of_kind(world, ObjectDef.Kind.CELL)
+	check(light.lamps.has(lamp.id), "the lamp has a layer")
+	var layer: LightLayer = light.lamps[lamp.id]
+	_check_energy_balance(layer.stats)
+	check_near(layer.stats.emitted, LAMP.lamp_light_w(), LAMP.lamp_light_w() * 3e-3, "emits its light")
+	var dist := absf(lamp.position.y - cell.position.y)
+	var arriving := LAMP.lamp_light_w() / TAU * 2.0 * atan(0.5 * CELL_SI.size_m / dist)
+	check_near(Spectrum.total(cell.lamp_light), arriving, arriving * 0.03,
+		"the cell gets I × the angle it subtends")
+
+
+## Dimming scales a lamp's light: half the level, half the light on the cell, after its next pass.
+func test_dimmed_lamp_gives_less() -> void:
+	var world := _lamp_world()
+	var light: LightSystem = world.get_system(&"light")
+	var lamp := _object_of_kind(world, ObjectDef.Kind.LAMP)
+	var cell := _object_of_kind(world, ObjectDef.Kind.CELL)
+	var full := Spectrum.total(cell.lamp_light)
+	lamp.lamp_level = 0.5
+	world.tick()   # Within the re-trace threshold the layer rescales its traced light
+	world.tick()
+	light.retrace(world)
+	check_near(Spectrum.total(cell.lamp_light), 0.5 * full, 0.02 * full,
+		"half the level, half the light")
+	lamp.lamp_level = 0.0
+	light.retrace(world)
+	check_eq(Spectrum.total(cell.lamp_light), 0.0, "off: dark")
+
+
+## Light from a lamp is heat where it lands: what the layer deposits in a tick (tiles, the skin,
+## the cell's body) is what it absorbed.
+func test_lamp_light_heats_the_ground() -> void:
+	var world := _lamp_world()
+	var light: LightSystem = world.get_system(&"light")
+	var lamp := _object_of_kind(world, ObjectDef.Kind.LAMP)
+	var cell := _object_of_kind(world, ObjectDef.Kind.CELL)
+	var layer: LightLayer = light.lamps[lamp.id]
+	world.grid.energy_in.fill(0.0)
+	cell.heat_in = 0.0
+	layer.tick(world, SimConst.DT)
+	var deposited: float = cell.heat_in
+	for i in world.grid.size():
+		deposited += world.grid.energy_in[i]
+	var skin_w := PackedFloat32Array()
+	skin_w.resize(world.skin.faces * world.skin.strips)
+	layer.write_skin(world, skin_w, true)
+	for w in skin_w:
+		deposited += w * SimConst.DT
+	var absorbed: float = layer.stats.absorbed
+	check(absorbed > 0.2 * LAMP.lamp_light_w(), "the lamp's light is absorbed (%.2f W)" % absorbed)
+	check_near(deposited, absorbed * SimConst.DT, absorbed * SimConst.DT * 1e-3, "light absorbed = heat deposited")

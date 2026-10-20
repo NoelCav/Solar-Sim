@@ -56,6 +56,8 @@ var trace_version: int:
 
 var _scratch: LightPass          ## Shared by the layers for previews and probe rays
 var _skin_key := Vector3i(-1, -1, -1)   ## (sky publish, skin version, lamp count) behind skin.light_w
+var _lamps_version := -1         ## objects_version the lamp layers were synced to
+var _lamp_lit := []              ## Ids of objects with lamp light on them
 
 
 func system_name() -> StringName:
@@ -68,6 +70,7 @@ func tick(world: SimWorld, dt: float) -> void:
 	for l: LightLayer in lamps.values():
 		l.tick(world, dt)
 	_write_skin(world)
+	_write_lamp_light(world)
 	_deposit_diffuse(world, dt)
 
 
@@ -86,6 +89,7 @@ func retrace(world: SimWorld, fresh := false) -> void:
 	for l in layers():
 		l.retrace(world, fresh)
 	_write_skin(world)
+	_write_lamp_light(world)
 
 
 ## Traces the current state on a separate pass and publishes only what renderers and the
@@ -144,8 +148,37 @@ func _scratch_pass(world: SimWorld) -> LightPass:
 
 
 ## Keeps one layer per lamp object.
-func _sync_lamps(_world: SimWorld) -> void:
-	pass
+func _sync_lamps(world: SimWorld) -> void:
+	if world.objects_version == _lamps_version:
+		return
+	for id: int in lamps.keys():
+		if not world.objects.has(id) or world.objects[id].def.kind != ObjectDef.Kind.LAMP:
+			lamps.erase(id)
+	for obj: SimObject in world.objects.values():
+		if obj.def.kind == ObjectDef.Kind.LAMP and not lamps.has(obj.id):
+			lamps[obj.id] = LightLayer.new(obj.id)
+	_lamps_version = world.objects_version
+
+
+## Light from lamps arriving on the active faces of cells and probes now, W per bin.
+func _write_lamp_light(world: SimWorld) -> void:
+	for id: int in _lamp_lit:
+		var obj: SimObject = world.objects.get(id)
+		if obj != null:
+			obj.lamp_light = Spectrum.make_zero()
+			obj.lamp_direct = Spectrum.make_zero()
+	_lamp_lit.clear()
+	for l: LightLayer in lamps.values():
+		var scale := l.power_scale(world)
+		for id: int in l.incident:
+			var obj: SimObject = world.objects.get(id)
+			var split: PackedFloat32Array = l.incident[id]
+			if obj == null or split.size() != 2 * Spectrum.BIN_COUNT:
+				continue
+			for b in Spectrum.BIN_COUNT:
+				obj.lamp_direct[b] += split[b] * scale
+				obj.lamp_light[b] += (split[b] + split[Spectrum.BIN_COUNT + b]) * scale
+			_lamp_lit.append(id)
 
 
 ## Writes the traced surface light into the skin's per-strip rate: the sky's at its traced

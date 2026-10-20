@@ -75,12 +75,14 @@ static func rated_efficiency(def: ObjectDef) -> float:
 	return rated_power(def) / (SimConst.REFERENCE_DNI * def.face_area_m2())
 
 
-## The front-face light of cell object `obj` now, W per bin: the traced light times
-## `light_scale` (LightSystem.power_scale); `direct_only` keeps the part straight from the source.
+## The front-face light of cell object `obj` now, W per bin: the sky's traced light times
+## `light_scale` (LightSystem.power_scale) plus its lamps'; `direct_only` keeps the part straight
+## from the source.
 static func object_light(obj: SimObject, light_scale: float, direct_only := false) -> PackedFloat32Array:
 	var s := (obj.incident_direct if direct_only else obj.incident).duplicate()
+	var lamps := obj.lamp_direct if direct_only else obj.lamp_light
 	for b in Spectrum.BIN_COUNT:
-		s[b] *= light_scale
+		s[b] = s[b] * light_scale + lamps[b]
 	return s
 
 

@@ -34,6 +34,9 @@ var ray_power := PackedFloat32Array()
 var stats := {}                 ## emitted/absorbed/escaped/scattered/culled W, rays
 var shown_strength := 0.0       ## Strength of the source the published (displayed) results were traced at
 
+## Object id -> W per bin arriving on its active face (direct bins, then the rest), as traced.
+var incident := {}
+
 ## The lamp object this layer lights for (-1: the sky).
 var lamp_id := -1
 
@@ -190,8 +193,20 @@ func _wanted(world: SimWorld) -> LightSource:
 
 
 ## The lamp's light now (null: no such lamp, or it gives none).
-func _lamp_source(_world: SimWorld) -> LightSource:
-	return null
+func _lamp_source(world: SimWorld) -> LightSource:
+	var obj: SimObject = world.objects.get(lamp_id)
+	if obj == null:
+		return null
+	var def := obj.def
+	var watts := def.lamp_light_w() * obj.lamp_level
+	if watts <= 0.0:
+		return null
+	var spread := minf(deg_to_rad(def.lamp_spread_deg), TAU)
+	var shares := Spectrum.make_zero()
+	for b in Spectrum.BIN_COUNT:
+		shares[b] = watts * def.lamp_spectrum[b] / spread
+	var aim := obj.angle + PI * 0.5
+	return LightSource.point(obj.position, shares, aim - spread * 0.5, aim + spread * 0.5)
 
 
 func _setup(world: SimWorld) -> void:
@@ -240,7 +255,7 @@ func _publish(world: SimWorld, p: LightPass, sim_state: bool) -> void:
 	ray_to = e.SegTo()
 	ray_power = e.SegPower()
 	var absorbed: Dictionary = e.ObjectAbsorbed()
-	var incident: Dictionary = e.ObjectIncident()
+	incident = e.ObjectIncident()
 	if lamp_id < 0:
 		for obj: SimObject in world.objects.values():
 			obj.absorbed_w = absorbed.get(obj.id, 0.0)
