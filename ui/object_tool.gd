@@ -7,7 +7,8 @@ extends Node2D
 ##   it, as often as you like; or drag a card onto the map to place one (R / F tilt the ghost
 ##   first; a right-click drops the pick). Items that lie on the ground (surface cells) are laid
 ##   in a run by dragging, one undo for the run. Right- or middle-drag pans in Select and Build. With nothing picked the
-##   mouse works as in Select. Objects go on stands (Mounting) that snap to tile columns and heights; in creative mode Alt floats them.
+##   mouse works as in Select. Objects go on stands (Mounting) that snap to tile columns and
+##   heights; in creative mode Alt floats them.
 ## The map ignores the pointer while it is over a panel (Hud.covers): no ghost, no hover.
 ## - Paint (T): the tile brush (CreativeBrush) owns the mouse.
 ## - Wire (V): the same brush lays wire (LMB) and removes it (RMB).
