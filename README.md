@@ -11,27 +11,29 @@ dotnet build "Solar Sim.csproj"
 godot --path .
 ```
 
-The site is saved every 5 s (`user://site.json`: objects, wire, painted terrain, clock, money) and comes back when the game starts; `SimProbe.run("site", {"op": "reset"})` forgets it and starts fresh. A fresh site starts with a demo rig: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror and a long-focus acrylic lens. Hover anything for the inspector (material, temperature, absorbed light by band, object readings and temperature).
+The site is saved every 5 s (`user://site.json`: objects, wire, painted terrain, clock, money) and comes back when the game starts; `SimProbe.run("site", {"op": "reset"})` forgets it and starts fresh. A fresh site starts with a demo rig on stands: a crown-glass lens over an irradiance probe, a flint prism, a tilted mirror, a long-focus acrylic lens, and a silicon cell panel wired to a Grid Connection that sells its power. Hover anything for a summary in the inspector (top right); click an object for its full numbers (a lens's focus and transmission, a cell's efficiency card) and its actions. Cells and the Grid Connection carry analog power meters, scaled to rated power.
 
 What you see: the sky glows from the screen edge the sunlight comes from and is colored by the sun's actual spectrum (red at dawn and dusk). At night the moon takes over: it goes through phases over 8 game days, rises about 3.4 h later each day, and its light (about a millionth of the sun's) is traced through the same optics and drawn pale blue at a night exposure; below the original ground line a dark earth backdrop sits behind the tiles. Lenses, prisms and mirrors have their own temperature (Heat view fills them with it).
+
+Screen: the top bar (clock, time controls, money and price, views), the tool rail on the left, the tool's side panel (the build catalog, or paint and wire options), the inspector top right and the view legend bottom right. The map ignores the pointer while it is over a panel.
 
 Controls (the window opens maximized and the interface scales with it; every key below also has a button):
 
 | Keys | Action |
 |---|---|
 | Select tool (Esc, 0) — default | Click an object to select it, drag to move, drag its ring handle to tilt (Ctrl snaps 15°); drag empty space to pan |
-| Build tool (B, 1–7) | Pick an item from the bar, LMB place (R/F tilt the ghost first), RMB back to Select. Objects go on stands that snap to tile columns and 25 cm heights (surface cells lie on the ground); hold Alt to float one (creative) |
+| Build tool (B) | Click a catalog card, then click the map to place it as often as you like (R/F tilt the ghost first); RMB or the card again drops it. Or drag a card onto the map to place one. 1–9 pick items by number. With nothing picked it works like Select. Objects go on stands that snap to tile columns and 25 cm heights (surface cells lie on the ground); hold Alt to float one (creative) |
 | Paint tool (T) | LMB paint, RMB erase, Q/E or the swatches for material, `[` `]` size |
-| Wire tool (V) | LMB lay wire, RMB remove, `[` `]` size. Objects connect at the foot of their stand; cells wired to a Grid Connection sell their power (money and price top left) |
+| Wire tool (V) | LMB lay wire, RMB remove, `[` `]` size. Objects connect at the foot of their stand; cells wired to a Grid Connection sell their power (money and price in the top bar) |
 | WASD / middle-drag, wheel | Pan, zoom (up to 64×; outlines and labels stay crisp) |
 | R / F (Shift = fine), Shift+wheel | Tilt the selected or hovered object |
 | X / Delete | Delete the selected or hovered object |
-| Space, Tab, or the speed buttons | Pause, speed 1× 2× 4× 8× 16× |
-| `,` `.` (Shift: 6 h), or the jump buttons | Move the clock −/+ 30 min, 1 h, 6 h without simulating the time between (the sun moves, temperatures don't) |
-| H, or the view bar (top right) | Views: Normal · Light (all wavelengths in false color, tiles show absorbed light) · Heat (every tile's temperature; hover the legend to read values) |
-| G / J, or the wavelength slider | Show one spectral band (UV, blue, green, red, near IR, IR) or all |
-| F1 | Hide/show the help lines |
-| Ctrl+Z | Undo |
+| Space; Tab or − / + | Pause; speed 1× 2× 4× 8× 16× |
+| `,` `.` (Shift: 6 h), the jump buttons, Set time… | Move the clock (−1 h, +30 min, +1 h, +6 h, or to a chosen hour) without simulating the time between (the sun moves, temperatures don't) |
+| H, or the view buttons (top bar) | Views: Normal · Light (all wavelengths in false color, tiles show absorbed light) · Heat (every tile's temperature; hover the legend to read values) |
+| G / J, or the wavelength list | Show one spectral band (UV, blue, green, red, near IR, IR) or all |
+| F1, or ? on the rail | Hide/show the help line |
+| Ctrl+Z, or the rail's undo | Undo |
 
 ## Agent tools (inspect the running game)
 
@@ -78,12 +80,14 @@ It runs gdlint (`gdlintrc`) plus the house rules: the sim never uses render/UI c
 - `sim/` — pure simulation (no Nodes): world, tile grid, materials, commands, systems
   - `light/` — spectrum, optical surfaces, generators, sun map, light passes; `LightEngine.cs` (ray work)
   - `thermal/` — heat grid; `HeatKernel.cs` (per-tile loops)
-  - `objects/` — object definitions and instances
+  - `objects/` — object definitions and instances, stands (`Mounting`), occupancy (`Placement`)
+  - `conduits/` — conduit networks (wire); `power/` — cell model, power system, market
+  - `thermal/` also holds the surface skin (`SkinKernel.cs`) and object thermal nodes
 - `data/materials/`, `data/objects/` — content definitions (`.tres`, SI units)
-- `render/`, `ui/` — Nodes that read sim state and send commands (`BeamMesh.cs` builds beam triangles; `DisplayLight` holds exposure and night policy, `Readout` formats values)
+- `render/`, `ui/` — Nodes that read sim state and send commands (`BeamMesh.cs` builds beam triangles; `DisplayLight` holds exposure and night policy, `PowerMeters` draws the meters, `Readout` formats values, `UiStyle` holds the interface's look, `Hud` assembles the panels)
 - `debug/` — `SimProbe`, agent tooling for the running game
 - `scenes/` — entry scene
 - `tests/` — headless tests and benchmark
-- `tools/` — `check.py` (lint and house rules)
-- `docs/` — design document and style guide
+- `tools/` — `check.py` (lint and house rules), `test.py` (tests and benchmark)
+- `docs/` — design document, style guide, run reports (`runs/`)
 - `addons/godot_ai/` — Godot AI MCP plugin (v4.3.0)

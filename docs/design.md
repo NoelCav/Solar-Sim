@@ -2,7 +2,7 @@
 
 > Living document. Sections marked **LOCKED** are architecture decisions we build against and should not change without a deliberate migration. Everything else is tunable.
 >
-> Last updated: 2026-10-19 (UI/sky/thermal pass; next: moonlight)
+> Last updated: 2026-10-20 (run 01 docs and cleanup pass; next: batteries, then lamps with display lighting)
 
 ---
 
@@ -52,7 +52,7 @@ Building scale is closer to *Terraria* / *Sandustry* (small tiles, precise place
 - **2D slice depth:** the world is a slice **0.25 m deep** (one tile). Tile volume = 0.25³ = 0.0156 m³. All mass/heat capacity derives from this.
 - **Site size (initial):** 300 × 120 tiles (75 m × 30 m). Configurable per site.
 - **Day length:** 12 real minutes at 1× (tunable). Roughly 8 min daylight, 4 min night; varies by site latitude/season.
-- **Time controls:** pause / 1× / 2× / 4× (multiple ticks per frame at higher speeds).
+- **Time controls:** pause, speed 1–16× (several ticks per frame), clock jumps (−1 h, +30 min, +1 h, +6 h) and Set time. Jumps move the sun without simulating the time between.
 - **Coordinates:** tile index `i = y * W + x`, y increasing downward (Godot convention). World positions in meters for the sim; pixels only in rendering.
 
 ## 5. Simulation architecture — LOCKED
@@ -87,6 +87,7 @@ All allocated at world creation, regardless of milestone (D9).
 | `smoke` | `PackedFloat32Array` | Density 0–1 |
 | `steam` | `PackedFloat32Array` | Density 0–1 |
 | `energy_in` | `PackedFloat32Array` | Joules deposited this tick (light, fire, electrical losses); consumed by heat step |
+| `wire` | `PackedByteArray` | Conduit layer (D14): 1 where a wire runs. Pipes add their own layer |
 
 One temperature per tile: liquid in a tile adds its heat capacity to the tile's total rather than having a separate temperature.
 
@@ -97,8 +98,8 @@ Each tick (dt = 0.05 s):
 1. **Apply commands** (build, remove, creative edits).
 2. **Environment** — sun position, air mass, weather, ambient temperature, wind.
 3. **Light** — re-trace if dirty (sun moved past threshold, geometry changed); deposit absorbed power into `energy_in` and object receivers.
-4. **Objects** — cells convert absorbed light; lenses update internal thermal slices; batteries, pumps, etc.
-5. **Power network** solve.
+4. **Objects** — lenses update internal thermal slices (M7); batteries, pumps, etc.
+5. **Power network** — cells deliver what they make (`SolarCell`), networks with a grid connection sell it (§10).
 6. **Pipe network** — move packets, exchange heat with host tiles.
 7. **Heat** — fold `energy_in` into temperature, then conduction/convection/radiation (subcycled if stability requires).
 8. **Free liquid** CA step.
@@ -107,6 +108,8 @@ Each tick (dt = 0.05 s):
 11. **Publish render state** — upload fields (heat, smoke, liquid) to textures; hand ray segments to the renderer.
 
 Some layers may run every Nth tick (e.g. gas at 10 Hz) — that's a tuning choice, not an architecture change.
+
+Built so far (`SimWorld.systems`): Environment → Light → Power → Thermal (heat and the surface skin). Later systems slot in at their place in this order.
 
 ### 5.4 Code boundaries
 
@@ -191,7 +194,7 @@ Ray tree rules (secondary light):
 
 ### 6.5 Stands & the lens crafter
 
-- **Stands** (bought by size class) hold a lens (D16). Stand qualities: max lens diameter/mass, height and tilt range, adjustment precision (coarse steps → smooth), heat tolerance (a stand near a stray focus can sag or burn). Later: motorized sun tracking (uses power, can fail).
+- **Stands** (D21, built): every lens, mirror and cell panel stands on a pole centered in a tile column, its height in 25 cm steps; the stand belongs to its object. With the crafter (D16) a stand holds a swappable lens and gains qualities: max lens diameter/mass, tilt precision (coarse steps → smooth), heat tolerance (a stand near a stray focus can sag or burn). Later: motorized sun tracking (uses power, can fail).
 - **Generic lenses** are sold in the shop from the start; the lens crafter unlocks custom ones.
 - **Lens crafter:** the player drags the **target focus** (and later shapes each face). The crafter traces the design together with its manufacturing tolerance and draws the **focus region** — where the focus will actually land and how spread it is. Early it is a big circle; upgrades shrink it to a dot. Clever designers can correct a poor lens with a second one, because the optics are real.
 - **Upgrades** add information and control, never different physics: focus region size (tolerance), predicted focal point / chromatic spread / concentration / safe temperature readouts, control of both faces, Fresnel and achromatic doublet types, better materials (acrylic → crown → flint → fused silica → sapphire), costs shown.
@@ -224,14 +227,23 @@ Real-ish lens materials:
 ### 6.7 Light rendering
 
 - **2D HDR + glow** enabled in project settings; concentrated light blooms.
-- Beams drawn as **additive soft quads** (not 1 px lines) into a light buffer; per-bin colors combine to white where bins overlap, separate into rainbows after prisms.
+- Beams drawn as **filled additive strips** (`BeamMesh`), brightness ∝ 1/width; per-bin colors combine to white where bins overlap, separate into rainbows after prisms.
 - **Caustics** emerge from overlapping additive rays — no special code.
 - Intensity → brightness through a log tone curve so 1× and 1000× are both readable.
-- **Dust motes** (particles) brighten where they sample the light buffer → visible beams.
-- **Heat shimmer** distortion shader driven by the heat texture.
+- *Planned:* visible beams in haze and smoke come from the display lighting's volumetric stage (§6.8); **heat shimmer** distortion driven by the heat texture.
 - NIR/IR are invisible in normal view but shown in a **light overlay** (false color per bin).
 - **World lighting (D19):** by day everything is lit; after dusk the ambient fades to near black and a block shows only in a thin skin on the faces light lands on (the light engine records light arriving per tile face; the D18 skin will refine that along each face). Moonlight is drawn at a night exposure in a pale-blue tint. All display exposure and night policy lives in `DisplayLight`.
-- **Background props (planned, D19):** a display layer behind the play plane, lit by the light passing in front of it (sheet, beams) so a lens stand or a panel frame glows where light crosses it. Display only: props never enter the optics or the heat field.
+- **Background props (D19):** stands, wires, machine bodies and power meters are drawn behind the play plane and never enter the optics or the heat field. Today they are drawn unlit; the display lighting (§6.8) lights them.
+
+### 6.8 Display lighting (planned, decided 2026-10-20)
+
+A display-only lighting pass that gives everything depth and makes light feel real. It never feeds back into the sim (D5): the light engine, heat and power are unchanged. One pass, one shared input, built in stages:
+
+1. **Surface depth (normals).** Every tile and object has a normal map. Tiles: generated from the tile shapes (rounded bevels on exposed edges) plus a per-material bump texture. Objects: generated from their geometry (curved glass for lens bodies, a cylinder for a pole, a box for a cabinet). Sun and moon light come from their real direction, so the lit side of a hill or a stand moves through the day. Objects dim at night like tiles.
+2. **Light field.** A grid (about tile resolution) holding how much light reaches each spot and its dominant direction: sky light (shadowed by terrain), the traced beams, and point emitters (lamps, fire, glowing hot tiles). Every pixel lights itself from the field by its normal: a lamp lights the side of a stand facing it, a focus glints on the faces around it. **This field is the one interface** lamps, fire and gases plug into.
+3. **Volumetrics.** With the gas fields (§12), smoke and steam density become a texture; each patch of air glows by density × local light (in-scattering). Beams show as shafts only where there is haze or smoke, a lens's cone shows as smoke drifts through it, shadows streak through the haze. Smoke dimming the light (§6.4) is the sim's part; this is only how it looks.
+
+Self-lit things (meter LCDs and lamps, glowing hot tiles) are emissive and stay visible at night. Stage 1 can come any time; stage 2 comes with the first lamp, stage 3 with gases. It replaces the per-face lighting in the current tile shader (one lighting path, not two). References: Noita (per-pixel light and glow), Dead Cells (normal-mapped sprites).
 
 ## 7. Heat
 
@@ -259,36 +271,39 @@ Starter set: air, dirt, stone, sand, wood, steel, copper, aluminum, crown glass,
 
 ## 9. Objects
 
-`ObjectDef` resource: footprint (tiles), construction materials, optical surfaces (generator + params), thermal nodes, ports (power, pipe), behavior script.
+`ObjectDef` resource (`data/objects/*.tres`): kind (lens, mirror, prism, probe, cell, grid connection), mount (stand, ground, free; D21), catalog category, material, shape parameters (the optical surfaces are generated from them, D4), per-bin reflectance, cell parameters. Every object has one thermal node (D13) and connects to conduits at its foot (`Mounting.port_tiles`). Later: `cost` and `unlock` (D15), components (D16).
 
-Milestone 1 objects: lens (convex, parametric), flat mirror, prism, Si solar cell, heatsink, irradiance probe (debug).
+Built: lens (bi/plano-convex), flat mirror, prism, irradiance probe, Si cell panel (1 m), Si surface cell (25 cm), grid connection. Next: battery and lamp (run 01 group 5); heatsink with pipes (M4).
 
 ### 9.1 Solar cell model
 
 For each bin with photon energy E absorbed by a junction of bandgap Eg:
 
-- **E < Eg:** not absorbed → transmits to the next layer (stacks) or is partly absorbed by the back contact as heat (single cells).
-- **E ≥ Eg:** absorbed. Electrical output `= P_bin × (Eg / E) × η_collect × η_voltage × η_temp × η_series`; everything else → heat.
+- The front coating reflects `R` per bin (`ObjectDef.reflectance`); the rest enters the cell.
+- **E < Eg:** not converted → heat in the cell (single cells; in stacks it will pass to the next layer).
+- **E ≥ Eg:** absorbed. Electrical output `= P_bin × (1 − R) × (Eg / E) × η_collect × η_voltage × η_temp × η_series`; everything else → heat. `SolarCell.analyze` returns each of these losses, so readouts can show where the light went.
   - `η_collect` ≈ 0.9
-  - `η_voltage` ≈ 0.5 × (1 + (kT/q)·ln(C) / Voc₀) — concentration *raises* efficiency (real); 0.5 (fill factor and Voc losses) calibrates Si to ≈22 % at 1 sun (0.75 would give the ~33 % detailed-balance limit)
+  - `η_voltage` ≈ 0.52 × (1 + (kT/q)·ln(C) / Voc₀) — concentration *raises* efficiency (real); 0.52 (fill factor and Voc losses) calibrates Si to ≈22 % at 1 sun and 25 °C after the coating's reflection (0.75 would give the ~33 % detailed-balance limit)
   - `η_temp` = 1 − β·(T − 298 K); β ≈ 0.004/K (Si), 0.002/K (GaAs)
   - `η_series` = 1 − r_s·C — resistive loss grows with concentration; r_s ≈ 0.002 for Si (best around 20–50 suns, nothing left by 500)
 - **Multi-junction (series):** each layer's photon current ∝ Σ(P_bin / E_bin) absorbed; stack current = **min** of layers; excess becomes heat. 4-terminal upgrade removes matching.
-- **Damage:** degrades above ~85 °C, fails ~150–200 °C (encapsulant smokes, cell cracks → debris).
+- **Damage** (planned, run 01 group 5): degrades above ~85 °C, fails ~150–200 °C (encapsulant smokes, cell cracks → debris).
+- **Rated power** (`SolarCell.rated_power`): what a cell makes face-on to plain sunlight at 25 °C, like a panel's nameplate watts; meters and readouts measure against it.
 
 Junction materials: Ge 0.67, Si 1.12, GaAs 1.42, GaInP 1.9 eV; perovskite (tunable 1.5–2.3, degrades with heat/moisture).
 
 ### 9.2 Cells in the world (no crafting screen)
 
-- Cells are placed in the world, Factorio-style, and must never feel clunky: drag to place rows, cells placed side by side **join into one array automatically**, one wire drag connects an array to the network.
+- Cells are placed in the world, Factorio-style, and must never feel clunky. Built: pick a cell and click to place as many as needed, paint wire to connect them (D14). Planned: drag to place rows, cells placed side by side **join into one array automatically**, one wire drag connects an array.
 - **Stacks emerge from placement:** a cell passes the light it can't absorb (E < Eg), so a GaInP cell in front of a Si cell is a tandem; series current matching (§9.1) applies to cells wired as a stack. Research adds cell types and coatings (AR, back reflectors), not recipes.
 - **Emergent play comes from the shared physics, never recipes:** spectrum splitting with prisms/dichroic mirrors to matched cells, concentration vs heat vs series loss, current matching, unused IR to a boiler. Every cell reads the same traced light.
 
 ## 10. Power & economy (M3)
 
-- Networks are graphs of wires/ports. Per tick: production → consumers (priority) → batteries → grid export (capped).
+- Networks are wire tiles joined edge to edge (D14); objects join at their foot. Per tick: production → consumers (priority) → batteries → grid export (capped).
+- **Built (run 01 group 3):** cells on a network with a grid connection deliver what they make and the network sells it; without one they sit at open circuit. Energy is counted in real time (a game day is 24 h, `SimConst.DAY_COMPRESSION`). Analog power meters sit on each cell's pole and in the grid connection (network total), scaled to rated power. Not yet: wire resistance and limits, export caps, consumers, batteries.
 - **Batteries:** capacity, max charge/discharge rate, ~90% round-trip; losses become heat; degrade with temperature; thermal runaway at extreme.
-- **Grid market:** price follows a **duck curve** — cheap midday (solar glut), expensive evening peak. Events: heatwaves, export caps, negative-price hours.
+- **Grid market:** price follows a **duck curve** — cheap midday (solar glut), expensive evening peak (built: 3 ¢/kWh at noon, 35 ¢ at 19:00, `Market`). Events: heatwaves, export caps, negative-price hours.
 - Internal consumers: pumps, trackers/lens motors, fans, research lab, lens kiln, later electrolyzer.
 
 ## 11. Fluids
@@ -339,7 +354,7 @@ Water is a resource: open cooling (towers, evaporating pools) loses water; deser
 
 ## 15. Progression (sketch — later)
 
-- **Shop / buy menu:** pages by category (Optics, Stands, Power, Cooling, Materials, Research); only unlocked items show. Start with simple versions (generic lenses, basic stands, Si cells). Each item has a price (D15). Bought items are placed directly (no inventory juggling at first); deconstruction refunds a fraction (D12). Creative mode (later) ignores prices and locks.
+- **Shop / buy menu:** pages by category (Optics, Stands, Power, Cooling, Materials, Research); only unlocked items show. Start with simple versions (generic lenses, basic stands, Si cells). Each item has a price (D15). Bought items are placed directly (no inventory juggling at first); deconstruction refunds a fraction (D12). Creative mode ignores prices and locks (`world.creative` exists and is on while testing; it also allows floating objects off their stands). The shop, prices and unlocks come after the core systems (decided 2026-10-20).
 - **Two currencies, two sources:** money from selling power (grid market, §10) buys items; **research** comes from feeding power into a research machine (kWh → research points), so "putting power in the machine" unlocks new materials and objects. Money may also buy research at a poor rate, so a stuck player can always progress.
 - Research unlocks materials, coatings (AR, texturing, passivation), lens types, cells, coolants, automation.
 - Sites as prestige: temperate → desert (high DNI, hot, dust, scarce water) → arctic (cold, low sun) → high altitude (UV) → orbit (AM0 1361 W/m², radiative cooling only).
@@ -347,19 +362,20 @@ Water is a resource: open cooling (towers, evaporating pools) loses water; deser
 
 ## 16. Controls & UI
 
-- Camera: pan (WASD / middle-drag), zoom (wheel).
-- Time: pause/space, speed keys.
-- **Overlays:** normal, light (per-bin false color + intensity), heat, power, liquid, gas, integrity.
-- **Inspector:** hover a tile/object → material, T, integrity, absorbed power, liquid/gas, object state.
-- Build: hotbar + categorized menu; place, rotate, remove; drag handles for lens mounts.
+Built (run 01 group 4): the screen is the map with fixed panels around it (`Hud` assembles them, `UiStyle` holds the look). The map ignores the pointer while it is over a panel.
+
+- **Top bar:** clock and sky; pause, speed − / +, clock jumps and Set time; money, what the site sells and the price with its trend; views and wavelength.
+- **Tool rail** (left): Select, Build, Paint, Wire, Undo, Help.
+- **Side panel:** Build is a catalog with search, category tabs and item cards (one at-a-glance figure; all numbers in the tooltip). Click a card, then click the map to place as many as you like (RMB or the card again drops it), or drag a card onto the map to place one. Paint and Wire show their options.
+- **Inspector** (top right): hover gives a summary of an object or tile; selecting an object gives the full numbers (a lens's focus, transmission and material; a cell's efficiency card: rated vs now, where the light goes, power by color, direct vs through optics) and its actions.
+- **On the map:** probe reading tags, the peak marker, power meters on the devices (§10), the tilt ring.
+- **Views:** Normal, Light (per-bin false color), Heat, with a wavelength filter; legend bottom right. Planned: power, liquid, gas, integrity.
+- Camera: pan (WASD / middle-drag / drag empty space), zoom (wheel).
 
 ### 16.1 Creative mode (M2)
 
-- Place any tile/object anywhere, free and instant; erase; area fill.
-- Paint temperature / add heat; spawn liquid, smoke, steam (once those layers ship).
-- Set time of day, freeze sun, set weather, set site latitude.
-- Undo/redo (via command queue, D6).
-- Toggle sim layers on/off for debugging.
+- Built: paint tiles, place anything free (Alt floats it off its stand), set the time, undo (D6).
+- Planned: area fill, paint temperature / add heat; spawn liquid, smoke, steam (once those layers ship); freeze sun, weather, latitude; redo; toggle sim layers on/off for debugging.
 
 ## 17. Project structure (Godot 4, latest stable)
 
@@ -369,19 +385,24 @@ res://
     sim_world.gd       # owns layers, tick loop, command queue
     constants.gd       # units, scale, tunables (D8)
     tile_grid.gd       # struct-of-arrays tile data (§5.2)
+    site_save.gd       # save and restore a site (JSON)
     commands/          # build/remove/edit commands
-    light/             # spectrum, surfaces, generators, tracer, accel grid
-    thermal/
-    objects/           # object runtime models (cell, lens, ...)
-    power/  pipes/  liquid/  gas/  damage/   # later milestones
+    light/             # spectrum, surfaces, generators, light passes; LightEngine.cs
+    thermal/           # heat grid, surface skin, object nodes; HeatKernel.cs, SkinKernel.cs
+    objects/           # object defs and instances, mounting, placement
+    conduits/          # conduit networks (wire now, pipes later)
+    power/             # cell model, power system, market
+    pipes/  liquid/  gas/  damage/   # later milestones
   data/
     materials/*.tres
     objects/*.tres
-  render/              # Nodes that read sim state: tiles, beams, overlays, shaders
-  ui/                  # HUD, inspector, build menu, creative tools
+  render/              # Nodes that read sim state: tiles, beams, objects, meters, overlays, shaders
+  ui/                  # top bar, tool rail, catalog, inspector, tools, Readout, UiStyle
+  debug/               # SimProbe (agent tooling)
   scenes/main.tscn
-  tests/               # headless sim tests (godot --headless)
-docs/design.md
+  tests/               # headless sim tests and benchmark
+  tools/               # check.py (lint and house rules), test.py
+docs/design.md  docs/style.md  docs/runs/
 ```
 
 Workflow: develop with the Godot MCP server; sim systems get headless tests so physics can be checked numerically (e.g. lens focal length matches the lensmaker's equation, energy is conserved across a trace).
@@ -392,15 +413,15 @@ Workflow: develop with the Godot MCP server; sim systems get headless tests so p
 |---|---|
 | **M0 — Skeleton** | Godot project, `SimWorld` tick loop, command queue, tile grid with all layers allocated, material resources, debug tile renderer, camera |
 | **M1 — Light & heat** ✅ | Sun + day cycle, polyline optics, tracer (refraction, reflection, dispersion, absorption), lens/mirror/prism objects, beam rendering v1 with HDR glow, heat grid with deposition + conduction, heat overlay, inspector. See §18.1 |
-| M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative mode deferred, current free-placement tools stay as dev tools |
+| M2 — Environment & creative mode | Sky, sunsets and per-bin atmosphere done (§18.5); creative toggle exists (`world.creative`); the rest of §16.1 as needed |
 | **Moonlight & moon cycle** ✅ | Done (§6.2, §18.6). Moon as a second light source at night: position from a moon cycle (phases over a few game days, rising later each day), irradiance from phase (full moon ≈ sunlight reflected, ~10⁻⁶ of the sun), spectrum = reflected sunlight; traced by the same light passes when it is up; pale-blue display tint; sky glow follows the real moon (§18.5) |
-| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell ✅, stands (D21 ✅), wires (D14 ✅), grid sale → money ✅, shop pages with unlocks |
+| **M3a — First playable loop** | Object thermal nodes (D13 ✅), surface skin (D18 ✅), Si cell ✅, stands (D21 ✅), wires (D14 ✅), grid sale → money ✅, interface ✅ (§18.12). Shop pages with unlocks: after the core systems |
 | M3b — Stands & crafter | Swappable stand contents (D16) and stand qualities (§9), generic lenses, lens crafter with focus region and manufacturing error; background props layer (D19) for stands and machine bodies |
 | M3c — Research | Research machine (power → research), crafter upgrades, more cell types |
-| M3 — Cells & power | Cell model, power network, batteries, grid market; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power |
+| M3 — Cells & power | Cell model ✅, power network ✅, grid market ✅; batteries, cell damage; **lamps**: the light engine generalizes from one parallel source to a list of sources (parallel sun/moon, point lamps, spread-limited directional lamps that a user-made Fresnel lens collimates), designed once; lamps draw power. Display lighting stages 1–2 (§6.8) with the lamp |
 | M4 — Pipes & cooling | Pumps, pipes, radiators, heat exchange, burst rule |
 | M5 — Fire & destruction | Integrity, ignition, debris, mining/deconstruction |
-| M6 — Liquids & gases | Free liquid CA, smoke/steam fields, phase change, light attenuation |
+| M6 — Liquids & gases | Free liquid CA, smoke/steam fields, phase change, light attenuation; volumetric display lighting (§6.8 stage 3) |
 | M7 — Lens failure | Thermal slices, thermal lensing, sag, cracks, slag |
 | M8 — Progression | Research, economy, sites, survival mode |
 
@@ -412,7 +433,7 @@ What shipped, and decisions made while building it (none change a LOCKED decisio
 - **Tracer:** sun rays start just above the highest tile or surface; rays over empty 8×8-tile air blocks skip the block in one step. Outside bodies a ray's medium is the tile it is in, so painted glass/water tiles refract and absorb too. Inside/outside a body is decided by which side of a face is hit, with a bounds check so grazing rays at corners can't stay "inside". Opaque-surface remainder is counted as `scattered` (not yet traced). Every emitted watt is accounted as absorbed, escaped, scattered or culled (tested).
 - **Re-traces are tick-sliced:** a pass traces `RAY_PATHS_PER_TICK` ray paths per tick (deterministic), and published deposits are scaled by current DNI between passes. Geometry changes or a sun jump restart a pass. While paused, a render-only preview trace shows edits without touching sim state.
 - **Heat:** banded explicit integration, one of `HEAT_BANDS` row bands per tick, each pair exchanged once per cycle (energy conserved, tested). Convective film between surfaces and air, buoyancy-boosted air mixing, air relaxing to ambient, sky radiation from sky-facing tiles. Heat-capacity dial is 0.05 for solids and liquids.
-- **Objects:** lens (bi/plano-convex), prism, flat mirror (double-sided for now), irradiance probe. Absorption inside a lens heats the air tiles it sits in until lens thermal slices arrive (M7). The Si cell and heatsink move to M3 with the cell model and power network.
+- **Objects:** lens (bi/plano-convex), prism, flat mirror (double-sided for now), irradiance probe. Absorption inside a lens heats the air tiles it sits in until lens thermal slices arrive (M7) (superseded by object thermal nodes, D13, §18.5). The Si cell and heatsink move to M3 with the cell model and power network.
 - **Creative extras pulled forward:** object placement/drag/rotate/delete with undo, and ±1 h time skip.
 
 **Performance (GDScript, full 300×120 site, demo rig, noon):** a full re-trace is ~50–60 ms (~3.5k ray paths, ~15 µs per path); a heat band is ~2 ms. Slicing keeps an average tick at ~6–7 ms headless, but the in-editor debug build is roughly 1.5–2× slower and 4× speed drops well below 60 fps. Per §5.5, the tracer and heat loop are the first candidates for a C#/GDExtension port.
@@ -508,7 +529,7 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 
 ### 18.10 Stands and solar cells (2026-10-19, run 01 group 2)
 
-- **Cells (§9.1):** `SolarCell.max_power` per bin (Eg/E, collection, voltage rising with ln C, temperature, series loss), calibrated to 22 % for Si at 1 sun and 25 °C (voltage factor 0.5, r_s 0.002). `Kind.CELL` is a mirror-like panel (coating `CELL`): its coating reflects per bin, the rest heats its body (thin silicon sheet), and its front face records the light arriving per bin (`SimObject.incident`, shared with probes; "probe" readings renamed "incident"). The inspector and SimProbe `objects` show what a cell could make now; until wires exist (group 3) all of its light stays heat.
+- **Cells (§9.1):** `SolarCell.max_power` per bin (Eg/E, collection, voltage rising with ln C, temperature, series loss), calibrated to 22 % for Si at 1 sun and 25 °C (voltage factor 0.5, r_s 0.002; later 0.52 once the coating's reflection was taken out of the output, §18.12). `Kind.CELL` is a mirror-like panel (coating `CELL`): its coating reflects per bin, the rest heats its body (thin silicon sheet), and its front face records the light arriving per bin (`SimObject.incident`, shared with probes; "probe" readings renamed "incident"). The inspector and SimProbe `objects` show what a cell could make now; until wires exist (group 3) all of its light stays heat.
 - **D21 built:** `Mounting.snap_position/snap_angle/ground_y/stand_base`; `ObjectDef.mount` (STAND, GROUND, FREE); `SimObject.mounted`; Place/Transform commands snap mounted objects; the build ghost shows the snapped spot and its stand; `ObjectRenderer.draw_stand` draws poles behind optics. Tilt stays continuous (aiming needs fine angles). The demo rig stands on stands and includes a cell panel; a 25 cm surface cell lies on the ground.
 
 ### 18.11 Wires, grid and money (2026-10-19, run 01 group 3)
@@ -516,11 +537,21 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - **D14 built (wires):** `TileGrid.wire` is a conduit layer with its own `conduit_version` (wire edits don't touch light or heat); `PaintWiresCommand` (undo); `ConduitNetworks` flood-fills a layer into networks, rebuilt only when it changes, written to serve pipes later. Wire runs behind the play plane (D19) through air and ground alike. The Wire tool (V) is the Paint brush switched to the wire layer; `WireRenderer` redraws only on change.
 - **Ports:** an object connects at its foot (`Mounting.port_tiles`): the tile just above the ground in its column, or the ground tile below; a floating object at the tile it is in.
 - **Machines:** `ObjectDef.is_machine()` (the grid connection, `Kind.GRID_TIE`, first): a box behind the play plane, skipped by the light pass, colliding only with machines (`Placement`), resting on the ground (`Mounting` rests a ground object's lowest point on the tile). `is_closed()` (bodies and machines) replaces `is_body()` where only the outline's closedness matters.
-- **PowerSystem** (after light, before heat): on each network with a grid connection every cell delivers `SolarCell.object_power` (`SimObject.power_w`), which leaves its heat (`heat_in`), and the network sells it at `Market.price_per_kwh` (duck curve: 3 ¢ at noon, 35 ¢ at 19:00); energy is counted in real time (`Market.REAL_S_PER_GAME_S` = 120). Without a grid connection cells sit at open circuit. HUD status shows money and price; SimProbe `power`, `wire`, `region` layer `wire`.
+- **PowerSystem** (after light, before heat): on each network with a grid connection every cell delivers `SolarCell.object_power` (`SimObject.power_w`), which leaves its heat (`heat_in`), and the network sells it at `Market.price_per_kwh` (duck curve: 3 ¢ at noon, 35 ¢ at 19:00); energy is counted in real time (120× the game clock, now `SimConst.DAY_COMPRESSION`). Without a grid connection cells sit at open circuit. HUD status shows money and price; SimProbe `power`, `wire`, `region` layer `wire`.
 - **Site save:** `SiteSave` captures objects (key, transform, mounted), wire, tile materials (zstd, base64), clock and money as JSON; `Main` autosaves every 5 s (the editor's stop kills the game, so not on exit only) and loads it on start, else builds the demo rig. Restoring is world construction like `WorldGen` (direct writes, no undo history). Temperatures and light settle again. Later saves add designs by value (D15).
 - **Paused readouts:** the inspector asks `PowerSystem.sells/output_w`, which read the light now and keep network membership current on demand, instead of the last tick's `power_w`.
 - **Test runner:** a test file that fails to load now fails the run (it used to drop its tests silently).
-- **Not yet:** wire resistance and current limits, export caps, consumers and batteries (group 5); prices are realistic, so earnings are tiny until the shop (group 4) sets costs to match.
+- **Not yet:** wire resistance and current limits, export caps, consumers and batteries (group 5); prices are realistic, so earnings are tiny until the shop sets costs to match (moved after the core systems).
+
+### 18.12 Interface and readouts (2026-10-19/20, run 01 group 4)
+
+- **Interface (§16):** chose a tool rail with a side catalog over a bottom build bar. `TopBar`, `ToolRail`, `ToolPanel`, `InspectorPanel`, `LegendPanel`, assembled by `Hud`; look and widgets in `UiStyle`. The map ignores the pointer over panels (`Hud.covers`). Build picks nothing by default; with nothing picked Build works like Select (pan, pick objects).
+- **Cell light by source:** the light engine records each object's incident light twice per bin, straight from the source and through optics (`SimObject.incident_direct`). `SolarCell.analyze` returns the whole loss breakdown (reflected, below gap, photon excess, collection, voltage, temperature, series) and power per bin; the cell's output now excludes the coating's reflection (voltage factor recalibrated 0.5 → 0.52).
+- **Readouts:** catalog cards show one figure (all of them in the tooltip); a selected lens shows its full numbers; a selected cell shows its efficiency card (`StackBar` bars). Analog power meters drawn on the devices (`PowerMeters`) replace map labels for power. Hover = summary, select = everything.
+- **Site save** (§18.11) and paused readouts that ask `PowerSystem` directly.
+- **Deferred:** shop, prices and unlocks move after the core systems (batteries, consumers, damage).
+- **Cleanup pass (2026-10-20):** removed tracer-era helpers nothing used; one home for pixels per meter (`SimConst.PX_PER_M`), face area (`ObjectDef.face_area_m2`), game-day compression (`SimConst.DAY_COMPRESSION`) and Stefan–Boltzmann (one per language), all guarded in `tools/check.py`.
+- **Known limits:** stands don't adapt when the ground under them is dug out; probe readings aren't rescaled between passes; wire has no resistance; cells get no diffuse light; objects are drawn unlit (§6.8).
 
 ## 19. Open questions
 
@@ -530,4 +561,3 @@ Results match the GDScript implementation (all tests; checksums within ~0.003 %)
 - Wind and weather depth.
 - ~~GDScript vs. C#/GDExtension port~~ — done in C# (§18.4).
 - ~~Thermal tuning~~ — solid/liquid heat capacity now scales with the day compression (DAY_LENGTH_S / 86400 ≈ 1/120), so ground warms and cools on a realistic daily cycle (dirt surface ~16 → 49 °C, subsurface lags by hours) and focal spots heat ~6× faster than before.
-- Lens absorption heats host air tiles until M7 thermal slices; acceptable stopgap?

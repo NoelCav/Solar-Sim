@@ -1,4 +1,4 @@
-# Run 01: M3a and power (autonomous)
+# Run 01: M3a, power and the interface
 
 Built on my own, group by group; you review at the end, one section per group. Each group is a
 separate commit (or a few), so any group can be reviewed, reverted or reworked on its own.
@@ -13,6 +13,11 @@ separate commit (or a few), so any group can be reviewed, reverted or reworked o
 - **Wires** are a painted tile layer (D14); networks rebuild when wires change.
 - **Money:** placing costs money, removal refunds a share; a creative toggle keeps free placement.
 - One report at the end (this file), group by group.
+
+Changed during the run:
+
+- Group 4 became the **interface and readouts** (you asked for a clearer UI and efficiency panels). The shop, prices and unlocks move to after the core systems (2026-10-20).
+- Asked for along the way: site save, power meters on devices, catalog click-to-place, the display-lighting plan (design §6.8), a docs and cleanup pass.
 
 ## Rules I hold myself to during the run
 
@@ -93,7 +98,7 @@ already 49 °C after a few seconds). Pick a lens in Build: the ghost shows its s
 - The sim enforces the rule: the commands snap, so tools, SimProbe and the demo rig all agree.
 - Cells reuse the probe's per-band record ("incident" light) instead of a second mechanism.
 - The model's voltage factor is 0.5, not the design doc's 0.75 (that gives the ~33 % theoretical
-  limit); the doc is updated.
+  limit); the doc is updated. (Group 4: 0.52, once the coating's reflection came out of the output.)
 
 **Not done / limits.** Stands don't change when the ground under them is dug out (the pole just
 reaches the new ground); poles don't occupy space, so two stands may share a column. Probe
@@ -133,8 +138,38 @@ connection)".
 gives and runs cooler, an unwired one sells nothing, the price curve. Headless boot of the game
 scene: the demo network has 11 wire tiles, grid on, 45.3 W sold. Tick cost unchanged (2.2 ms).
 
+### Group 4: interface and readouts (design §16, §18.12)
+
+**What it does.** A new screen layout: a top bar (clock and sky, pause, speed − / +, clock jumps
+and Set time, money, what the site sells and the price trend, views), a tool rail on the left, a
+side panel with the build catalog (search, category tabs, item cards), the inspector fixed top
+right and the legend bottom right. Click a card, then click the map to place as many as you like,
+or drag a card onto the map. Hovering gives summaries; selecting gives everything: a lens's focus,
+transmission and material, a cell's efficiency card (rated vs now, where the light goes, power by
+color, direct sun vs through optics). Cells and the Grid Connection have analog power meters on
+the device. The site saves every 5 s and comes back on start.
+
+**Where to look.** `ui/hud.gd` and the panels it assembles, `ui/ui_style.gd`, `ui/stack_bar.gd`,
+`render/power_meters.gd`, `SolarCell.analyze` / `rated_power`, `SimObject.incident_direct` (the
+light engine's direct/optics split), `sim/site_save.gd`.
+
+**Try it.** Select the cell panel at noon: about 43 W of 55 W rated, 18 % against 22 % rated (it
+runs warm), and red and near-IR making most of the power. Put a lens over it and watch the
+"through optics" share and the meter's needle climb into the red zone.
+
+**Choices made.**
+- Tool rail plus side catalog (your pick), drag or click to place.
+- Meters scale to rated power (the nameplate watts: plain sunlight face-on at 25 °C); past it the
+  needle pins and the amber lamp lights. An unwired cell's meter reads zero (it makes nothing);
+  the inspector says what it could make.
+- Display lighting is planned as a separate display pass (design §6.8), not part of the sim.
+
+**Cleanup pass.** Removed helpers left from the GDScript tracer; gave pixels per meter, face area,
+the game-day compression and Stefan–Boltzmann one home each (guarded by `tools/check.py`); shared
+panel and spacer helpers in `UiStyle`. Tests and benchmark unchanged.
+
 ## Open questions
 
-- The editor has to be reloaded (Project → Reload Current Project) whenever a run adds a new
-  `class_name` script; until then the game fails to start from the editor. Headless tests are not
-  affected (`tools/test.py`).
+- ~~The editor has to be reloaded whenever a run adds a new `class_name` script.~~ Solved without a
+  reload: the MCP's `filesystem_manage` reimport of each new script registers it. (Its full `scan`
+  must not be used for this: it drops classes a headless import found first.)

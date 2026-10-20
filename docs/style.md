@@ -4,7 +4,7 @@ The goal is a codebase that stays easy to change as it grows: one way to do each
 
 ## 1. Principles
 
-1. **One source of truth.** Every formula, constant and conversion has one home; everything else calls it. Before writing a formula, search for it. Plain sunlight is `SimConst.REFERENCE_DNI`, a material's sun-weighted absorptivity is `MaterialDB.sun_absorptivity`, tile watts become W/m² through `LightSystem.irradiance_scale`, display exposure comes from `DisplayLight`. When you centralize something, add its pattern to `ONE_HOME` in `tools/check.py` so copies can't creep back.
+1. **One source of truth.** Every formula, constant and conversion has one home; everything else calls it. Before writing a formula, search for it. Plain sunlight is `SimConst.REFERENCE_DNI`, a material's sun-weighted absorptivity is `MaterialDB.sun_absorptivity`, tile watts become W/m² through `LightSystem.irradiance_scale`, display exposure comes from `DisplayLight`, pixels per meter is `SimConst.PX_PER_M`, an object's face area is `ObjectDef.face_area_m2`. When you centralize something, add its pattern to `ONE_HOME` in `tools/check.py` so copies can't creep back.
 2. **Fix the model, not the symptom.** A fix changes the system so the whole class of problem can't happen again (a beam split drawn wrong is fixed where splits are drawn, not by hiding the seam). If the right fix is an overhaul, stop and discuss it first, and prefer the design that makes the system complete and simple over one that bolts on a case.
 3. **Less code.** Generalize the existing path instead of adding a parallel one; delete what the generalization replaces. Duplicate systems are the main source of rot.
 4. **Build a system when it is its time.** The roadmap (design §18) orders the work. Record decisions early (design doc), build them when their milestone comes; don't scaffold ahead.
@@ -16,7 +16,7 @@ The goal is a codebase that stays easy to change as it grows: one way to do each
 |---|---|---|---|
 | `sim/` | World state and physics, SI units (D5, D8), deterministic (D7), mutated only through commands (D6). `*.cs`: compiled hot loops behind a small API; GDScript orchestrates | `sim/`, `data/` | Reference `render/`, `ui/`, `scenes/`, `debug/` (checked) |
 | `render/` | Draws sim state. Display policy for light: `DisplayLight` (exposure, night, tint); beam tone: `BeamGeometry` | `sim/` (read only) | Mutate sim state |
-| `ui/` | Input → commands, panels, text. All value formatting through `Readout` | `sim/` (read), `render/`, commands | Mutate sim state directly |
+| `ui/` | Input → commands, panels, text. All value formatting through `Readout`; colors, sizes and widgets through `UiStyle` | `sim/` (read), `render/`, commands | Mutate sim state directly |
 | `debug/` | `SimProbe`: agent tooling. Extend it with every new system | Public APIs only | Reach into private members |
 | `tests/` | Headless checks (`run_tests.gd`) and the benchmark (`bench.gd`) | Public APIs | |
 | `data/` | Content as `.tres` (D11, D15) | | Hold logic |
