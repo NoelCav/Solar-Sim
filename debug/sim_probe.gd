@@ -55,8 +55,8 @@ const COMMANDS := {
 		+ "hist_deg: 2}: ground truth without the beam engine: n parallel plain rays along the traced "
 		+ "light (rotated by sun_offset_deg) from the start line; histogram of directions of legs "
 		+ "leaving the box, weighted by power",
-	"beams": "{x0, y0, x1, y1}: published beam records and secondary rays overlapping a box: count, "
-		+ "watts, and a fingerprint to compare passes",
+	"beams": "{x0, y0, x1, y1, list: false}: published beam records and secondary rays overlapping a box: count, "
+		+ "watts, and a fingerprint to compare passes; list: the secondary rays (first 40)",
 	"strips": "{x0, y0, x1, y1, bin: 2, max: 40}: beam render records with a point in the box, leg by "
 		+ "leg: start/end widths (m, as BeamMesh measures them) and concentration C (1 = plain sun); "
 		+ "sorted by peak C",
@@ -583,13 +583,22 @@ func _cmd_beams(a: Dictionary) -> Dictionary:
 		o = start + pts * stride
 	var rays := 0
 	var ray_w := 0.0
+	var listed := []
 	for k in light.ray_from.size():
 		if box.has_point(light.ray_from[k]) or box.has_point(light.ray_to[k]):
 			rays += 1
+			var w := 0.0
 			for b in Spectrum.BIN_COUNT:
-				ray_w += light.ray_power[k * Spectrum.BIN_COUNT + b]
-	return {"version": light.trace_version, "records": n, "points": legs, "watts": snappedf(watts, 0.001),
+				w += light.ray_power[k * Spectrum.BIN_COUNT + b]
+			ray_w += w
+			if a.get("list", false) and listed.size() < 40:
+				listed.append({"from": _v(light.ray_from[k]), "to": _v(light.ray_to[k]), "w": snappedf(w, 0.0001),
+					"angle_deg": snappedf(rad_to_deg((light.ray_to[k] - light.ray_from[k]).angle()), 0.01)})
+	var out := {"version": light.trace_version, "records": n, "points": legs, "watts": snappedf(watts, 0.001),
 		"fingerprint": _v(fp), "secondary_rays": rays, "secondary_w": snappedf(ray_w, 0.001)}
+	if a.get("list", false):
+		out["rays"] = listed
+	return out
 
 
 func _cmd_strips(a: Dictionary) -> Dictionary:
