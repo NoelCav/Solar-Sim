@@ -8,3 +8,7 @@ export_presets.cfg
 .DS_Store
 Thumbs.db
 __pycache__/
+
+# Claude Code local files
+.claude/
+CLAUDE.md
